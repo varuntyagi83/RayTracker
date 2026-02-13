@@ -1,14 +1,14 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-13
-> Current phase: Phase 0 ✅ (fully bootstrapped)
+> Current phase: Phase 1 ✅
 
 ## Phase Status
 
 | Phase | Feature | Status | Date | Notes |
 |-------|---------|--------|------|-------|
 | 0 | Project Bootstrap | ✅ Complete | 2026-02-13 | Next.js 15 project created with all deps, shadcn/ui (26 components), Drizzle config, full folder structure, .env.local template |
-| 1 | Auth & Workspace System | ⬜ Not started | | |
+| 1 | Auth & Workspace System | ✅ Complete | 2026-02-13 | Supabase auth with email/password + Google OAuth, login/signup pages, workspace creation on signup, middleware for route protection, PostHog provider with user identify + workspace group, dashboard layout with WorkspaceProvider |
 | 2 | Database Schema & Seed Data | ⬜ Not started | | |
 | 3 | Sidebar Navigation & Layout | ⬜ Not started | | |
 | 4 | Workspace Overview Dashboard | ⬜ Not started | | |
@@ -35,4 +35,19 @@
 
 ## Context for Next Session
 
-Phase 0 complete. The Next.js 15 project lives in the `voltic/` subdirectory. All shadcn/ui components installed (sonner used instead of deprecated toast). Drizzle ORM, Supabase, PostHog, Recharts, Zustand, Zod, Slack Web API, and all other dependencies are installed. The full folder structure from CLAUDE.md is in place with placeholder files for supabase clients, analytics provider, db schema, types, and seed script. `npx tsc --noEmit` passes clean. Dev server starts in ~576ms. Phase 1 should implement auth, workspace system, middleware, and PostHog identification.
+Phase 1 complete. Auth system fully implemented with Supabase. Key files:
+- `voltic/src/lib/supabase/client.ts` (browser client) and `server.ts` (server client)
+- `voltic/src/middleware.ts` — refreshes tokens, redirects unauthenticated users to /login, redirects authenticated users away from auth pages to /home
+- `voltic/src/app/(auth)/login/page.tsx` — email/password + Google OAuth
+- `voltic/src/app/(auth)/signup/page.tsx` — creates user + workspace + workspace_member
+- `voltic/src/app/auth/callback/route.ts` — OAuth callback handler
+- `voltic/src/lib/hooks/use-workspace.ts` — WorkspaceContext + useWorkspace hook
+- `voltic/src/lib/supabase/queries.ts` — getWorkspace() and getUser() server helpers
+- `voltic/src/components/shared/workspace-provider.tsx` — WorkspaceProvider client component
+- `voltic/src/lib/analytics/posthog-provider.tsx` — PostHogProvider with identify, group, trackEvent, resetPostHog
+- `voltic/src/components/shared/posthog-identify.tsx` — auto-identifies user + groups by workspace
+- `voltic/src/app/(dashboard)/layout.tsx` — checks auth, fetches workspace, wraps in providers
+- `voltic/supabase/migrations/001_workspaces.sql` — workspaces + workspace_members tables with RLS
+- Note: Next.js 16 deprecates middleware in favor of proxy convention — still works but should be migrated in a later phase.
+- `npx tsc --noEmit` passes. Dev server starts clean. Supabase tables created with RLS policies.
+- Phase 2 should implement the full database schema (all remaining tables) and seed data.
