@@ -1,13 +1,13 @@
 # PROGRESS.md — Build Progress Tracker
 
-> Last updated: [DATE]
-> Current phase: Phase 0 ✅
+> Last updated: 2026-02-13
+> Current phase: Phase 0 ✅ (fully bootstrapped)
 
 ## Phase Status
 
 | Phase | Feature | Status | Date | Notes |
 |-------|---------|--------|------|-------|
-| 0 | Project Bootstrap | ✅ Complete | | Initial setup, CLAUDE.md, PROGRESS.md created |
+| 0 | Project Bootstrap | ✅ Complete | 2026-02-13 | Next.js 15 project created with all deps, shadcn/ui (26 components), Drizzle config, full folder structure, .env.local template |
 | 1 | Auth & Workspace System | ⬜ Not started | | |
 | 2 | Database Schema & Seed Data | ⬜ Not started | | |
 | 3 | Sidebar Navigation & Layout | ⬜ Not started | | |
@@ -35,4 +35,4 @@
 
 ## Context for Next Session
 
-(Claude Code writes notes here at the end of each phase to carry forward to the next session)
+Phase 0 complete. The Next.js 15 project lives in the `glued/` subdirectory. All shadcn/ui components installed (sonner used instead of deprecated toast). Drizzle ORM, Supabase, PostHog, Recharts, Zustand, Zod, Slack Web API, and all other dependencies are installed. The full folder structure from CLAUDE.md is in place with placeholder files for supabase clients, analytics provider, db schema, types, and seed script. `npx tsc --noEmit` passes clean. Dev server starts in ~576ms. Phase 1 should implement auth, workspace system, middleware, and PostHog identification.
