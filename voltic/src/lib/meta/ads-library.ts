@@ -1,10 +1,15 @@
 /**
  * Meta Ads Library Scraper Service
  *
- * Fetches competitor ad data from the Meta Ads Library API.
- * In production, this would use the Meta Ads Library API (v21.0).
- * For now, it provides typed interfaces and a mock implementation.
+ * Uses Apify's Facebook Ads Library scraper actor to fetch competitor ads.
+ * Falls back to mock data when APIFY_API_TOKEN is not configured.
+ *
+ * Env vars:
+ *   APIFY_API_TOKEN          — Your Apify API token
+ *   APIFY_ADS_LIBRARY_ACTOR_ID — Actor ID (default: apify/facebook-ads-library-scraper)
  */
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface AdsLibraryAd {
   id: string;
@@ -38,24 +43,145 @@ export interface AdsLibraryScrapeResult {
   brandName: string;
 }
 
+// ─── Apify Config ───────────────────────────────────────────────────────────
+
+const APIFY_BASE_URL = "https://api.apify.com/v2";
+
+function getApifyConfig() {
+  const token = process.env.APIFY_API_TOKEN;
+  const actorId = process.env.APIFY_ADS_LIBRARY_ACTOR_ID || "apify/facebook-ads-library-scraper";
+  return { token, actorId };
+}
+
+/** Map our startedWithin values to a date string for the actor input */
+function getStartDateFromWithin(startedWithin: AdsLibraryScrapeParams["startedWithin"]): string {
+  const now = Date.now();
+  const ms: Record<typeof startedWithin, number> = {
+    last_7d: 7 * 86_400_000,
+    last_30d: 30 * 86_400_000,
+    last_90d: 90 * 86_400_000,
+    last_6m: 180 * 86_400_000,
+    last_1y: 365 * 86_400_000,
+  };
+  return new Date(now - ms[startedWithin]).toISOString().split("T")[0];
+}
+
+// ─── Main Function ──────────────────────────────────────────────────────────
+
 /**
- * Scrape competitor ads from Meta Ads Library.
- *
- * TODO: Replace with real Meta Ads Library API integration in Phase 8+.
- * The real implementation will:
- * 1. Parse the adsLibraryUrl to extract page_id and search params
- * 2. Call GET /ads_archive with access_token, search_terms, ad_reached_countries
- * 3. Filter by impression_condition and ad_delivery_date_min
- * 4. Sort by impressions and return top N
+ * Scrape competitor ads from Meta Ads Library via Apify.
+ * Falls back to mock data if APIFY_API_TOKEN is not set.
  */
 export async function scrapeAdsLibrary(
   params: AdsLibraryScrapeParams
 ): Promise<AdsLibraryScrapeResult> {
-  // Mock implementation — returns sample data for UI development
+  const { token, actorId } = getApifyConfig();
+
+  // If no Apify token, return mock data for local development
+  if (!token) {
+    console.warn("[ads-library] APIFY_API_TOKEN not set — returning mock data");
+    return getMockResult(params);
+  }
+
+  try {
+    // Run the Apify actor synchronously (waits for completion)
+    const runUrl = `${APIFY_BASE_URL}/acts/${actorId}/run-sync-get-dataset-items?token=${token}`;
+
+    const response = await fetch(runUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        searchTerms: params.brandName,
+        adType: "all",
+        adActiveStatus: "active",
+        adDeliveryDateMin: getStartDateFromWithin(params.startedWithin),
+        resultsLimit: params.topN,
+        // If user provided a direct URL, pass it for more precise targeting
+        ...(params.adsLibraryUrl ? { startUrls: [{ url: params.adsLibraryUrl }] } : {}),
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[ads-library] Apify request failed:", response.status, errorText);
+      return getMockResult(params);
+    }
+
+    const rawItems: ApifyAdItem[] = await response.json();
+
+    const ads: AdsLibraryAd[] = rawItems.slice(0, params.topN).map((item, i) => ({
+      id: item.id || `apify_${i}`,
+      pageId: item.pageId || item.page_id || "",
+      pageName: item.pageName || item.page_name || params.brandName,
+      headline: item.title || item.ad_creative_bodies?.[0] || "Untitled Ad",
+      bodyText: item.body || item.ad_creative_bodies?.join(" ") || "",
+      linkUrl: item.link_url || item.ad_creative_link_captions?.[0] || null,
+      mediaType: inferMediaType(item),
+      mediaThumbnailUrl: item.image_url || item.ad_snapshot_url || null,
+      startDate: item.start_date || item.ad_delivery_start_time || "",
+      endDate: item.end_date || item.ad_delivery_stop_time || null,
+      isActive: item.is_active ?? item.ad_delivery_start_time != null,
+      impressionRange: item.impressions
+        ? { lower: item.impressions.lower_bound || 0, upper: item.impressions.upper_bound || 0 }
+        : null,
+      platforms: item.publisher_platforms || ["facebook"],
+      adsLibraryUrl: item.ad_library_url || item.url || `https://www.facebook.com/ads/library/?id=${item.id}`,
+    }));
+
+    return {
+      ads,
+      totalCount: ads.length,
+      scrapedAt: new Date().toISOString(),
+      brandName: params.brandName,
+    };
+  } catch (error) {
+    console.error("[ads-library] Apify scrape error:", error);
+    return getMockResult(params);
+  }
+}
+
+// ─── Apify Response Shape ───────────────────────────────────────────────────
+
+/** Loose type for Apify actor output — field names vary by actor version */
+interface ApifyAdItem {
+  id?: string;
+  pageId?: string;
+  page_id?: string;
+  pageName?: string;
+  page_name?: string;
+  title?: string;
+  body?: string;
+  ad_creative_bodies?: string[];
+  ad_creative_link_captions?: string[];
+  link_url?: string;
+  image_url?: string;
+  video_url?: string;
+  ad_snapshot_url?: string;
+  start_date?: string;
+  end_date?: string;
+  ad_delivery_start_time?: string;
+  ad_delivery_stop_time?: string;
+  is_active?: boolean;
+  impressions?: { lower_bound?: number; upper_bound?: number };
+  publisher_platforms?: ("facebook" | "instagram" | "audience_network" | "messenger")[];
+  ad_library_url?: string;
+  url?: string;
+  media_type?: string;
+}
+
+function inferMediaType(item: ApifyAdItem): AdsLibraryAd["mediaType"] {
+  if (item.media_type === "video" || item.video_url) return "video";
+  if (item.media_type === "carousel") return "carousel";
+  return "image";
+}
+
+// ─── Mock Fallback ──────────────────────────────────────────────────────────
+
+function getMockResult(params: AdsLibraryScrapeParams): AdsLibraryScrapeResult {
   const mockAds: AdsLibraryAd[] = Array.from(
     { length: params.topN },
     (_, i) => ({
-      id: `ad_${crypto.randomUUID().slice(0, 8)}`,
+      id: `mock_${crypto.randomUUID().slice(0, 8)}`,
       pageId: `page_${params.brandName.toLowerCase().replace(/\s+/g, "_")}`,
       pageName: params.brandName,
       headline: MOCK_HEADLINES[i % MOCK_HEADLINES.length],
@@ -82,8 +208,6 @@ export async function scrapeAdsLibrary(
     brandName: params.brandName,
   };
 }
-
-// ─── Mock Data ──────────────────────────────────────────────────────────────
 
 const MOCK_HEADLINES = [
   "Summer Collection — 50% Off Everything",
@@ -117,11 +241,11 @@ const MOCK_MEDIA_TYPES: AdsLibraryAd["mediaType"][] = [
 function getRandomStartDate(startedWithin: AdsLibraryScrapeParams["startedWithin"]): string {
   const now = Date.now();
   const ranges: Record<typeof startedWithin, number> = {
-    last_7d: 7 * 24 * 60 * 60 * 1000,
-    last_30d: 30 * 24 * 60 * 60 * 1000,
-    last_90d: 90 * 24 * 60 * 60 * 1000,
-    last_6m: 180 * 24 * 60 * 60 * 1000,
-    last_1y: 365 * 24 * 60 * 60 * 1000,
+    last_7d: 7 * 86_400_000,
+    last_30d: 30 * 86_400_000,
+    last_90d: 90 * 86_400_000,
+    last_6m: 180 * 86_400_000,
+    last_1y: 365 * 86_400_000,
   };
   const offset = Math.floor(Math.random() * ranges[startedWithin]);
   return new Date(now - offset).toISOString().split("T")[0];
