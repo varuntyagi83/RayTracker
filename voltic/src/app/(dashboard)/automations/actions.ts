@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getWorkspace } from "@/lib/supabase/queries";
@@ -41,6 +42,7 @@ export async function createAutomation(formData: z.infer<typeof automationSchema
 
   if (error) return { error: error.message };
 
+  revalidatePath("/automations");
   return { data, error: null };
 }
 
@@ -62,6 +64,7 @@ export async function updateAutomation(
 
   if (error) return { error: error.message };
 
+  revalidatePath("/automations");
   return { data, error: null };
 }
 
@@ -83,5 +86,6 @@ export async function toggleAutomationStatus(automationId: string) {
 
   if (error) return { error: error.message };
 
+  revalidatePath("/automations");
   return { status: newStatus, error: null };
 }
