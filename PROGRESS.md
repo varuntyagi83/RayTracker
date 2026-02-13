@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-13
-> Current phase: Phase 3 ✅
+> Current phase: Phase 4 ✅
 
 ## Phase Status
 
@@ -11,7 +11,7 @@
 | 1 | Auth & Workspace System | ✅ Complete | 2026-02-13 | Supabase auth with email/password + Google OAuth, login/signup pages, workspace creation on signup, middleware for route protection, PostHog provider with user identify + workspace group, dashboard layout with WorkspaceProvider |
 | 2 | Database Schema & Seed Data | ✅ Complete | 2026-02-13 | Full Drizzle schema (17 tables + relations), SQL migration with RLS policies, seed script with 91 ad accounts, 50 campaigns, 1500 campaign metrics, 20 creatives, 600 creative metrics, 5 automations, 2 boards, 12 saved ads, 2 assets, 48 facebook pages, 20 comments, 3 competitor brands, 1 credit transaction |
 | 3 | Sidebar Navigation & Layout | ✅ Complete | 2026-02-13 | Collapsible sidebar using shadcn/ui primitives, workspace header with green avatar + dropdown, 6 main nav items, 6 report sub-pages, folders section, user footer with settings/logout dropdown, top bar with Meta sync status + refresh, all 12 route placeholders, PostHog sidebar_nav_clicked tracking, responsive mobile sidebar via Sheet |
-| 4 | Workspace Overview Dashboard | ⬜ Not started | | |
+| 4 | Workspace Overview Dashboard | ✅ Complete | 2026-02-13 | 3 KPI cards (Revenue/Spend/Profit) with % change arrows, mini Recharts bar charts (Today vs Yesterday), YESTERDAY + LAST 7 DAYS comparisons, profit margin badge. Top Performing Assets with 4 tabs (Creatives/Headlines/Copy/Landing Pages), horizontal scroll creative cards with thumbnail + ROAS/Spend/Impressions, skeleton loading state. Data functions query campaign_metrics + creative_metrics via Supabase RLS. PostHog: dashboard_loaded, top_assets_tab_switched, refresh_clicked |
 | 5 | Automations — Performance Wizard | ⬜ Not started | | |
 | 6 | Automations — Competitor Wizard | ⬜ Not started | | |
 | 7 | Automations — Comment Digest | ⬜ Not started | | |
@@ -35,12 +35,13 @@
 
 ## Context for Next Session
 
-Phase 3 complete. Sidebar navigation and layout shell implemented. Key files:
-- `voltic/src/components/layout/app-sidebar.tsx` — Full sidebar with workspace header (green avatar + dropdown), 6 main nav items (Home, Automations, Campaign Analysis, Discover, Boards, Assets), 6 report pages, folders section, user footer with settings/logout dropdown. Uses shadcn/ui Sidebar primitives. Active state: green left border + bold. PostHog `sidebar_nav_clicked` event on every nav click.
-- `voltic/src/components/layout/top-bar.tsx` — Top bar with SidebarTrigger, Meta sync status icon, refresh button, and page-specific action slot.
-- `voltic/src/app/(dashboard)/layout.tsx` — Updated to wrap children in SidebarProvider + AppSidebar + SidebarInset + TopBar. Server component: auth check → fetch workspace → render layout.
-- 12 placeholder route pages: `/home`, `/automations`, `/campaign-analysis`, `/discover`, `/boards`, `/assets`, `/reports/top-ads`, `/reports/top-campaigns`, `/reports/top-creatives`, `/reports/top-landing-pages`, `/reports/top-headlines`, `/reports/top-copy`
-- Sidebar is collapsible (icon mode on desktop via Cmd+B, Sheet on mobile)
-- Old `logout-button.tsx` removed (logout now in sidebar user dropdown)
-- `npx tsc --noEmit` passes clean
-- Phase 4 should implement the Workspace Overview Dashboard with KPI cards and top performing assets.
+Phase 4 complete. Workspace Overview Dashboard implemented. Key files:
+- `voltic/src/lib/data/dashboard.ts` — Server-side data functions: `getWorkspaceKPIs` (aggregates campaign_metrics for today/yesterday/last 7 days across all workspace campaigns), `getTopCreatives` (joins creatives + creative_metrics, sorted by ROAS), `getTopHeadlines`, `getTopCopy`, `getTopLandingPages` (all grouped by field, aggregated metrics, sorted by ROAS). Uses Supabase server client with RLS.
+- `voltic/src/app/(dashboard)/home/page.tsx` — Server component: fetches workspace, then parallel-fetches KPIs + all 4 top asset queries. Renders page header with "Last synced" timestamp + ad account count, 3 KPI cards, and TopAssets tabs.
+- `voltic/src/app/(dashboard)/home/components/kpi-card.tsx` — Client component: Revenue/Spend/Profit card with colored icon, % change arrow (green up / red down), mini Recharts BarChart (Today vs Yesterday), formatted currency, YESTERDAY + LAST 7 DAYS comparison row, profit margin badge.
+- `voltic/src/app/(dashboard)/home/components/top-assets.tsx` — Client component: 4-tab interface (Creatives/Headlines/Copy/Landing Pages). Creatives tab: horizontal scroll cards with thumbnail, format badge, ROAS/Spend/Impressions. Other tabs: list cards with text + metrics.
+- `voltic/src/app/(dashboard)/home/components/dashboard-tracker.tsx` — PostHog `dashboard_loaded` event on mount.
+- `voltic/src/app/(dashboard)/home/loading.tsx` — Skeleton loading state matching dashboard layout.
+- PostHog events: `dashboard_loaded` (with ad_account_count), `top_assets_tab_switched` (with tab), `refresh_clicked` (in top-bar).
+- `npx tsc --noEmit` passes clean.
+- Phase 5 should implement the Automations list page and Performance Wizard.
