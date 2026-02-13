@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 6 ✅
+> Current phase: Phase 7 ✅
 
 ## Phase Status
 
@@ -14,7 +14,7 @@
 | 4 | Workspace Overview Dashboard | ✅ Complete | 2026-02-13 | 3 KPI cards (Revenue/Spend/Profit) with % change arrows, mini Recharts bar charts (Today vs Yesterday), YESTERDAY + LAST 7 DAYS comparisons, profit margin badge. Top Performing Assets with 4 tabs (Creatives/Headlines/Copy/Landing Pages), horizontal scroll creative cards with thumbnail + ROAS/Spend/Impressions, skeleton loading state. Data functions query campaign_metrics + creative_metrics via Supabase RLS. PostHog: dashboard_loaded, top_assets_tab_switched, refresh_clicked |
 | 5 | Automations — Performance Wizard | ✅ Complete | 2026-02-14 | Automations list page with filter tabs (All/Performance/Competitor/Comments with counts), automation cards with status/type badges, schedule/platform/classification grid, metric tags, Edit/Pause/Test Run actions. Create dropdown (Performance/Competitor/Comments). 4-step Performance Wizard modal: Step 1 Basics (name, description, aggregation level, metrics tag multi-select, time period toggles, sort by metric+direction+period, classification toggle with thresholds), Step 2 Groups & Filters (entity filters with field/operator/value, metric filters with threshold), Step 3 Notifications (Slack active, WhatsApp coming soon), Step 4 Schedule (daily/weekly, time picker, day-of-week pills, summary text). Live preview panel with sample data table. Server actions with Zod validation + admin client. PostHog: automations_page_viewed, create_automation_clicked, automation_wizard_step_completed, automation_wizard_abandoned, automation_created, automation_paused, automation_activated. Skeleton loading state. |
 | 6 | Automations — Competitor Wizard | ✅ Complete | 2026-02-14 | 3-step Competitor Wizard modal: Step 1 Basics (name, competitor brand name, Meta Ads Library URL with helper box, description, scrape settings — top N/impression period/started within), Step 2 Notify (reused Slack/WhatsApp), Step 3 Schedule (reused daily/weekly/time/days). Competitor preview with mock numbered ads (thumbnail, headline, runtime, format, "View in Ads Library" link). New types: CompetitorConfig, CompetitorWizardState, ImpressionPeriod, StartedWithin + defaults + label maps. Scraper service stub: lib/meta/ads-library.ts with typed interfaces (AdsLibraryAd, AdsLibraryScrapeParams, AdsLibraryScrapeResult) + mock implementation. PostHog: competitor_automation_created. Wired into automations-list-client. npx tsc --noEmit passes clean. |
-| 7 | Automations — Comment Digest | ⬜ Not started | | |
+| 7 | Automations — Comment Digest | ✅ Complete | 2026-02-14 | 3-step Comment Digest wizard: Step 1 Basics (name, description, Facebook Pages multi-select with Checkbox list from DB with Instagram badges, post filters — post type organic/ad/all + post age, digest frequency toggles 1h/3h/6h/Daily). Step 2 Notify (reused Slack/WhatsApp). Step 3 Schedule (reused daily/weekly/time/days). Comment preview with mock comments showing commenter, post title, platform icon, page name, time ago. New types: CommentDigestConfig, CommentWizardState, CommentFrequency, PostType, PostAge, FacebookPageRef + defaults + label maps. Comment service: lib/meta/comments.ts with PageComment, CommentFetchParams, CommentFetchResult types + mock fetchPageComments(). Added shadcn Checkbox component. PostHog: comment_automation_created. Wired into automations-list-client. npx tsc --noEmit passes clean. |
 | 8 | Slack Bot & Execution Engine | ⬜ Not started | | |
 | 9 | Reports Module | ⬜ Not started | | |
 | 10 | Campaign Analysis | ⬜ Not started | | |
@@ -35,11 +35,12 @@
 
 ## Context for Next Session
 
-Phase 6 complete. Competitor Wizard implemented. Key new/modified files:
-- `voltic/src/types/automation.ts` — Added CompetitorConfig, CompetitorWizardState, ImpressionPeriod, StartedWithin types + DEFAULT_COMPETITOR_CONFIG + IMPRESSION_PERIOD_LABELS + STARTED_WITHIN_LABELS.
-- `voltic/src/lib/meta/ads-library.ts` — NEW: Scraper service with AdsLibraryAd, AdsLibraryScrapeParams, AdsLibraryScrapeResult types + mock scrapeAdsLibrary() function.
-- `voltic/src/app/(dashboard)/automations/components/competitor-wizard.tsx` — NEW: 3-step wizard (Basics → Notify → Schedule) with StepCompetitorBasics (brand name, Ads Library URL + helper box, scrape settings), reused StepNotify + StepSchedule.
-- `voltic/src/app/(dashboard)/automations/components/competitor-preview.tsx` — NEW: Live preview with mock competitor ads (numbered, thumbnail, headline, runtime, format, "View in Ads Library").
-- `voltic/src/app/(dashboard)/automations/components/automations-list-client.tsx` — Wired CompetitorWizard for type="competitor".
+Phase 7 complete. All 3 automation wizards implemented (Performance, Competitor, Comments). Key new/modified files:
+- `voltic/src/types/automation.ts` — Added CommentDigestConfig, CommentWizardState, CommentFrequency, PostType, PostAge, FacebookPageRef types + DEFAULT_COMMENT_CONFIG + COMMENT_FREQUENCY_LABELS + POST_TYPE_LABELS + POST_AGE_LABELS.
+- `voltic/src/lib/meta/comments.ts` — NEW: Comment service with PageComment, CommentFetchParams, CommentFetchResult types + mock fetchPageComments().
+- `voltic/src/app/(dashboard)/automations/components/comment-wizard.tsx` — NEW: 3-step wizard (Basics → Notify → Schedule) with StepCommentBasics (pages multi-select from DB, post filters, digest frequency), reused StepNotify + StepSchedule.
+- `voltic/src/app/(dashboard)/automations/components/comment-preview.tsx` — NEW: Live preview with mock comments showing commenter, post title, platform icon, page name.
+- `voltic/src/app/(dashboard)/automations/components/automations-list-client.tsx` — Wired CommentWizard for type="comments".
+- `voltic/src/components/ui/checkbox.tsx` — NEW: shadcn Checkbox component.
 - `npx tsc --noEmit` passes clean.
-- Phase 7 should implement the Comment Digest wizard (Step 1: page selector, post filters, frequency; skip Step 2, reuse Steps 3-4).
+- Phase 8 should implement Slack Bot & Execution Engine (Slack OAuth, digest templates, executor, cron, test run).

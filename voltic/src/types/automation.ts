@@ -85,7 +85,7 @@ export interface Automation {
   description: string | null;
   type: AutomationType;
   status: AutomationStatus;
-  config: PerformanceConfig | CompetitorConfig | Record<string, unknown>;
+  config: PerformanceConfig | CompetitorConfig | CommentDigestConfig | Record<string, unknown>;
   schedule: ScheduleConfig;
   delivery: DeliveryConfig;
   classification: { enabled: boolean } | null;
@@ -109,6 +109,29 @@ export interface CompetitorConfig {
   };
 }
 
+// ─── Comment Digest Config ──────────────────────────────────────────────────
+
+export type CommentFrequency = "1h" | "3h" | "6h" | "daily";
+export type PostType = "organic" | "ad" | "all";
+export type PostAge = "last_24h" | "last_7d" | "last_30d" | "all_time";
+
+export interface FacebookPageRef {
+  id: string;
+  pageId: string;
+  pageName: string;
+  hasInstagram: boolean;
+  instagramHandle: string | null;
+}
+
+export interface CommentDigestConfig {
+  pages: FacebookPageRef[];
+  postFilters: {
+    postType: PostType;
+    postAge: PostAge;
+  };
+  frequency: CommentFrequency;
+}
+
 // ─── Wizard State ───────────────────────────────────────────────────────────
 
 export interface PerformanceWizardState {
@@ -123,6 +146,14 @@ export interface CompetitorWizardState {
   name: string;
   description: string;
   config: CompetitorConfig;
+  delivery: DeliveryConfig;
+  schedule: ScheduleConfig;
+}
+
+export interface CommentWizardState {
+  name: string;
+  description: string;
+  config: CommentDigestConfig;
   delivery: DeliveryConfig;
   schedule: ScheduleConfig;
 }
@@ -144,6 +175,35 @@ export const DEFAULT_COMPETITOR_CONFIG: CompetitorConfig = {
     impressionPeriod: "last_30d",
     startedWithin: "last_30d",
   },
+};
+
+export const DEFAULT_COMMENT_CONFIG: CommentDigestConfig = {
+  pages: [],
+  postFilters: {
+    postType: "all",
+    postAge: "last_24h",
+  },
+  frequency: "daily",
+};
+
+export const COMMENT_FREQUENCY_LABELS: Record<CommentFrequency, string> = {
+  "1h": "Every hour",
+  "3h": "Every 3 hours",
+  "6h": "Every 6 hours",
+  daily: "Daily",
+};
+
+export const POST_TYPE_LABELS: Record<PostType, string> = {
+  organic: "Organic only",
+  ad: "Ads only",
+  all: "All posts",
+};
+
+export const POST_AGE_LABELS: Record<PostAge, string> = {
+  last_24h: "Last 24 hours",
+  last_7d: "Last 7 days",
+  last_30d: "Last 30 days",
+  all_time: "All time",
 };
 
 export const DEFAULT_SCHEDULE: ScheduleConfig = {
