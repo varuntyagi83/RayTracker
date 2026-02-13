@@ -5,6 +5,7 @@ import { AutomationFilters } from "./automation-filters";
 import { AutomationCard } from "./automation-card";
 import { CreateAutomationButton } from "./create-automation-button";
 import { PerformanceWizard } from "./performance-wizard";
+import { CompetitorWizard } from "./competitor-wizard";
 import { trackEvent } from "@/lib/analytics/posthog-provider";
 import type { Automation, AutomationType } from "@/types/automation";
 
@@ -69,6 +70,14 @@ export function AutomationsListClient({
 
       {wizardType === "performance" && (
         <PerformanceWizard
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          editAutomation={editAutomation}
+        />
+      )}
+
+      {wizardType === "competitor" && (
+        <CompetitorWizard
           open={wizardOpen}
           onOpenChange={setWizardOpen}
           editAutomation={editAutomation}
