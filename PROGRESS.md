@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-13
-> Current phase: Phase 1 ✅
+> Current phase: Phase 2 ✅
 
 ## Phase Status
 
@@ -9,7 +9,7 @@
 |-------|---------|--------|------|-------|
 | 0 | Project Bootstrap | ✅ Complete | 2026-02-13 | Next.js 15 project created with all deps, shadcn/ui (26 components), Drizzle config, full folder structure, .env.local template |
 | 1 | Auth & Workspace System | ✅ Complete | 2026-02-13 | Supabase auth with email/password + Google OAuth, login/signup pages, workspace creation on signup, middleware for route protection, PostHog provider with user identify + workspace group, dashboard layout with WorkspaceProvider |
-| 2 | Database Schema & Seed Data | ⬜ Not started | | |
+| 2 | Database Schema & Seed Data | ✅ Complete | 2026-02-13 | Full Drizzle schema (17 tables + relations), SQL migration with RLS policies, seed script with 91 ad accounts, 50 campaigns, 1500 campaign metrics, 20 creatives, 600 creative metrics, 5 automations, 2 boards, 12 saved ads, 2 assets, 48 facebook pages, 20 comments, 3 competitor brands, 1 credit transaction |
 | 3 | Sidebar Navigation & Layout | ⬜ Not started | | |
 | 4 | Workspace Overview Dashboard | ⬜ Not started | | |
 | 5 | Automations — Performance Wizard | ⬜ Not started | | |
@@ -35,19 +35,14 @@
 
 ## Context for Next Session
 
-Phase 1 complete. Auth system fully implemented with Supabase. Key files:
-- `voltic/src/lib/supabase/client.ts` (browser client) and `server.ts` (server client)
-- `voltic/src/middleware.ts` — refreshes tokens, redirects unauthenticated users to /login, redirects authenticated users away from auth pages to /home
-- `voltic/src/app/(auth)/login/page.tsx` — email/password + Google OAuth
-- `voltic/src/app/(auth)/signup/page.tsx` — creates user + workspace + workspace_member
-- `voltic/src/app/auth/callback/route.ts` — OAuth callback handler
-- `voltic/src/lib/hooks/use-workspace.ts` — WorkspaceContext + useWorkspace hook
-- `voltic/src/lib/supabase/queries.ts` — getWorkspace() and getUser() server helpers
-- `voltic/src/components/shared/workspace-provider.tsx` — WorkspaceProvider client component
-- `voltic/src/lib/analytics/posthog-provider.tsx` — PostHogProvider with identify, group, trackEvent, resetPostHog
-- `voltic/src/components/shared/posthog-identify.tsx` — auto-identifies user + groups by workspace
-- `voltic/src/app/(dashboard)/layout.tsx` — checks auth, fetches workspace, wraps in providers
-- `voltic/supabase/migrations/001_workspaces.sql` — workspaces + workspace_members tables with RLS
-- Note: Next.js 16 deprecates middleware in favor of proxy convention — still works but should be migrated in a later phase.
-- `npx tsc --noEmit` passes. Dev server starts clean. Supabase tables created with RLS policies.
-- Phase 2 should implement the full database schema (all remaining tables) and seed data.
+Phase 2 complete. Full database schema and seed data implemented. Key files:
+- `voltic/src/db/schema.ts` — Complete Drizzle ORM schema with 17 tables and full relations
+- `voltic/supabase/migrations/002_full_schema.sql` — SQL migration for all Phase 2 tables with RLS policies, indexes, updated_at triggers
+- `voltic/src/scripts/seed.ts` — Seed script using Supabase service role key (bypasses RLS), run with `npm run seed`
+- `voltic/supabase/config.toml` — Supabase CLI initialized for the project
+- Tables: workspaces, workspace_members, ad_accounts, campaigns, campaign_metrics, creatives, creative_metrics, automations, automation_runs, boards, saved_ads, assets, variations, credit_transactions, competitor_brands, facebook_pages, comments
+- All 17 tables verified via REST API (200 OK)
+- Seed data: 91 ad accounts, 50 campaigns, 1500 campaign metrics (30d), 20 creatives, 600 creative metrics (30d), 5 automations, 2 boards, 12 saved ads, 2 assets, 48 facebook pages, 20 comments, 3 competitor brands, 1 credit transaction
+- DB connection note: Direct connection to Supabase is IPv6-only (no route from this machine). SQL migrations must be run via Supabase Dashboard SQL Editor. Seed script uses REST API via service role key (works fine).
+- `npx tsc --noEmit` passes. `npm run seed` completes successfully.
+- Phase 3 should implement the sidebar navigation and layout shell.
