@@ -46,11 +46,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages to /home
+  // Redirect authenticated users away from login page to /home
+  // Note: /signup is allowed for authenticated users who still need to create a workspace
   if (
     user &&
     (request.nextUrl.pathname.startsWith("/login") ||
-      request.nextUrl.pathname.startsWith("/signup") ||
       request.nextUrl.pathname === "/")
   ) {
     const url = request.nextUrl.clone();

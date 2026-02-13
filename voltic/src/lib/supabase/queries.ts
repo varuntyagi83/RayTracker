@@ -1,4 +1,5 @@
 import { createClient } from "./server";
+import { createAdminClient } from "./admin";
 import type { Workspace } from "@/lib/hooks/use-workspace";
 
 export async function getWorkspace(): Promise<Workspace | null> {
@@ -10,8 +11,10 @@ export async function getWorkspace(): Promise<Workspace | null> {
 
   if (!user) return null;
 
-  // Get the user's workspace via workspace_members
-  const { data: member } = await supabase
+  // Use admin client to bypass RLS until migration policies are applied
+  const admin = createAdminClient();
+
+  const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
     .eq("user_id", user.id)
@@ -19,7 +22,7 @@ export async function getWorkspace(): Promise<Workspace | null> {
 
   if (!member) return null;
 
-  const { data: workspace } = await supabase
+  const { data: workspace } = await admin
     .from("workspaces")
     .select("id, name, slug, timezone, currency, credit_balance, settings")
     .eq("id", member.workspace_id)

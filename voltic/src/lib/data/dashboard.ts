@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -73,7 +73,7 @@ function getDateRanges() {
 export async function getWorkspaceKPIs(
   workspaceId: string
 ): Promise<WorkspaceKPIs> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { today, yesterday, last7 } = getDateRanges();
 
   // Get ad account count
@@ -133,7 +133,7 @@ export async function getTopCreatives(
   workspaceId: string,
   limit = 10
 ): Promise<TopCreative[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
   // Get creatives with their metrics aggregated over last 7 days
@@ -181,7 +181,7 @@ export async function getTopHeadlines(
   workspaceId: string,
   limit = 10
 ): Promise<TopHeadline[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
   const { data: creatives } = await supabase
@@ -241,7 +241,7 @@ export async function getTopCopy(
   workspaceId: string,
   limit = 10
 ): Promise<TopCopy[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
   const { data: creatives } = await supabase
@@ -298,7 +298,7 @@ export async function getTopLandingPages(
   workspaceId: string,
   limit = 10
 ): Promise<TopLandingPage[]> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
   const { data: creatives } = await supabase

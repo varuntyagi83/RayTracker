@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/lib/analytics/posthog-provider";
@@ -31,12 +30,10 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Suspense>
-          <PostHogProvider>
-            {children}
-            <Toaster />
-          </PostHogProvider>
-        </Suspense>
+        <PostHogProvider>
+          {children}
+          <Toaster />
+        </PostHogProvider>
       </body>
     </html>
   );
