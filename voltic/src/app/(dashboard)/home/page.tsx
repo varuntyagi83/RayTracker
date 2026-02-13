@@ -1,20 +1,10 @@
-import { getWorkspace } from "@/lib/supabase/queries";
-import { redirect } from "next/navigation";
-import { LogoutButton } from "./logout-button";
-
-export default async function HomePage() {
-  const workspace = await getWorkspace();
-  if (!workspace) redirect("/login");
-
+export default function HomePage() {
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold">Workspace Overview</h1>
       <p className="mt-2 text-muted-foreground">
-        Welcome to <strong>{workspace.name}</strong>
+        Dashboard with KPI cards and top performing assets will be built in Phase 4.
       </p>
-      <div className="mt-6">
-        <LogoutButton />
-      </div>
     </div>
   );
 }

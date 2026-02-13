@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import { getWorkspace, getUser } from "@/lib/supabase/queries";
 import { WorkspaceProvider } from "@/components/shared/workspace-provider";
 import { PostHogIdentify } from "@/components/shared/posthog-identify";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/layout/app-sidebar";
+import { TopBar } from "@/components/layout/top-bar";
 
 export default async function DashboardLayout({
   children,
@@ -22,7 +25,13 @@ export default async function DashboardLayout({
         workspaceId={workspace.id}
         workspaceName={workspace.name}
       />
-      <main className="min-h-screen">{children}</main>
+      <SidebarProvider>
+        <AppSidebar userEmail={user.email ?? ""} />
+        <SidebarInset>
+          <TopBar />
+          <main className="flex-1 overflow-auto">{children}</main>
+        </SidebarInset>
+      </SidebarProvider>
     </WorkspaceProvider>
   );
 }
