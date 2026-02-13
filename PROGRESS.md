@@ -35,4 +35,4 @@
 
 ## Context for Next Session
 
-Phase 0 complete. The Next.js 15 project lives in the `glued/` subdirectory. All shadcn/ui components installed (sonner used instead of deprecated toast). Drizzle ORM, Supabase, PostHog, Recharts, Zustand, Zod, Slack Web API, and all other dependencies are installed. The full folder structure from CLAUDE.md is in place with placeholder files for supabase clients, analytics provider, db schema, types, and seed script. `npx tsc --noEmit` passes clean. Dev server starts in ~576ms. Phase 1 should implement auth, workspace system, middleware, and PostHog identification.
+Phase 0 complete. The Next.js 15 project lives in the `voltic/` subdirectory. All shadcn/ui components installed (sonner used instead of deprecated toast). Drizzle ORM, Supabase, PostHog, Recharts, Zustand, Zod, Slack Web API, and all other dependencies are installed. The full folder structure from CLAUDE.md is in place with placeholder files for supabase clients, analytics provider, db schema, types, and seed script. `npx tsc --noEmit` passes clean. Dev server starts in ~576ms. Phase 1 should implement auth, workspace system, middleware, and PostHog identification.

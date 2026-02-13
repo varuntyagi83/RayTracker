@@ -6,10 +6,10 @@
 Read the following files in this exact order:
 1. CLAUDE.md (project intelligence and rules)
 2. PROGRESS.md (current build status)
-3. GLUED_BUILD_PLAN.md (full phase specifications)
+3. VOLTIC_BUILD_PLAN.md (full phase specifications)
 
 Tell me which phase is next based on PROGRESS.md.
-Then execute ONLY that single phase from GLUED_BUILD_PLAN.md.
+Then execute ONLY that single phase from VOLTIC_BUILD_PLAN.md.
 
 Follow the Ralph Loop protocol:
 1. Implement all features listed in the phase
@@ -39,7 +39,7 @@ Each Claude Code session gets a fresh context window. By reading CLAUDE.md (stab
 Before your very first session, you need to bootstrap the project. Use this instead:
 
 ```
-Read CLAUDE.md and GLUED_BUILD_PLAN.md.
+Read CLAUDE.md and VOLTIC_BUILD_PLAN.md.
 
 Execute Phase 0: Project Bootstrap.
 - Create the Next.js project with all dependencies listed in Phase 0

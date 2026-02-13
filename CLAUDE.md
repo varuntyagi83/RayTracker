@@ -1,7 +1,7 @@
-# CLAUDE.md — Glued Project Intelligence
+# CLAUDE.md — Voltic Project Intelligence
 
-## What is Glued?
-Glued is a SaaS platform that unifies Meta (Facebook/Instagram) advertising analytics, competitor intelligence, automated reporting, social comment monitoring, and AI-powered creative generation into a single workspace. Think of it as "Supermetrics + AdSpy + Jasper" combined into one platform.
+## What is Voltic?
+Voltic is a SaaS platform that unifies Meta (Facebook/Instagram) advertising analytics, competitor intelligence, automated reporting, social comment monitoring, and AI-powered creative generation into a single workspace. Think of it as "Supermetrics + AdSpy + Jasper" combined into one platform.
 
 ## Tech Stack
 - **Framework:** Next.js 15 (App Router, Server Components, Route Handlers)
@@ -107,7 +107,7 @@ src/
 - Mock external APIs (Meta, Slack, AI) in tests
 
 ## Build Plan Reference
-The full 20-phase build plan is documented in `GLUED_BUILD_PLAN.md`. Each phase is designed to be executed in a single Claude Code session following the Ralph Loop protocol. Read `PROGRESS.md` to determine which phase to execute next.
+The full 20-phase build plan is documented in `VOLTIC_BUILD_PLAN.md`. Each phase is designed to be executed in a single Claude Code session following the Ralph Loop protocol. Read `PROGRESS.md` to determine which phase to execute next.
 
 ## IMPORTANT RULES
 1. **NEVER skip TypeScript types** — every function, every component, every API response

@@ -1,4 +1,4 @@
-# GLUED_BUILD_PLAN.md — 20-Phase Implementation Spec
+# VOLTIC_BUILD_PLAN.md — 20-Phase Implementation Spec
 
 > **How Claude Code uses this file:** Read CLAUDE.md for project rules. Read PROGRESS.md to find the next incomplete phase. Then find that phase below and execute it. After completing all verification checks, update PROGRESS.md and commit.
 
@@ -42,8 +42,8 @@
 
 1. Create the project:
 ```bash
-npx create-next-app@latest glued --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
-cd glued
+npx create-next-app@latest voltic --typescript --tailwind --eslint --app --src-dir --import-alias "@/*"
+cd voltic
 ```
 
 2. Install all dependencies:
@@ -104,7 +104,7 @@ Create Supabase clients:
 - Email + password form
 - "Don't have an account? Sign up" link
 - Google OAuth button (styled, can be disabled if no credentials)
-- Clean centered card layout with Glued branding (green accent color)
+- Clean centered card layout with Voltic branding (green accent color)
 
 **(auth)/signup/page.tsx:**
 - Email + password + workspace name fields
@@ -216,7 +216,7 @@ Define ALL tables. Reference CLAUDE.md for naming conventions.
 ### 2C. Seed Data — `scripts/seed.ts`
 
 Create realistic development data:
-- 1 workspace ("Glued Demo", timezone: Asia/Hong_Kong, currency: HKD, credit_balance: 500)
+- 1 workspace ("Voltic Demo", timezone: Asia/Hong_Kong, currency: HKD, credit_balance: 500)
 - 91 ad accounts with realistic names
 - 50 campaigns across accounts (Summer_Sale_2024, Brand_Awareness_Q1, Retargeting_High_Value, etc.)
 - 30 days of campaign_metrics per campaign with realistic ranges (spend: $100-$5000/day, ROAS: 0.5-5x, revenue derived from spend × ROAS)
@@ -246,7 +246,7 @@ Commit: `feat: complete database schema with Drizzle ORM and realistic seed data
 
 ## PHASE 3: SIDEBAR NAVIGATION & LAYOUT SHELL
 
-**Goal:** Build the dashboard layout with collapsible sidebar matching Glued's exact navigation structure. Every route has a placeholder page.
+**Goal:** Build the dashboard layout with collapsible sidebar matching Voltic's exact navigation structure. Every route has a placeholder page.
 
 ### 3A. Dashboard Layout — `(dashboard)/layout.tsx`
 
@@ -254,7 +254,7 @@ Server component: check auth → fetch workspace → render Sidebar + main area 
 
 ### 3B. Sidebar — `components/layout/sidebar.tsx`
 
-`"use client"` component matching Glued's sidebar:
+`"use client"` component matching Voltic's sidebar:
 
 **Top:** Workspace avatar ("G" green circle) + name + dropdown chevron, layout toggle icon
 
@@ -290,7 +290,7 @@ PostHog: `sidebar_nav_clicked` with `{ destination, current_page }`
 - [ ] `npx tsc --noEmit` passes
 
 Update PROGRESS.md → Phase 3 ✅
-Commit: `feat: dashboard layout with sidebar navigation matching Glued UI`
+Commit: `feat: dashboard layout with sidebar navigation matching Voltic UI`
 
 ---
 
