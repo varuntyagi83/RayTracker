@@ -68,14 +68,28 @@ export default function SignupPage() {
         return;
       }
 
+      // Detect fake/obfuscated response for already-registered emails
+      // Supabase returns an empty identities array in this case
+      if (authData.user.identities?.length === 0) {
+        setError("An account with this email already exists. Please log in instead.");
+        setLoading(false);
+        return;
+      }
+
       userId = authData.user.id;
     }
 
     // Create workspace + membership via server action
-    const result = await createWorkspace(workspaceName, userId);
+    try {
+      const result = await createWorkspace(workspaceName, userId);
 
-    if (result.error) {
-      setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      setError("Failed to create workspace. Please try again.");
       setLoading(false);
       return;
     }
