@@ -313,22 +313,24 @@ export default function DecompositionModal({
                             : "Generating..."}
                         </span>
                       </div>
-                    ) : result?.cleanImageUrl ? (
-                      <Image
-                        src={result.cleanImageUrl}
-                        alt="Clean product"
-                        fill
-                        className="object-contain"
-                        sizes="(max-width: 768px) 100vw, 50vw"
-                        unoptimized
-                      />
                     ) : status === "completed" ? (
-                      <div className="h-full w-full flex flex-col items-center justify-center gap-2">
-                        <AlertCircle className="size-8 text-muted-foreground/40" />
-                        <span className="text-xs text-muted-foreground">
-                          No clean image generated
-                        </span>
-                      </div>
+                      <>
+                        <Image
+                          src={result?.cleanImageUrl || imageUrl}
+                          alt="Clean product"
+                          fill
+                          className="object-contain"
+                          sizes="(max-width: 768px) 100vw, 50vw"
+                          unoptimized
+                        />
+                        {!result?.cleanImageUrl && (
+                          <div className="absolute bottom-2 inset-x-2 text-center">
+                            <Badge variant="secondary" className="text-[10px]">
+                              No overlay text — original used
+                            </Badge>
+                          </div>
+                        )}
+                      </>
                     ) : null}
                   </div>
                 </div>
