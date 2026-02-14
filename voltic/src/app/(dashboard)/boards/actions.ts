@@ -205,7 +205,7 @@ export async function generateVariationsAction(
   const totalCost = VARIATION_CREDIT_COST * strategies.length;
 
   // Check credits
-  const creditCheck = await checkAndDeductCredits(workspace.id, totalCost);
+  const creditCheck = await checkAndDeductCredits(workspace.id, totalCost, "variation");
   if (!creditCheck.success) {
     return { results: [], error: creditCheck.error };
   }
@@ -365,7 +365,7 @@ export async function enhanceCreativesAction(
   const totalCost = CREATIVE_ENHANCE_CREDIT_COST * combinations.length;
 
   // Check credits
-  const creditCheck = await checkAndDeductCredits(workspace.id, totalCost);
+  const creditCheck = await checkAndDeductCredits(workspace.id, totalCost, "creative_enhance");
   if (!creditCheck.success) return { error: creditCheck.error };
 
   // Fetch brand guidelines
@@ -426,7 +426,7 @@ export async function analyzeAdAction(
   }
 
   // Deduct credits
-  const creditCheck = await checkAndDeductCredits(workspace.id, INSIGHT_CREDIT_COST);
+  const creditCheck = await checkAndDeductCredits(workspace.id, INSIGHT_CREDIT_COST, "ad_insight");
   if (!creditCheck.success) return { error: creditCheck.error };
 
   try {

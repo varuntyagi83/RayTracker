@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 16 ✅
+> Current phase: Phase 17 ✅
 
 ## Phase Status
 
@@ -26,7 +26,7 @@
 | 14++ | Competitor Intelligence + gpt-image-1 + File Upload | ✅ Complete | 2026-02-14 | (1) gpt-image-1 migration — replaced DALL-E 3 with OpenAI gpt-image-1 for image generation in variations + Creative Studio, higher quality output. (2) File Upload in Creative Studio — Upload images/documents to chat, stored in studio-attachments bucket, passed as attachments in messages. (3) Competitor Intelligence system — New /competitors page with Companies tab (multi-select, ad counts, last scraped) + Reports tab (per-ad analysis with score bars, hook/CTA analysis, target audience, copy structure, strengths/weaknesses/improvements, cross-brand insights). Save competitor brands from Discover page runs. Generate AI analysis reports (GPT-4o) with credit deduction (3 base + 2 per ad). @mention competitor reports in Creative Studio with full context injection. New DB tables: competitor_brands, competitor_reports. New types: types/competitors.ts. New data layer: lib/data/competitors.ts. New actions: competitors/actions.ts. New components: company-selector, report-viewer, competitors-client. Sidebar nav updated with Competitors item. Studio @mention extended for competitor_report type with orange badge. |
 | 15 | Chrome Extension (Meta Ad Library) | ✅ Complete | 2026-02-14 | Chrome Manifest V3 extension for saving ads from Meta Ad Library (facebook.com/ads/library) directly to Voltic boards. Auth: user copies Supabase JWT from new Settings → Chrome Extension section, extension validates via API route. 3 new API routes: /api/extension/auth (GET, validate token + return workspace), /api/extension/boards (GET, list boards), /api/extension/save-ad (POST, Zod-validated, duplicate check by meta_library_id, source="extension"). Extension popup: connect/disconnect with URL + token inputs, green connected state. Content script: connection banner (green/yellow), MutationObserver for SPA navigation, ad card detection via multiple CSS selector fallbacks, "Save to Voltic" button injection, board selector dropdown (cached 5 min), ad data parser (metaLibraryId, brandName, headline, body, format, imageUrl, landingPageUrl, platforms, startDate, runtimeDays), saved state transition. Settings page updated with Chrome Extension card (reveal/copy API token with eye toggle). 12 new files, 1 modified. |
 | 16 | PostHog Deep Integration | ✅ Complete | 2026-02-14 | Typed event system (45+ events), posthog-node server-side client, track() wrapper with compile-time enforcement, 33 client files instrumented, 4 API routes instrumented, all trackEvent() migrated to typed track(), zero TS errors |
-| 17 | Credit System & Billing | ⬜ Not started | | |
+| 17 | Credit System & Billing | ✅ Complete | 2026-02-14 | Credit balance indicator in top bar (Coins icon + balance + low-balance badges), /credits page with transaction history table (type filter, pagination), purchase dialog with 3 mock packages (100/$9.99, 500/$39.99, 1000/$69.99), Credits nav in sidebar. Fixed transaction type bug: checkAndDeductCredits now accepts TransactionType param, all 6 call sites fixed (ad_insight, comparison, variation, creative_enhance, competitor_report). New types: TransactionType, CreditTransaction, CreditPackage. Data layer: getCreditTransactions (paginated+filtered), addCredits, getCurrentBalance. 5 new analytics events. 7 new files, 9 modified. npx tsc --noEmit passes clean. |
 | 18 | Production Hardening | ⬜ Not started | | |
 | 19 | Testing & QA | ⬜ Not started | | |
 | 20 | Deployment & CI/CD | ⬜ Not started | | |
@@ -37,32 +37,28 @@
 
 ## Context for Next Session
 
-Phase 16 complete. PostHog Deep Integration across entire codebase.
+Phase 17 complete. Credit System & Billing UI fully implemented.
 
 **New Files:**
-- `voltic/src/lib/analytics/events.ts` — Typed event definitions (`EventPropertiesMap` with 45+ events), `VolticEvent` union type, `track()` wrapper with compile-time enforcement of event name + properties
-- `voltic/src/lib/analytics/posthog-server.ts` — Server-side PostHog client using `posthog-node`, singleton `getServerPostHog()`, typed `trackServer()` function
+- `voltic/src/types/credits.ts` — TransactionType, CreditTransaction, CreditPackage types, CREDIT_PACKAGES array, generateTransactionDescription(), TRANSACTION_TYPE_LABELS
+- `voltic/src/lib/data/credits.ts` — getCreditTransactions (paginated with type filter), addCredits, getCurrentBalance
+- `voltic/src/components/shared/credit-balance.tsx` — Top bar credit balance indicator with dropdown (balance, View History, Purchase Credits), low-balance badges
+- `voltic/src/app/(dashboard)/credits/page.tsx` — Server component wrapper
+- `voltic/src/app/(dashboard)/credits/actions.ts` — fetchCreditTransactionsAction, purchaseCreditsAction (mock)
+- `voltic/src/app/(dashboard)/credits/components/credits-page-client.tsx` — Main credits page with balance card + transaction table + purchase dialog
+- `voltic/src/app/(dashboard)/credits/components/transaction-table.tsx` — Paginated table with type filter, colored amounts (+green/-red), type badges
+- `voltic/src/app/(dashboard)/credits/components/purchase-dialog.tsx` — 3 credit packages (100/$9.99, 500/$39.99, 1000/$69.99), mock purchase flow
 
-**Modified (33 client files + 4 API routes):**
-- Auth pages: login_submitted, login_failed, signup_started, signup_completed
-- Discover: search_executed, ad_saved_to_board, ad_analyzed, ads_compared, run_saved
-- Boards (4 files): board CRUD, ad_removed, variation_opened, ad_analyzed, creative_builder_opened
-- Assets: asset CRUD
-- Creative Studio (4 files): conversation_created/deleted, message_sent, model_changed, generation_saved_as_asset
-- Brand Guidelines: brand_guideline_deleted
-- Competitors: report_generated, report_deleted, brands_deleted
-- Reports: date_range_changed
-- Campaign Analysis: report_exported
-- Settings: settings_updated, api_token_copied
-- Automations (6 files): migrated all trackEvent() → typed track()
-- Layout (sidebar + topbar): migrated trackEvent() → track()
-- Dashboard (tracker + top-assets): migrated trackEvent() → track()
-- API routes: automation_cron_executed, automation_cron_error, extension_auth_validated, extension_ad_saved, automation_test_run
-
-**Dependency added:** `posthog-node` (server-side PostHog SDK)
+**Modified (9 files):**
+- `lib/analytics/events.ts` — Added 5 credit UI events (credits_page_viewed, credits_purchased, credits_purchase_clicked, credit_balance_clicked, insufficient_credits_shown)
+- `lib/data/insights.ts` — checkAndDeductCredits now takes `type: TransactionType` and optional `description` params; uses generateTransactionDescription instead of hardcoded strings
+- `app/(dashboard)/discover/actions.ts` — 2 call sites: "ad_insight" + "comparison"
+- `app/(dashboard)/boards/actions.ts` — 3 call sites: "variation" + "creative_enhance" + "ad_insight"
+- `app/(dashboard)/competitors/actions.ts` — 1 call site: "competitor_report"
+- `components/layout/top-bar.tsx` — Added CreditBalance component
+- `components/layout/app-sidebar.tsx` — Added Credits nav item with Coins icon
 
 **Notes:**
-- All consumer files use typed `track()` from `@/lib/analytics/events` — zero raw `trackEvent()` calls remain
-- Server-side uses `trackServer()` from `@/lib/analytics/posthog-server`
-- TypeScript enforces correct event name + properties at compile time
-- Phase 17 should implement Credit System & Billing
+- Purchase is mock (adds credits directly) — real Stripe integration deferred to Phase 18+
+- Transaction types are now correctly categorized (fixed bug where all were "ad_insight")
+- Phase 18 should implement Production Hardening

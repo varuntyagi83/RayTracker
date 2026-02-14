@@ -81,7 +81,7 @@ export async function generateCompetitorReportAction(
   const creditCost = REPORT_BASE_COST + REPORT_PER_AD_COST * ads.length;
 
   // 4. Check and deduct credits
-  const creditResult = await checkAndDeductCredits(workspace.id, creditCost);
+  const creditResult = await checkAndDeductCredits(workspace.id, creditCost, "competitor_report");
   if (!creditResult.success) {
     return { error: creditResult.error ?? "Insufficient credits" };
   }

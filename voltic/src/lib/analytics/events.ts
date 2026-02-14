@@ -125,6 +125,23 @@ export interface EventPropertiesMap {
     amount: number;
     reason: string;
   };
+
+  // Credits UI
+  credits_page_viewed: Record<string, never>;
+  credits_purchased: {
+    package_id: string;
+    credits: number;
+    workspace_id?: string;
+    stripe_session_id?: string;
+    amount?: number;
+  };
+  credits_purchase_clicked: { package_id: string };
+  credit_balance_clicked: Record<string, never>;
+  insufficient_credits_shown: {
+    feature: string;
+    needed: number;
+    have: number;
+  };
 }
 
 // ─── Event Name Union ─────────────────────────────────────────────────────

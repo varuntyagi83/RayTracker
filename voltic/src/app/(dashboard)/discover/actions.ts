@@ -98,7 +98,7 @@ export async function analyzeAd(
   }
 
   // 4. Check and deduct credits
-  const creditResult = await checkAndDeductCredits(workspace.id, INSIGHT_CREDIT_COST);
+  const creditResult = await checkAndDeductCredits(workspace.id, INSIGHT_CREDIT_COST, "ad_insight");
   if (!creditResult.success) {
     return { error: creditResult.error ?? "Insufficient credits" };
   }
@@ -194,7 +194,8 @@ export async function compareAds(
   // 3. Check and deduct credits
   const creditResult = await checkAndDeductCredits(
     workspace.id,
-    COMPARISON_CREDIT_COST
+    COMPARISON_CREDIT_COST,
+    "comparison"
   );
   if (!creditResult.success) {
     return { error: creditResult.error ?? "Insufficient credits" };

@@ -1,5 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { AdInsightData, AdInsightRecord } from "@/types/discover";
+import type { TransactionType } from "@/types/credits";
+import { generateTransactionDescription, isUnlimitedCredits } from "@/types/credits";
 
 const INSIGHT_CREDIT_COST = 2;
 
@@ -80,7 +82,9 @@ export async function saveInsight(
 
 export async function checkAndDeductCredits(
   workspaceId: string,
-  amount: number
+  amount: number,
+  type: TransactionType = "ad_insight",
+  description?: string
 ): Promise<{ success: boolean; remainingBalance: number; error?: string }> {
   const supabase = createAdminClient();
 
@@ -93,6 +97,11 @@ export async function checkAndDeductCredits(
 
   if (fetchErr || !workspace) {
     return { success: false, remainingBalance: 0, error: "Workspace not found" };
+  }
+
+  // Unlimited credits — skip deduction entirely
+  if (isUnlimitedCredits(workspace.credit_balance)) {
+    return { success: true, remainingBalance: workspace.credit_balance };
   }
 
   if (workspace.credit_balance < amount) {
@@ -119,12 +128,13 @@ export async function checkAndDeductCredits(
     };
   }
 
-  // 3. Record transaction
+  // 3. Record transaction with correct type
+  const txDescription = description ?? generateTransactionDescription(type, amount);
   await supabase.from("credit_transactions").insert({
     workspace_id: workspaceId,
     amount: -amount,
-    type: "ad_insight",
-    description: `AI Ad Insight generation (-${amount} credits)`,
+    type,
+    description: txDescription,
   });
 
   return { success: true, remainingBalance: newBalance };

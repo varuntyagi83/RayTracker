@@ -12,6 +12,7 @@ import {
   Image,
   BookOpen,
   MessageSquareText,
+  Coins,
   Plus,
   TrendingUp,
   LineChart,
@@ -63,6 +64,7 @@ const mainNavItems = [
   { label: "Assets", href: "/assets", icon: Image },
   { label: "Brand Guidelines", href: "/brand-guidelines", icon: BookOpen },
   { label: "Creative Studio", href: "/creative-studio", icon: MessageSquareText },
+  { label: "Credits", href: "/credits", icon: Coins },
 ];
 
 const reportItems = [
