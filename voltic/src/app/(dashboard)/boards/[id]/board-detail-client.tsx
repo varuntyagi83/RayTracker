@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -43,6 +44,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
+import { toast } from "sonner";
 import { track } from "@/lib/analytics/events";
 import {
   fetchBoard,
@@ -122,6 +124,9 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
         ads: board.ads.filter((a) => a.id !== deletingAd.id),
         adCount: board.adCount - 1,
       });
+      toast.success("Ad removed from board");
+    } else {
+      toast.error(result.error || "Failed to remove ad");
     }
 
     setIsDeleting(false);
@@ -151,6 +156,9 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
         name: editName.trim(),
         description: editDescription.trim() || null,
       });
+      toast.success("Board updated");
+    } else {
+      toast.error(result.error || "Failed to update board");
     }
 
     setEditSaving(false);
@@ -164,7 +172,10 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
     const result = await deleteBoardAction({ boardId: board.id });
     if (result.success) {
       track("board_deleted", { board_id: board.id });
+      toast.success("Board deleted");
       router.push("/boards");
+    } else {
+      toast.error(result.error || "Failed to delete board");
     }
 
     setDeletingBoard(false);
@@ -483,13 +494,7 @@ function SavedAdCard({
 
         {/* Thumbnail */}
         <div className="aspect-video bg-muted relative">
-          {ad.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={ad.imageUrl}
-              alt={ad.brandName ?? "Ad"}
-              className="h-full w-full object-cover"
-            />
+          {ad.imageUrl ? (            <Image src={ad.imageUrl || "/placeholder.svg"} alt={ad.brandName ?? "Ad"} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
           ) : (
             <div className="h-full w-full flex items-center justify-center">
               <ImageIcon className="size-8 text-muted-foreground/30" />
@@ -565,6 +570,7 @@ function SavedAdCard({
             size="sm"
             className="text-destructive hover:text-destructive shrink-0"
             onClick={onDelete}
+            aria-label="Delete"
           >
             <Trash2 className="size-3.5" />
           </Button>

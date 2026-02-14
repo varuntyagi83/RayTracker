@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import {
   getCampaignList,
@@ -9,6 +10,20 @@ import {
   getCampaignFilterOptions,
 } from "@/lib/data/campaign-analysis";
 import type { DateRange } from "@/types/campaign-analysis";
+
+const dateRangeSchema = z.object({
+  from: z.string().min(1),
+  to: z.string().min(1),
+});
+
+const campaignListSchema = z.object({
+  dateRange: dateRangeSchema,
+  search: z.string().max(200).optional(),
+  statusFilter: z.string().max(50).optional(),
+  objectiveFilter: z.string().max(50).optional(),
+  sortKey: z.string().min(1),
+  sortDirection: z.enum(["asc", "desc"]),
+});
 
 // ─── Fetch Campaign List ────────────────────────────────────────────────────
 
@@ -20,12 +35,15 @@ export async function fetchCampaignList(input: {
   sortKey: string;
   sortDirection: "asc" | "desc";
 }) {
+  const parsed = campaignListSchema.safeParse(input);
+  if (!parsed.success) return { error: "Invalid input" } as const;
+
   const workspace = await getWorkspace();
   if (!workspace) return { error: "No workspace" } as const;
 
   return await getCampaignList({
     workspaceId: workspace.id,
-    ...input,
+    ...parsed.data,
   });
 }
 

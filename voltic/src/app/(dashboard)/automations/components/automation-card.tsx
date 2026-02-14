@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Pause, Play, Pencil, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { toggleAutomationStatus } from "../actions";
 import { track } from "@/lib/analytics/events";
 import type { Automation, PerformanceConfig, ScheduleConfig } from "@/types/automation";
@@ -55,7 +56,10 @@ export function AutomationCard({ automation, onEdit }: AutomationCardProps) {
           : "automation_paused",
         { automation_id: automation.id }
       );
+      toast.success(`Automation ${result.status === "active" ? "enabled" : "paused"}`);
       router.refresh();
+    } else {
+      toast.error(result.error || "Failed to update automation");
     }
     setToggling(false);
   }
@@ -96,7 +100,7 @@ export function AutomationCard({ automation, onEdit }: AutomationCardProps) {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="More options">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>

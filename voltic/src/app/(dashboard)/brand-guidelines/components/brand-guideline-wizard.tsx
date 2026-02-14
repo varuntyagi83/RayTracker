@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import {
   ArrowLeft,
   ArrowRight,
@@ -358,13 +359,7 @@ export function BrandGuidelineWizard({ onCancel, onComplete }: BrandGuidelineWiz
                     key={file.path}
                     className="flex items-center gap-3 p-2 rounded-lg border bg-muted/50"
                   >
-                    {/\.(jpg|jpeg|png|webp|gif|svg)$/i.test(file.name) ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={file.url}
-                        alt={file.name}
-                        className="size-10 rounded object-cover border"
-                      />
+                    {/\.(jpg|jpeg|png|webp|gif|svg)$/i.test(file.name) ? (                      <Image src={file.url || "/placeholder.svg"} alt={file.name} width={40} height={40} className="rounded object-cover border" unoptimized />
                     ) : (
                       <div className="size-10 rounded bg-muted flex items-center justify-center">
                         <Upload className="size-4 text-muted-foreground" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   Plus,
@@ -39,6 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
 import { track } from "@/lib/analytics/events";
 import {
   fetchBoards,
@@ -112,6 +114,9 @@ export default function BoardsClient() {
               : b
           )
         );
+        toast.success("Board updated");
+      } else {
+        toast.error(result.error || "Failed to update board");
       }
     } else {
       const result = await createBoardAction({
@@ -121,6 +126,9 @@ export default function BoardsClient() {
       if (result.success && result.id) {
         track("board_created", { board_id: result.id, name: formName.trim() });
         await loadBoards();
+        toast.success("Board created");
+      } else {
+        toast.error(result.error || "Failed to create board");
       }
     }
 
@@ -136,6 +144,9 @@ export default function BoardsClient() {
     if (result.success) {
       track("board_deleted", { board_id: deleteBoard.id });
       setBoards((prev) => prev.filter((b) => b.id !== deleteBoard.id));
+      toast.success("Board deleted");
+    } else {
+      toast.error(result.error || "Failed to delete board");
     }
 
     setDeleting(false);
@@ -296,13 +307,7 @@ function BoardCard({
             <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="relative overflow-hidden">
-                  {thumbnails[i] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={thumbnails[i]}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
+                  {thumbnails[i] ? (                    <Image src={thumbnails[i] || "/placeholder.svg"} alt="" fill className="h-full w-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                   ) : (
                     <div className="h-full w-full bg-muted" />
                   )}
@@ -339,6 +344,7 @@ function BoardCard({
                   size="icon"
                   className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => e.stopPropagation()}
+                  aria-label="More options"
                 >
                   <MoreHorizontal className="size-4" />
                 </Button>

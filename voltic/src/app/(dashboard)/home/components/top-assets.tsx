@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Zap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,13 +76,7 @@ export function TopAssets({
                 <Card key={c.id} className="w-[220px] shrink-0">
                   <CardContent className="p-0">
                     <div className="relative h-32 w-full overflow-hidden rounded-t-lg bg-muted">
-                      {c.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={c.imageUrl}
-                          alt={c.name}
-                          className="h-full w-full object-cover"
-                        />
+                      {c.imageUrl ? (                        <Image src={c.imageUrl || "/placeholder.svg"} alt={c.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                       ) : (
                         <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
                           No image

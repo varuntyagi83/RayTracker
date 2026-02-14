@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getStripe } from "@/lib/stripe/client";
 import { CREDIT_PACKAGES } from "@/types/credits";
+import { apiLimiter } from "@/lib/utils/rate-limit";
+
+const checkoutSchema = z.object({
+  packageId: z.enum(["starter", "pro", "enterprise"]),
+});
 
 /**
  * POST /api/checkout
@@ -22,6 +28,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Rate limit
+  const rl = apiLimiter.check(user.id, 10);
+  if (!rl.success) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   // 2. Get workspace
   const admin = createAdminClient();
   const { data: member } = await admin
@@ -34,11 +46,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "No workspace" }, { status: 403 });
   }
 
-  // 3. Parse body
-  const body = await request.json();
-  const packageId = body.packageId as string;
+  // 3. Validate body
+  const parsed = checkoutSchema.safeParse(await request.json());
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0].message },
+      { status: 400 }
+    );
+  }
 
-  const pkg = CREDIT_PACKAGES.find((p) => p.id === packageId);
+  const pkg = CREDIT_PACKAGES.find((p) => p.id === parsed.data.packageId);
   if (!pkg) {
     return NextResponse.json({ error: "Invalid package" }, { status: 400 });
   }

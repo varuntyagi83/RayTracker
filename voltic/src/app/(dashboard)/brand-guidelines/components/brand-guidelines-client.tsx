@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import {
   Plus,
   BookOpen,
@@ -31,6 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { BrandGuidelineWizard } from "./brand-guideline-wizard";
 import { BrandGuidelineEditor } from "./brand-guideline-editor";
 import { track } from "@/lib/analytics/events";
@@ -83,6 +85,9 @@ export default function BrandGuidelinesClient() {
     if (result.success) {
       track("brand_guideline_deleted", { guideline_id: deleteTarget.id });
       setGuidelines((prev) => prev.filter((g) => g.id !== deleteTarget.id));
+      toast.success("Brand guidelines deleted");
+    } else {
+      toast.error(result.error || "Failed to delete brand guidelines");
     }
 
     setDeleting(false);
@@ -232,13 +237,7 @@ function GuidelineCard({
       <CardContent className="p-0">
         {/* Color bar preview */}
         <div className="h-20 bg-muted flex items-center justify-center relative">
-          {guideline.logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={guideline.logoUrl}
-              alt={guideline.name}
-              className="h-full w-full object-contain p-3"
-            />
+          {guideline.logoUrl ? (            <Image src={guideline.logoUrl || "/placeholder.svg"} alt={guideline.name} fill className="object-contain" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
           ) : guideline.colorPalette.length > 0 ? (
             <div className="flex w-full h-full">
               {guideline.colorPalette.slice(0, 6).map((c, i) => (
@@ -287,6 +286,7 @@ function GuidelineCard({
                   size="icon"
                   className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                   onClick={(e) => e.stopPropagation()}
+                  aria-label="More options"
                 >
                   <MoreHorizontal className="size-4" />
                 </Button>

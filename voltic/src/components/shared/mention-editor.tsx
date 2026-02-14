@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import Image from "next/image";
 import { useEditor, EditorContent, ReactRenderer } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Mention from "@tiptap/extension-mention";
@@ -85,13 +86,7 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
             }`}
             onClick={() => selectItem(index)}
           >
-            {item.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.imageUrl}
-                alt={item.name}
-                className="size-7 rounded object-cover border shrink-0"
-              />
+            {item.imageUrl ? (              <Image src={item.imageUrl || "/placeholder.svg"} alt={item.name} width={28} height={28} className="rounded object-cover border shrink-0" unoptimized />
             ) : item.type === "brand_guidelines" ? (
               <div className="size-7 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
                 <BookOpen className="size-3.5" />
@@ -183,7 +178,6 @@ export const MentionEditor = forwardRef<MentionEditorRef, MentionEditorProps>(
               let popup: TippyInstance[] | null = null;
 
               return {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 onStart: (props: SuggestionProps<any>) => {
                   component = new ReactRenderer(MentionList, {
                     props,
@@ -202,7 +196,6 @@ export const MentionEditor = forwardRef<MentionEditorRef, MentionEditorProps>(
                     placement: "bottom-start",
                   });
                 },
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 onUpdate: (props: SuggestionProps<any>) => {
                   component?.updateProps(props);
 
@@ -259,7 +252,6 @@ export const MentionEditor = forwardRef<MentionEditorRef, MentionEditorProps>(
       const mentions: MentionData[] = [];
       const doc = editor.getJSON();
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       function extractMentions(node: any) {
         if (node.type === "mention" && node.attrs) {
           try {

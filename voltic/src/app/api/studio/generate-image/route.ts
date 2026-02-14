@@ -3,6 +3,7 @@ import { z } from "zod";
 import OpenAI from "openai";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { aiLimiter } from "@/lib/utils/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -19,6 +20,12 @@ export async function POST(req: NextRequest) {
   const workspace = await getWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit
+  const rl = aiLimiter.check(workspace.id, 10);
+  if (!rl.success) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const parsed = schema.safeParse(await req.json());

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { User, Bot, Save, FileText, Download, ImageIcon, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { StudioMessage, MessageAttachment } from "@/types/creative-studio";
@@ -46,12 +47,7 @@ function AttachmentGrid({ attachments }: { attachments: MessageAttachment[] }) {
               rel="noopener noreferrer"
               className="block"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={img.url}
-                alt={img.name}
-                className="max-w-[300px] max-h-[300px] rounded-md border object-cover hover:opacity-90 transition-opacity"
-              />
+              <Image src={img.url || "/placeholder.svg"} alt={img.name} width={200} height={200} className="max-w-[300px] max-h-[300px] rounded-md border object-cover hover:opacity-90 transition-opacity" unoptimized />
             </a>
           ))}
         </div>
@@ -129,12 +125,7 @@ function ImageGenerationBlock({
     return (
       <div className="mt-3 space-y-1">
         <a href={generatedUrl} target="_blank" rel="noopener noreferrer">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={generatedUrl}
-            alt="Generated creative"
-            className="max-w-[400px] rounded-lg border hover:opacity-90 transition-opacity"
-          />
+          <Image src={generatedUrl || "/placeholder.svg"} alt="Generated creative" width={200} height={200} className="max-w-[400px] rounded-lg border hover:opacity-90 transition-opacity" unoptimized />
         </a>
         <p className="text-xs text-muted-foreground">Generated with GPT Image</p>
       </div>

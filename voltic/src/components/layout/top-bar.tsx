@@ -49,6 +49,7 @@ export function TopBar({ actions }: TopBarProps) {
           size="icon"
           onClick={handleRefresh}
           className="size-8"
+          aria-label="Refresh"
         >
           <RefreshCw className="size-4" />
           <span className="sr-only">Refresh</span>

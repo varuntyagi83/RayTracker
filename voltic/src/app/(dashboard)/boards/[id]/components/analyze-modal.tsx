@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import {
   Loader2,
   Zap,
@@ -112,13 +113,7 @@ export default function AnalyzeModal({
 
         {/* Ad Summary */}
         <div className="flex items-start gap-3 rounded-md border p-3">
-          {savedAd.imageUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={savedAd.imageUrl}
-              alt={savedAd.brandName ?? "Ad"}
-              className="size-16 rounded object-cover shrink-0"
-            />
+          {savedAd.imageUrl && (            <Image src={savedAd.imageUrl || "/placeholder.svg"} alt={savedAd.brandName ?? "Ad"} width={64} height={64} className="rounded object-cover shrink-0" unoptimized />
           )}
           <div className="min-w-0">
             <p className="font-semibold text-sm">

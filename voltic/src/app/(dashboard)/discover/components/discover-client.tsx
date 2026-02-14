@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,7 @@ import {
   Save,
   Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   fetchDiscoverAds,
   fetchBoards,
@@ -257,6 +259,9 @@ export default function DiscoverClient() {
     if (result.success) {
       setSavedAdIds((prev) => new Set(prev).add(ad.id));
       track("discover_ad_saved_to_board", { board_id: boardId, ad_id: ad.id });
+      toast.success("Ad saved to board");
+    } else {
+      toast.error(result.error || "Failed to save ad to board");
     }
     setSavingAdId(null);
   };
@@ -681,11 +686,13 @@ function AdCard({
         {/* Media */}
         <div className="relative bg-muted h-[200px] flex items-center justify-center mx-4 rounded overflow-hidden">
           {ad.mediaThumbnailUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={ad.mediaThumbnailUrl}
+            <Image
+              src={ad.mediaThumbnailUrl || "/placeholder.svg"}
               alt={ad.headline}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              unoptimized
             />
           ) : (
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -825,6 +832,7 @@ function AdCard({
               href={ad.adsLibraryUrl}
               target="_blank"
               rel="noopener noreferrer"
+              aria-label="Open in Meta Ads Library"
             >
               <ExternalLink className="h-3.5 w-3.5" />
             </a>

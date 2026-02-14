@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 17 ✅
+> Current phase: Phase 18 ✅
 
 ## Phase Status
 
@@ -27,7 +27,7 @@
 | 15 | Chrome Extension (Meta Ad Library) | ✅ Complete | 2026-02-14 | Chrome Manifest V3 extension for saving ads from Meta Ad Library (facebook.com/ads/library) directly to Voltic boards. Auth: user copies Supabase JWT from new Settings → Chrome Extension section, extension validates via API route. 3 new API routes: /api/extension/auth (GET, validate token + return workspace), /api/extension/boards (GET, list boards), /api/extension/save-ad (POST, Zod-validated, duplicate check by meta_library_id, source="extension"). Extension popup: connect/disconnect with URL + token inputs, green connected state. Content script: connection banner (green/yellow), MutationObserver for SPA navigation, ad card detection via multiple CSS selector fallbacks, "Save to Voltic" button injection, board selector dropdown (cached 5 min), ad data parser (metaLibraryId, brandName, headline, body, format, imageUrl, landingPageUrl, platforms, startDate, runtimeDays), saved state transition. Settings page updated with Chrome Extension card (reveal/copy API token with eye toggle). 12 new files, 1 modified. |
 | 16 | PostHog Deep Integration | ✅ Complete | 2026-02-14 | Typed event system (45+ events), posthog-node server-side client, track() wrapper with compile-time enforcement, 33 client files instrumented, 4 API routes instrumented, all trackEvent() migrated to typed track(), zero TS errors |
 | 17 | Credit System & Billing | ✅ Complete | 2026-02-14 | Credit balance indicator in top bar (Coins icon + balance + low-balance badges), /credits page with transaction history table (type filter, pagination), purchase dialog with 3 mock packages (100/$9.99, 500/$39.99, 1000/$69.99), Credits nav in sidebar. Fixed transaction type bug: checkAndDeductCredits now accepts TransactionType param, all 6 call sites fixed (ad_insight, comparison, variation, creative_enhance, competitor_report). New types: TransactionType, CreditTransaction, CreditPackage. Data layer: getCreditTransactions (paginated+filtered), addCredits, getCurrentBalance. 5 new analytics events. 7 new files, 9 modified. npx tsc --noEmit passes clean. |
-| 18 | Production Hardening | ⬜ Not started | | |
+| 18 | Production Hardening | ✅ Complete | 2026-02-14 | Security headers (HSTS, X-Frame-Options, CSP-adjacent, nosniff, Referrer-Policy, Permissions-Policy) in next.config.ts. In-memory rate limiting on 4 critical API routes (checkout, studio/chat, studio/generate-image, extension/auth). Zod validation added to 6 action/route files (checkout, signup, reports, campaign-analysis, creative-studio, credits). Error boundaries (dashboard-error.tsx shared + 12 error.tsx files). Loading skeletons (11 loading.tsx files). next/image migration (16 files, 29 img→Image). Toast notifications via sonner in 7 CRUD components. Accessibility: aria-labels on 10 icon-only buttons. .env.example created. CRON_SECRET set. npx tsc --noEmit passes clean. |
 | 19 | Testing & QA | ⬜ Not started | | |
 | 20 | Deployment & CI/CD | ⬜ Not started | | |
 
@@ -37,28 +37,25 @@
 
 ## Context for Next Session
 
-Phase 17 complete. Credit System & Billing UI fully implemented.
+Phase 18 complete. Production Hardening implemented across the entire codebase.
 
-**New Files:**
-- `voltic/src/types/credits.ts` — TransactionType, CreditTransaction, CreditPackage types, CREDIT_PACKAGES array, generateTransactionDescription(), TRANSACTION_TYPE_LABELS
-- `voltic/src/lib/data/credits.ts` — getCreditTransactions (paginated with type filter), addCredits, getCurrentBalance
-- `voltic/src/components/shared/credit-balance.tsx` — Top bar credit balance indicator with dropdown (balance, View History, Purchase Credits), low-balance badges
-- `voltic/src/app/(dashboard)/credits/page.tsx` — Server component wrapper
-- `voltic/src/app/(dashboard)/credits/actions.ts` — fetchCreditTransactionsAction, purchaseCreditsAction (mock)
-- `voltic/src/app/(dashboard)/credits/components/credits-page-client.tsx` — Main credits page with balance card + transaction table + purchase dialog
-- `voltic/src/app/(dashboard)/credits/components/transaction-table.tsx` — Paginated table with type filter, colored amounts (+green/-red), type badges
-- `voltic/src/app/(dashboard)/credits/components/purchase-dialog.tsx` — 3 credit packages (100/$9.99, 500/$39.99, 1000/$69.99), mock purchase flow
+**New Files (26):**
+- `voltic/src/lib/utils/rate-limit.ts` — In-memory sliding window rate limiter with apiLimiter, aiLimiter, authLimiter presets
+- `voltic/src/components/shared/dashboard-error.tsx` — Shared error boundary component (AlertTriangle + message + "Try again")
+- 12 × `error.tsx` files — automations, discover, boards, boards/[id], assets, campaign-analysis, creative-studio, settings, brand-guidelines, competitors, credits, reports
+- 11 × `loading.tsx` files — discover, boards, boards/[id], assets, campaign-analysis, creative-studio, settings, brand-guidelines, competitors, credits, reports
+- `voltic/.env.example` — Environment variable template (22 keys)
 
-**Modified (9 files):**
-- `lib/analytics/events.ts` — Added 5 credit UI events (credits_page_viewed, credits_purchased, credits_purchase_clicked, credit_balance_clicked, insufficient_credits_shown)
-- `lib/data/insights.ts` — checkAndDeductCredits now takes `type: TransactionType` and optional `description` params; uses generateTransactionDescription instead of hardcoded strings
-- `app/(dashboard)/discover/actions.ts` — 2 call sites: "ad_insight" + "comparison"
-- `app/(dashboard)/boards/actions.ts` — 3 call sites: "variation" + "creative_enhance" + "ad_insight"
-- `app/(dashboard)/competitors/actions.ts` — 1 call site: "competitor_report"
-- `components/layout/top-bar.tsx` — Added CreditBalance component
-- `components/layout/app-sidebar.tsx` — Added Credits nav item with Coins icon
+**Modified (~43 files):**
+- `next.config.ts` — Security headers (HSTS, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy) + images.remotePatterns
+- 4 API routes — Rate limiting (checkout 10/min, studio/chat 20/min, studio/generate-image 10/min, extension/auth 10/min)
+- 6 action files — Zod validation (checkout, signup, reports, campaign-analysis, creative-studio, credits)
+- 16 component files — `<img>` → `<Image>` migration (29 total replacements, all with `unoptimized` for external URLs)
+- 7 component files — Toast notifications via sonner for CRUD operations
+- 8 component files — aria-label attributes on icon-only buttons
+- `.env.local` — CRON_SECRET set
 
 **Notes:**
-- Purchase is mock (adds credits directly) — real Stripe integration deferred to Phase 18+
-- Transaction types are now correctly categorized (fixed bug where all were "ad_insight")
-- Phase 18 should implement Production Hardening
+- Rate limiting is in-memory (suitable for single-instance). For multi-instance, swap with @upstash/ratelimit
+- Real Stripe Checkout was integrated in Phase 17+
+- Phase 19 should implement Testing & QA

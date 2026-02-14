@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { X, Scale, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,13 +34,7 @@ export function ComparisonTray({ onCompare, isComparing }: ComparisonTrayProps) 
                 key={ad.id}
                 className="flex items-center gap-1.5 bg-muted rounded-md px-2 py-1 shrink-0 group"
               >
-                {ad.mediaThumbnailUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={ad.mediaThumbnailUrl}
-                    alt={ad.pageName}
-                    className="size-8 rounded object-cover"
-                  />
+                {ad.mediaThumbnailUrl ? (                  <Image src={ad.mediaThumbnailUrl || "/placeholder.svg"} alt={ad.pageName} width={32} height={32} className="rounded object-cover" unoptimized />
                 ) : (
                   <div className="size-8 rounded bg-muted-foreground/20 flex items-center justify-center text-xs">
                     Ad

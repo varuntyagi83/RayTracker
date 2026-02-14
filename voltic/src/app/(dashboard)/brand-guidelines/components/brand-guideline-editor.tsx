@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
+import Image from "next/image";
 import {
   ArrowLeft,
   Save,
@@ -377,12 +378,7 @@ export function BrandGuidelineEditor({
               {logoUrl ? (
                 <div className="space-y-3">
                   <div className="rounded-lg border bg-muted p-4 flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={logoUrl}
-                      alt="Brand logo"
-                      className="max-h-32 max-w-full object-contain"
-                    />
+                    <Image src={logoUrl || "/placeholder.svg"} alt="Brand logo" width={200} height={200} className="max-h-32 max-w-full object-contain" unoptimized />
                   </div>
                   <Button
                     variant="outline"

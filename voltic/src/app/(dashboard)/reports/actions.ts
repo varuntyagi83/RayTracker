@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import type { ReportParams, DateRange, ReportSort, ReportResult } from "@/types/reports";
 import {
@@ -11,6 +12,19 @@ import {
   getTopCopyReport,
 } from "@/lib/data/reports";
 
+const fetchReportSchema = z.object({
+  dateRange: z.object({
+    from: z.string().min(1),
+    to: z.string().min(1),
+  }),
+  sort: z.object({
+    key: z.string().min(1),
+    direction: z.enum(["asc", "desc"]),
+  }),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1).max(100),
+});
+
 interface FetchReportInput {
   dateRange: DateRange;
   sort: ReportSort;
@@ -19,14 +33,17 @@ interface FetchReportInput {
 }
 
 async function buildParams(input: FetchReportInput): Promise<ReportParams | null> {
+  const parsed = fetchReportSchema.safeParse(input);
+  if (!parsed.success) return null;
+
   const workspace = await getWorkspace();
   if (!workspace) return null;
   return {
     workspaceId: workspace.id,
-    dateRange: input.dateRange,
-    sort: input.sort,
-    page: input.page,
-    pageSize: input.pageSize,
+    dateRange: parsed.data.dateRange,
+    sort: parsed.data.sort,
+    page: parsed.data.page,
+    pageSize: parsed.data.pageSize,
   };
 }
 

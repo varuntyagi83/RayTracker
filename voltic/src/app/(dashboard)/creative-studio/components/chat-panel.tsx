@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Send, Loader2, MessageSquareText, Paperclip, X, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -242,13 +243,7 @@ export function ChatPanel({
                   key={`${file.name}-${i}`}
                   className="relative group flex items-center gap-1.5 rounded-md border bg-muted/50 px-2 py-1.5 text-xs"
                 >
-                  {file.type.startsWith("image/") ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={URL.createObjectURL(file)}
-                      alt={file.name}
-                      className="size-8 rounded object-cover"
-                    />
+                  {file.type.startsWith("image/") ? (                    <Image src={URL.createObjectURL(file) || "/placeholder.svg"} alt={file.name} width={32} height={32} className="rounded object-cover" unoptimized />
                   ) : (
                     <FileText className="size-4 text-muted-foreground" />
                   )}
@@ -284,6 +279,7 @@ export function ChatPanel({
               disabled={streaming || pendingFiles.length >= 5}
               onClick={() => fileInputRef.current?.click()}
               title="Attach files (images, PDF)"
+              aria-label="Attach files"
             >
               {uploading ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -307,6 +303,7 @@ export function ChatPanel({
               onClick={() => {
                 editorRef.current?.submit();
               }}
+              aria-label="Send message"
             >
               {streaming ? (
                 <Loader2 className="size-4 animate-spin" />

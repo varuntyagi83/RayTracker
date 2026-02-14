@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import {
   listConversations,
@@ -12,6 +13,18 @@ import {
 } from "@/lib/data/studio";
 import { createAsset } from "@/lib/data/assets";
 import type { StudioConversation, StudioMessage, MentionableItem, LLMProvider } from "@/types/creative-studio";
+
+const conversationIdSchema = z.object({ id: z.string().uuid() });
+const createConversationSchema = z.object({
+  title: z.string().max(200).optional(),
+  llmProvider: z.enum(["openai", "anthropic", "google"]),
+  llmModel: z.string().min(1).max(100),
+});
+const saveAssetSchema = z.object({
+  name: z.string().min(1).max(200).trim(),
+  description: z.string().max(1000).optional(),
+  imageUrl: z.string().url().optional(),
+});
 
 // ─── Conversations ──────────────────────────────────────────────────────────
 
@@ -33,10 +46,13 @@ export async function fetchConversationAction(input: {
   messages?: StudioMessage[];
   error?: string;
 }> {
+  const parsed = conversationIdSchema.safeParse(input);
+  if (!parsed.success) return { error: "Invalid conversation ID" };
+
   const workspace = await getWorkspace();
   if (!workspace) return { error: "No workspace" };
 
-  const conversation = await getConversation(workspace.id, input.id);
+  const conversation = await getConversation(workspace.id, parsed.data.id);
   if (!conversation) return { error: "Not found" };
 
   const messages = await getMessages(workspace.id, input.id);
@@ -48,13 +64,16 @@ export async function createConversationAction(input: {
   llmProvider: LLMProvider;
   llmModel: string;
 }): Promise<{ success: boolean; id?: string; error?: string }> {
+  const parsed = createConversationSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
 
   return await createConversation(workspace.id, {
-    title: input.title,
-    llmProvider: input.llmProvider,
-    llmModel: input.llmModel,
+    title: parsed.data.title,
+    llmProvider: parsed.data.llmProvider,
+    llmModel: parsed.data.llmModel,
   });
 }
 
@@ -99,15 +118,16 @@ export async function saveStudioOutputAsAssetAction(input: {
   description?: string;
   imageUrl?: string;
 }): Promise<{ success: boolean; id?: string; error?: string }> {
+  const parsed = saveAssetSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
 
-  if (!input.name.trim()) return { success: false, error: "Name is required" };
-
   return await createAsset(
     workspace.id,
-    input.name.trim(),
-    input.imageUrl ?? "",
-    input.description?.trim()
+    parsed.data.name,
+    parsed.data.imageUrl ?? "",
+    parsed.data.description
   );
 }

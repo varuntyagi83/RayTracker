@@ -3,6 +3,7 @@ import { z } from "zod";
 import { streamText } from "ai";
 import { getModel } from "@/lib/ai/providers";
 import { getWorkspace } from "@/lib/supabase/queries";
+import { aiLimiter } from "@/lib/utils/rate-limit";
 import { createMessage, getMessages, resolveMentions, buildMentionContext } from "@/lib/data/studio";
 import type { LLMProvider, MessageAttachment } from "@/types/creative-studio";
 import { LLM_MODELS } from "@/types/creative-studio";
@@ -41,6 +42,12 @@ export async function POST(req: NextRequest) {
   const workspace = await getWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit
+  const rl = aiLimiter.check(workspace.id, 20);
+  if (!rl.success) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   // Validate input

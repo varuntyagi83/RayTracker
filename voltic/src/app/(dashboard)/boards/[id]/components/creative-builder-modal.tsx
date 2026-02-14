@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Image from "next/image";
 import {
   Plus,
   Trash2,
@@ -235,12 +236,7 @@ export default function CreativeBuilderModal({
                 <div className="grid grid-cols-3 gap-2">
                   {images.map((img) => (
                     <div key={img.id} className="relative group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={img.url}
-                        alt={img.name}
-                        className="aspect-square rounded-md object-cover border"
-                      />
+                      <Image src={img.url || "/placeholder.svg"} alt={img.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                       <button
                         type="button"
                         onClick={() => removeImage(img.id)}
@@ -366,12 +362,7 @@ export default function CreativeBuilderModal({
                     return (
                       <Card key={combo.id} className="overflow-hidden">
                         <CardContent className="p-0">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={combo.image.url}
-                            alt={combo.image.name}
-                            className="aspect-video w-full object-cover"
-                          />
+                          <Image src={combo.image.url || "/placeholder.svg"} alt={combo.image.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                           <div className="p-3 space-y-1">
                             {showEnhanced && (
                               <Badge

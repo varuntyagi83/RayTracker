@@ -1,9 +1,16 @@
 "use server";
 
+import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { getCreditTransactions, addCredits, getTotalCreditsUsed } from "@/lib/data/credits";
 import { CREDIT_PACKAGES } from "@/types/credits";
 import type { TransactionType } from "@/types/credits";
+
+const fetchTransactionsSchema = z.object({
+  type: z.string().max(50).optional(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1).max(100),
+});
 
 // ─── Fetch Transactions ──────────────────────────────────────────────────
 
@@ -12,18 +19,21 @@ export async function fetchCreditTransactionsAction(input: {
   page: number;
   pageSize: number;
 }) {
+  const parsed = fetchTransactionsSchema.safeParse(input);
+  if (!parsed.success) return { transactions: [], totalCount: 0, totalPages: 0 };
+
   const workspace = await getWorkspace();
   if (!workspace) return { transactions: [], totalCount: 0, totalPages: 0 };
 
   const typeFilter =
-    input.type && input.type !== "all"
-      ? (input.type as TransactionType)
+    parsed.data.type && parsed.data.type !== "all"
+      ? (parsed.data.type as TransactionType)
       : undefined;
 
   return await getCreditTransactions(
     workspace.id,
     { type: typeFilter },
-    { page: input.page, pageSize: input.pageSize }
+    { page: parsed.data.page, pageSize: parsed.data.pageSize }
   );
 }
 

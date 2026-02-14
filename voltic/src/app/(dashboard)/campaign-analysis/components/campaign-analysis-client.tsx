@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import {
   Table,
   TableBody,
@@ -691,12 +692,7 @@ function CampaignRow({
                                     <div className="flex items-center gap-2">
                                       {creative.imageUrl && (
                                         <div className="w-8 h-8 rounded bg-muted flex-shrink-0 overflow-hidden">
-                                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                                          <img
-                                            src={creative.imageUrl}
-                                            alt=""
-                                            className="w-full h-full object-cover"
-                                          />
+                                          <Image src={creative.imageUrl || "/placeholder.svg"} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                                         </div>
                                       )}
                                       <span className="truncate max-w-[160px]">{creative.name}</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { Loader2, Sparkles, Check, X, AlertCircle, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -376,12 +377,7 @@ function VariationCard({ variation }: { variation: Variation }) {
 
       {variation.generatedImageUrl && (
         <div className="aspect-video rounded-md overflow-hidden bg-muted">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={variation.generatedImageUrl}
-            alt="Generated variation"
-            className="h-full w-full object-cover"
-          />
+          <Image src={variation.generatedImageUrl || "/placeholder.svg"} alt="Generated variation" fill className="h-full w-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
         </div>
       )}
 

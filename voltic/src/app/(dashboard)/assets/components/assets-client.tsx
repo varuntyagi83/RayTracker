@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import {
   Plus,
   Search,
@@ -41,6 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { track } from "@/lib/analytics/events";
 import {
   fetchAssets,
@@ -158,20 +160,24 @@ export default function AssetsClient() {
       const result = await updateAssetAction(formData);
       if (!result.success) {
         setFormError(result.error ?? "Failed to update");
+        toast.error(result.error ?? "Failed to update product");
         setSaving(false);
         return;
       }
       track("asset_updated", { asset_id: editingAsset.id });
+      toast.success("Product updated");
     } else {
       formData.set("image", selectedFile!);
 
       const result = await createAssetAction(formData);
       if (!result.success) {
         setFormError(result.error ?? "Failed to create");
+        toast.error(result.error ?? "Failed to add product");
         setSaving(false);
         return;
       }
       track("asset_created", { asset_id: result.id ?? "", name: formName.trim() });
+      toast.success("Product added");
     }
 
     setSaving(false);
@@ -187,6 +193,9 @@ export default function AssetsClient() {
     if (result.success) {
       track("asset_deleted", { asset_id: deleteTarget.id });
       setAssets((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      toast.success("Product deleted");
+    } else {
+      toast.error(result.error || "Failed to delete product");
     }
 
     setDeleting(false);
@@ -278,17 +287,13 @@ export default function AssetsClient() {
               <label className="text-sm font-medium">Product Image</label>
               {previewUrl ? (
                 <div className="relative rounded-lg overflow-hidden border bg-muted">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={previewUrl}
-                    alt="Preview"
-                    className="w-full h-48 object-contain"
-                  />
+                  <Image src={previewUrl || "/placeholder.svg"} alt="Preview" width={200} height={200} className="w-full h-48 object-contain" unoptimized />
                   <Button
                     variant="secondary"
                     size="icon"
                     className="absolute top-2 right-2 size-7"
                     onClick={clearFile}
+                    aria-label="Remove image"
                   >
                     <X className="size-4" />
                   </Button>
@@ -423,13 +428,7 @@ function AssetCard({
       <CardContent className="p-0">
         {/* Image */}
         <div className="aspect-square bg-muted relative">
-          {asset.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={asset.imageUrl}
-              alt={asset.name}
-              className="h-full w-full object-contain"
-            />
+          {asset.imageUrl ? (            <Image src={asset.imageUrl || "/placeholder.svg"} alt={asset.name} fill className="object-contain" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
           ) : (
             <div className="h-full w-full flex items-center justify-center">
               <ImageIcon className="size-10 text-muted-foreground/30" />
@@ -459,6 +458,7 @@ function AssetCard({
                   variant="ghost"
                   size="icon"
                   className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="More options"
                 >
                   <MoreHorizontal className="size-4" />
                 </Button>

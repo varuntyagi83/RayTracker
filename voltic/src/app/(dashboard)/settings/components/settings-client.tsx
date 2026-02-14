@@ -21,6 +21,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { track } from "@/lib/analytics/events";
 import { createClient } from "@/lib/supabase/client";
@@ -107,6 +108,7 @@ export default function SettingsClient() {
     await navigator.clipboard.writeText(apiToken);
     track("api_token_copied");
     setTokenCopied(true);
+    toast.success("Token copied to clipboard");
     setTimeout(() => setTokenCopied(false), 2000);
   }, [apiToken]);
 
@@ -132,7 +134,10 @@ export default function SettingsClient() {
     if (result.success) {
       track("settings_updated", { section: "timezone" });
       setSaved(true);
+      toast.success("Settings saved");
       router.refresh();
+    } else {
+      toast.error(result.error || "Failed to save settings");
     }
   };
 
