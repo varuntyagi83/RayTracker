@@ -113,6 +113,23 @@ export async function getCurrentBalance(workspaceId: string): Promise<number> {
   return data?.credit_balance ?? 0;
 }
 
+// ─── Get Total Credits Used ─────────────────────────────────────────────
+
+export async function getTotalCreditsUsed(workspaceId: string): Promise<number> {
+  const supabase = createAdminClient();
+
+  // Sum all negative amounts (usage transactions)
+  const { data, error } = await supabase
+    .from("credit_transactions")
+    .select("amount")
+    .eq("workspace_id", workspaceId)
+    .lt("amount", 0);
+
+  if (error || !data) return 0;
+
+  return data.reduce((sum, row) => sum + Math.abs(row.amount), 0);
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

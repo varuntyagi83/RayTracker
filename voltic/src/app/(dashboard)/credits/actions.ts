@@ -1,7 +1,7 @@
 "use server";
 
 import { getWorkspace } from "@/lib/supabase/queries";
-import { getCreditTransactions, addCredits } from "@/lib/data/credits";
+import { getCreditTransactions, addCredits, getTotalCreditsUsed } from "@/lib/data/credits";
 import { CREDIT_PACKAGES } from "@/types/credits";
 import type { TransactionType } from "@/types/credits";
 
@@ -25,6 +25,14 @@ export async function fetchCreditTransactionsAction(input: {
     { type: typeFilter },
     { page: input.page, pageSize: input.pageSize }
   );
+}
+
+// ─── Fetch Total Credits Used ────────────────────────────────────────────
+
+export async function fetchTotalCreditsUsedAction(): Promise<number> {
+  const workspace = await getWorkspace();
+  if (!workspace) return 0;
+  return getTotalCreditsUsed(workspace.id);
 }
 
 // ─── Mock Purchase ───────────────────────────────────────────────────────

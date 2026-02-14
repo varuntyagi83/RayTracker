@@ -13,15 +13,18 @@ import {
 import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { track } from "@/lib/analytics/events";
 import { isUnlimitedCredits } from "@/types/credits";
+import { fetchTotalCreditsUsedAction } from "../actions";
 import { TransactionTable } from "./transaction-table";
 import { PurchaseDialog } from "./purchase-dialog";
 
 export default function CreditsPageClient() {
   const { workspace } = useWorkspace();
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [creditsUsed, setCreditsUsed] = useState<number | null>(null);
 
   useEffect(() => {
     track("credits_page_viewed");
+    fetchTotalCreditsUsedAction().then(setCreditsUsed);
   }, []);
 
   const balance = workspace?.credit_balance ?? 0;
@@ -57,11 +60,26 @@ export default function CreditsPageClient() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-baseline gap-3">
-            <span className="text-4xl font-bold">{unlimited ? "∞" : balance}</span>
-            <span className="text-sm text-muted-foreground">
-              {unlimited ? "Unlimited credits" : "credits"}
-            </span>
+          <div className="flex items-center gap-6">
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold">
+                  {creditsUsed !== null ? creditsUsed : "—"}
+                </span>
+                <span className="text-sm text-muted-foreground">used</span>
+              </div>
+            </div>
+            <span className="text-2xl text-muted-foreground/40">/</span>
+            <div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold">
+                  {unlimited ? "∞" : balance}
+                </span>
+                <span className="text-sm text-muted-foreground">
+                  {unlimited ? "Unlimited" : "remaining"}
+                </span>
+              </div>
+            </div>
           </div>
           {isLow && (
             <p className="mt-2 text-sm text-amber-600 dark:text-amber-400">
