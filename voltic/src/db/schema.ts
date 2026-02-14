@@ -407,6 +407,27 @@ export const adInsights = pgTable(
   ]
 );
 
+export const adComparisons = pgTable(
+  "ad_comparisons",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    adIds: text("ad_ids").array().notNull(),
+    brandNames: text("brand_names").array().notNull(),
+    result: jsonb("result").notNull(),
+    model: text("model").notNull().default("gpt-4o"),
+    creditsUsed: integer("credits_used").notNull().default(3),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_ad_comparisons_workspace_id").on(table.workspaceId),
+  ]
+);
+
 export const competitorBrands = pgTable(
   "competitor_brands",
   {
@@ -496,6 +517,7 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   facebookPages: many(facebookPages),
   comments: many(comments),
   adInsights: many(adInsights),
+  adComparisons: many(adComparisons),
 }));
 
 export const workspaceMembersRelations = relations(
@@ -659,6 +681,13 @@ export const facebookPagesRelations = relations(
 export const adInsightsRelations = relations(adInsights, ({ one }) => ({
   workspace: one(workspaces, {
     fields: [adInsights.workspaceId],
+    references: [workspaces.id],
+  }),
+}));
+
+export const adComparisonsRelations = relations(adComparisons, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [adComparisons.workspaceId],
     references: [workspaces.id],
   }),
 }));

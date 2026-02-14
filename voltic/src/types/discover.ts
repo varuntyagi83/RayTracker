@@ -23,16 +23,12 @@ export interface DiscoverSearchParams {
   format: "all" | "image" | "video" | "carousel";
   sort: "newest" | "oldest" | "impressions";
   country: string; // ISO 2-letter code or "ALL"
-  page: number;
-  perPage: number;
+  scrapeCount: number; // how many ads to fetch from Apify (10/25/50)
 }
 
 export interface DiscoverSearchResult {
   ads: DiscoverAd[];
   totalCount: number;
-  page: number;
-  perPage: number;
-  totalPages: number;
 }
 
 export interface BoardOption {
@@ -86,6 +82,60 @@ export interface AdInsightRecord {
   bodyText: string | null;
   format: string | null;
   insights: AdInsightData;
+  model: string;
+  creditsUsed: number;
+  createdAt: string;
+}
+
+// ─── Ad Comparison Types ──────────────────────────────────────────────────
+
+export interface ComparisonAdInput {
+  id: string;
+  pageName: string;
+  headline: string;
+  bodyText: string;
+  mediaType: "image" | "video" | "carousel";
+  platforms: string[];
+  linkUrl: string | null;
+  runtimeDays: number;
+  isActive: boolean;
+  mediaThumbnailUrl: string | null;
+}
+
+export interface ComparisonAdAnalysis {
+  brandName: string;
+  hookType: string;
+  copyFramework: string;
+  creativeStrategy: string;
+  targetAudience: string;
+  strengths: string[];
+  weaknesses: string[];
+  performanceScore: number;
+}
+
+export interface ComparisonResult {
+  ads: ComparisonAdAnalysis[];
+  winner: {
+    brandName: string;
+    adId: string;
+    rationale: string;
+  };
+  comparativeInsights: {
+    hookComparison: string;
+    copyComparison: string;
+    audienceOverlap: string;
+    creativeStrategyComparison: string;
+  };
+  recommendations: string[];
+  summary: string;
+}
+
+export interface AdComparisonRecord {
+  id: string;
+  workspaceId: string;
+  adIds: string[];
+  brandNames: string[];
+  result: ComparisonResult;
   model: string;
   creditsUsed: number;
   createdAt: string;

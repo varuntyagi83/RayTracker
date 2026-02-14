@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { searchAdsLibrary, getWorkspaceBoards, saveAdToBoard } from "@/lib/data/discover";
-import { clearAdsLibraryCache } from "@/lib/meta/ads-library";
+import { clearAdsLibraryCache, abortActiveScrape } from "@/lib/meta/ads-library";
 import { generateAdInsights } from "@/lib/ai/insights";
 import {
   getExistingInsight,
@@ -13,7 +13,18 @@ import {
   getInsightsByMetaLibraryIds,
   INSIGHT_CREDIT_COST,
 } from "@/lib/data/insights";
-import type { DiscoverSearchParams, DiscoverAd, AdInsightRecord } from "@/types/discover";
+import { generateAdComparison } from "@/lib/ai/comparison";
+import {
+  saveComparison,
+  getComparison,
+  COMPARISON_CREDIT_COST,
+} from "@/lib/data/comparisons";
+import type {
+  DiscoverSearchParams,
+  DiscoverAd,
+  AdInsightRecord,
+  AdComparisonRecord,
+} from "@/types/discover";
 
 // ─── Existing Actions ────────────────────────────────────────────────────────
 
@@ -36,6 +47,10 @@ export async function saveToBoard(input: { boardId: string; ad: DiscoverAd }) {
 export async function clearDiscoverCache() {
   clearAdsLibraryCache();
   return { success: true };
+}
+
+export async function stopScrape() {
+  return await abortActiveScrape();
 }
 
 // ─── Analyze Ad (AI Insights) ────────────────────────────────────────────────
@@ -128,4 +143,81 @@ export async function fetchExistingInsights(
 
   const result = await getInsightsByMetaLibraryIds(workspace.id, metaLibraryIds);
   return { data: result };
+}
+
+// ─── Compare Ads (Cross-Brand) ──────────────────────────────────────────────
+
+const compareAdsSchema = z.object({
+  ads: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        pageName: z.string().min(1),
+        headline: z.string(),
+        bodyText: z.string(),
+        mediaType: z.enum(["image", "video", "carousel"]),
+        platforms: z.array(z.string()),
+        linkUrl: z.string().nullable(),
+        runtimeDays: z.number(),
+        isActive: z.boolean(),
+        mediaThumbnailUrl: z.string().nullable(),
+      })
+    )
+    .min(2)
+    .max(4),
+});
+
+export async function compareAds(
+  input: z.input<typeof compareAdsSchema>
+): Promise<{ data?: AdComparisonRecord; error?: string }> {
+  // 1. Auth check
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
+  // 2. Validate input
+  const parsed = compareAdsSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
+  const { ads } = parsed.data;
+
+  // 3. Check and deduct credits
+  const creditResult = await checkAndDeductCredits(
+    workspace.id,
+    COMPARISON_CREDIT_COST
+  );
+  if (!creditResult.success) {
+    return { error: creditResult.error ?? "Insufficient credits" };
+  }
+
+  // 4. Generate comparison via OpenAI
+  try {
+    const result = await generateAdComparison(ads);
+
+    // 5. Save to database
+    const adIds = ads.map((a) => a.id);
+    const brandNames = ads.map((a) => a.pageName);
+    const saveResult = await saveComparison(
+      workspace.id,
+      adIds,
+      brandNames,
+      result
+    );
+
+    if (!saveResult.success) {
+      await refundCredits(workspace.id, COMPARISON_CREDIT_COST);
+      return { error: saveResult.error ?? "Failed to save comparison" };
+    }
+
+    // 6. Return the saved record
+    const record = await getComparison(workspace.id, saveResult.id!);
+    return { data: record ?? undefined };
+  } catch (err) {
+    // Refund credits on failure
+    await refundCredits(workspace.id, COMPARISON_CREDIT_COST);
+    console.error("[compareAds] OpenAI error:", err);
+    return {
+      error: "Failed to generate comparison. Credits have been refunded.",
+    };
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -24,14 +24,14 @@ import {
   Search,
   ExternalLink,
   Plus,
-  ChevronLeft,
-  ChevronRight,
   Image as ImageIcon,
   Video,
   Layers,
   Check,
   Sparkles,
   RotateCcw,
+  Square,
+  Scale,
 } from "lucide-react";
 import {
   fetchDiscoverAds,
@@ -40,13 +40,19 @@ import {
   analyzeAd,
   fetchExistingInsights,
   clearDiscoverCache,
+  stopScrape,
+  compareAds,
 } from "../actions";
 import { InsightsPanel } from "@/components/shared/insights-panel";
+import { useComparisonStore } from "@/lib/stores/comparison-store";
+import { ComparisonTray } from "./comparison-tray";
+import { ComparisonResultDialog } from "./comparison-result-dialog";
 import type {
   DiscoverAd,
   DiscoverSearchParams,
   BoardOption,
   AdInsightRecord,
+  AdComparisonRecord,
 } from "@/types/discover";
 
 // ─── Platform Icons ─────────────────────────────────────────────────────────
@@ -86,22 +92,26 @@ function FormatIcon({ format }: { format: string }) {
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function DiscoverClient() {
-  // Search state
+  // Search / scrape config (only applied when user clicks Search)
   const [query, setQuery] = useState("");
+  const [country, setCountry] = useState("ALL");
+  const [scrapeCount, setScrapeCount] = useState(10);
+
+  // Client-side filters (applied instantly to already-scraped data)
   const [activeOnly, setActiveOnly] = useState(true);
   const [format, setFormat] = useState<DiscoverSearchParams["format"]>("all");
   const [sort, setSort] = useState<DiscoverSearchParams["sort"]>("newest");
-  const [country, setCountry] = useState("ALL");
-  const [perPage, setPerPage] = useState(12);
-  const [page, setPage] = useState(1);
 
-  // Results state
-  const [ads, setAds] = useState<DiscoverAd[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+  // Raw results from scraper (unfiltered)
+  const [rawAds, setRawAds] = useState<DiscoverAd[]>([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
+  const [cacheCleared, setCacheCleared] = useState(false);
+
+  // Cancel support — increment to invalidate in-flight requests
+  const scrapeIdRef = useRef(0);
+  const [cancelled, setCancelled] = useState(false);
 
   // Board state
   const [boards, setBoards] = useState<BoardOption[]>([]);
@@ -112,6 +122,45 @@ export default function DiscoverClient() {
   const [insightsMap, setInsightsMap] = useState<Record<string, AdInsightRecord>>({});
   const [analyzingAdId, setAnalyzingAdId] = useState<string | null>(null);
   const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null);
+
+  // Comparison state (Zustand store persists across searches)
+  const { selectedAds, isSelected, addAd, removeAd, canAdd } = useComparisonStore();
+  const [isComparing, setIsComparing] = useState(false);
+  const [comparisonResult, setComparisonResult] = useState<AdComparisonRecord | null>(null);
+  const [showComparisonDialog, setShowComparisonDialog] = useState(false);
+
+  // Derive displayed ads from raw data + client-side filters
+  const displayedAds = useMemo(() => {
+    let ads = [...rawAds];
+
+    // Filter: active only
+    if (activeOnly) {
+      ads = ads.filter((a) => a.isActive);
+    }
+
+    // Filter: format
+    if (format !== "all") {
+      ads = ads.filter((a) => a.mediaType === format);
+    }
+
+    // Sort
+    switch (sort) {
+      case "newest":
+        ads.sort((a, b) => b.startDate.localeCompare(a.startDate));
+        break;
+      case "oldest":
+        ads.sort((a, b) => a.startDate.localeCompare(b.startDate));
+        break;
+      case "impressions":
+        ads.sort(
+          (a, b) =>
+            (b.impressionRange?.upper ?? 0) - (a.impressionRange?.upper ?? 0)
+        );
+        break;
+    }
+
+    return ads;
+  }, [rawAds, activeOnly, format, sort]);
 
   // Load boards on mount
   useEffect(() => {
@@ -149,62 +198,44 @@ export default function DiscoverClient() {
     }
   }, []);
 
-  // Search function
+  // Search function — only runs when user clicks Search
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
+    const currentId = ++scrapeIdRef.current;
     setLoading(true);
     setHasSearched(true);
-    setPage(1);
+    setCancelled(false);
+    setCacheCleared(false);
     setExpandedInsightId(null);
 
     const result = await fetchDiscoverAds({
       query: query.trim(),
-      activeOnly,
-      format,
-      sort,
+      activeOnly: false, // don't filter server-side, we do it client-side
+      format: "all",     // don't filter server-side, we do it client-side
+      sort: "newest",    // don't sort server-side, we do it client-side
       country,
-      page: 1,
-      perPage,
+      scrapeCount,
     });
 
-    setAds(result.ads);
-    setTotalCount(result.totalCount);
-    setTotalPages(result.totalPages);
+    // Discard results if this scrape was cancelled or superseded
+    if (scrapeIdRef.current !== currentId) return;
+
+    setRawAds(result.ads);
     setLoading(false);
 
     // Pre-load insights for these ads
     const adIds = result.ads.map((a) => a.id);
     loadExistingInsights(adIds);
-  }, [query, activeOnly, format, sort, country, perPage, loadExistingInsights]);
+  }, [query, country, scrapeCount, loadExistingInsights]);
 
-  // Paginate
-  const handlePageChange = useCallback(
-    async (newPage: number) => {
-      setLoading(true);
-      setPage(newPage);
-      setExpandedInsightId(null);
-
-      const result = await fetchDiscoverAds({
-        query: query.trim(),
-        activeOnly,
-        format,
-        sort,
-        country,
-        page: newPage,
-        perPage,
-      });
-
-      setAds(result.ads);
-      setTotalCount(result.totalCount);
-      setTotalPages(result.totalPages);
-      setLoading(false);
-
-      // Pre-load insights
-      const adIds = result.ads.map((a) => a.id);
-      loadExistingInsights(adIds);
-    },
-    [query, activeOnly, format, sort, country, perPage, loadExistingInsights]
-  );
+  // Stop scraper — aborts Apify run and discards results
+  const handleStop = useCallback(async () => {
+    scrapeIdRef.current++;
+    setLoading(false);
+    setCancelled(true);
+    // Fire-and-forget: abort the active Apify run on the server
+    stopScrape().catch(() => {});
+  }, []);
 
   // Save to board
   const handleSaveToBoard = async (ad: DiscoverAd, boardId: string) => {
@@ -245,24 +276,39 @@ export default function DiscoverClient() {
     setAnalyzingAdId(null);
   };
 
-  // Clear cache and re-search
+  // Clear cache only — does NOT re-scrape
   const handleClearCache = async () => {
     await clearDiscoverCache();
-    if (hasSearched) {
-      handleSearch();
-    }
+    setCacheCleared(true);
   };
 
-  // Re-search when filters change (if already searched)
-  useEffect(() => {
-    if (hasSearched) {
-      handleSearch();
+  // Compare selected ads
+  const handleCompare = async () => {
+    if (selectedAds.length < 2) return;
+    setIsComparing(true);
+    const result = await compareAds({
+      ads: selectedAds.map((ad) => ({
+        id: ad.id,
+        pageName: ad.pageName,
+        headline: ad.headline,
+        bodyText: ad.bodyText,
+        mediaType: ad.mediaType,
+        platforms: ad.platforms,
+        linkUrl: ad.linkUrl,
+        runtimeDays: ad.runtimeDays,
+        isActive: ad.isActive,
+        mediaThumbnailUrl: ad.mediaThumbnailUrl,
+      })),
+    });
+    if (result.data) {
+      setComparisonResult(result.data);
+      setShowComparisonDialog(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeOnly, format, sort, country, perPage]);
+    setIsComparing(false);
+  };
 
   return (
-    <div className="space-y-6 p-8">
+    <div className={`space-y-6 p-8 ${selectedAds.length > 0 ? "pb-24" : ""}`}>
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Discover</h1>
@@ -284,8 +330,14 @@ export default function DiscoverClient() {
           />
         </div>
         <Button onClick={handleSearch} disabled={!query.trim() || loading}>
-          {loading ? `Scraping... ${elapsedSecs}s` : "Search"}
+          Search
         </Button>
+        {loading && (
+          <Button variant="destructive" size="sm" onClick={handleStop}>
+            <Square className="mr-1.5 h-3.5 w-3.5 fill-current" />
+            Stop
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -352,15 +404,15 @@ export default function DiscoverClient() {
           </SelectContent>
         </Select>
 
-        {/* Per Page */}
-        <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
-          <SelectTrigger className="w-[100px]">
+        {/* Scrape Count */}
+        <Select value={String(scrapeCount)} onValueChange={(v) => setScrapeCount(Number(v))}>
+          <SelectTrigger className="w-[110px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="6">6</SelectItem>
-            <SelectItem value="12">12</SelectItem>
-            <SelectItem value="24">24</SelectItem>
+            <SelectItem value="10">10 ads</SelectItem>
+            <SelectItem value="25">25 ads</SelectItem>
+            <SelectItem value="50">50 ads</SelectItem>
           </SelectContent>
         </Select>
 
@@ -371,16 +423,21 @@ export default function DiscoverClient() {
             size="sm"
             onClick={handleClearCache}
             disabled={loading}
-            title="Clear cached results and re-fetch fresh ads"
+            title="Clear cache so next Search fetches fresh ads"
           >
             <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-            Refresh
+            Clear Cache
           </Button>
         )}
+        {cacheCleared && (
+          <span className="text-xs text-green-600">
+            Cache cleared — click Search to fetch fresh ads
+          </span>
+        )}
 
-        {hasSearched && (
+        {hasSearched && !loading && rawAds.length > 0 && (
           <span className="text-sm text-muted-foreground ml-auto">
-            {totalCount} results
+            {displayedAds.length} of {rawAds.length} ads
           </span>
         )}
       </div>
@@ -393,7 +450,7 @@ export default function DiscoverClient() {
               <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               <div>
                 <p className="text-sm font-medium">
-                  Scraping Meta Ad Library for &ldquo;{query}&rdquo;...
+                  Scraping {scrapeCount} ads for &ldquo;{query}&rdquo;...
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {elapsedSecs < 10
@@ -401,6 +458,9 @@ export default function DiscoverClient() {
                     : elapsedSecs < 60
                       ? `Fetching ads... (${elapsedSecs}s)`
                       : `Almost there... (${Math.floor(elapsedSecs / 60)}m ${elapsedSecs % 60}s)`}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Click Stop to cancel
                 </p>
               </div>
             </div>
@@ -421,8 +481,17 @@ export default function DiscoverClient() {
         </div>
       )}
 
+      {/* Cancelled State */}
+      {!loading && cancelled && (
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">
+            Scrape stopped. Results discarded. Click Search to try again.
+          </p>
+        </div>
+      )}
+
       {/* Empty State */}
-      {!loading && hasSearched && ads.length === 0 && (
+      {!loading && !cancelled && hasSearched && rawAds.length === 0 && (
         <div className="text-center py-16">
           <p className="text-muted-foreground">
             No ads found for &ldquo;{query}&rdquo;. Try a different brand name.
@@ -430,8 +499,17 @@ export default function DiscoverClient() {
         </div>
       )}
 
+      {/* Filter Empty State */}
+      {!loading && !cancelled && rawAds.length > 0 && displayedAds.length === 0 && (
+        <div className="text-center py-16">
+          <p className="text-muted-foreground">
+            No ads match the current filters. Try adjusting format or active toggle.
+          </p>
+        </div>
+      )}
+
       {/* Initial State */}
-      {!hasSearched && !loading && (
+      {!hasSearched && !loading && !cancelled && (
         <div className="text-center py-16">
           <p className="text-muted-foreground">
             Enter a brand name above to search the Meta Ads Library.
@@ -440,9 +518,9 @@ export default function DiscoverClient() {
       )}
 
       {/* Ad Grid */}
-      {!loading && ads.length > 0 && (
+      {!loading && displayedAds.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ads.map((ad) => (
+          {displayedAds.map((ad) => (
             <AdCard
               key={ad.id}
               ad={ad}
@@ -452,40 +530,30 @@ export default function DiscoverClient() {
               isAnalyzing={analyzingAdId === ad.id}
               insight={insightsMap[ad.id] ?? null}
               isExpanded={expandedInsightId === ad.id}
+              isSelectedForComparison={isSelected(ad.id)}
+              canAddToComparison={canAdd()}
               onSaveToBoard={(boardId) => handleSaveToBoard(ad, boardId)}
               onAnalyze={() => handleAnalyzeAd(ad)}
               onToggleInsight={() =>
                 setExpandedInsightId((prev) => (prev === ad.id ? null : ad.id))
+              }
+              onToggleComparison={() =>
+                isSelected(ad.id) ? removeAd(ad.id) : addAd(ad)
               }
             />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
-      {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={page <= 1}
-            onClick={() => handlePageChange(page - 1)}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={page >= totalPages}
-            onClick={() => handlePageChange(page + 1)}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      {/* Comparison Tray */}
+      <ComparisonTray onCompare={handleCompare} isComparing={isComparing} />
+
+      {/* Comparison Result Dialog */}
+      <ComparisonResultDialog
+        open={showComparisonDialog}
+        onOpenChange={setShowComparisonDialog}
+        result={comparisonResult?.result ?? null}
+      />
     </div>
   );
 }
@@ -500,9 +568,12 @@ interface AdCardProps {
   isAnalyzing: boolean;
   insight: AdInsightRecord | null;
   isExpanded: boolean;
+  isSelectedForComparison: boolean;
+  canAddToComparison: boolean;
   onSaveToBoard: (boardId: string) => void;
   onAnalyze: () => void;
   onToggleInsight: () => void;
+  onToggleComparison: () => void;
 }
 
 function AdCard({
@@ -513,9 +584,12 @@ function AdCard({
   isAnalyzing,
   insight,
   isExpanded,
+  isSelectedForComparison,
+  canAddToComparison,
   onSaveToBoard,
   onAnalyze,
   onToggleInsight,
+  onToggleComparison,
 }: AdCardProps) {
   const startDate = new Date(ad.startDate + "T00:00:00");
   const dateStr = startDate.toLocaleDateString("en-US", {
@@ -525,7 +599,7 @@ function AdCard({
   });
 
   return (
-    <Card className="overflow-hidden hover:shadow-md transition-shadow">
+    <Card className={`overflow-hidden hover:shadow-md transition-shadow ${isSelectedForComparison ? "ring-2 ring-primary" : ""}`}>
       <CardContent className="p-0">
         {/* Header: Brand + Status */}
         <div className="flex items-center justify-between px-4 pt-3 pb-2">
@@ -668,6 +742,18 @@ function AdCard({
               )}
             </Button>
           )}
+
+          {/* Compare Toggle */}
+          <Button
+            variant={isSelectedForComparison ? "default" : "outline"}
+            size="sm"
+            onClick={onToggleComparison}
+            disabled={!isSelectedForComparison && !canAddToComparison}
+            className="flex-shrink-0"
+          >
+            <Scale className="mr-1.5 h-3.5 w-3.5" />
+            {isSelectedForComparison ? "Selected" : "Compare"}
+          </Button>
 
           {/* View in Ads Library */}
           <Button

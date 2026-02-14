@@ -33,6 +33,7 @@ export interface AdsLibraryScrapeParams {
   adsLibraryUrl?: string;
   topN: number;
   country: string; // ISO 2-letter code or "ALL"
+  mediaType?: "all" | "image" | "video"; // maps to Meta's media_type URL param
   impressionPeriod: "last_7d" | "last_30d" | "last_90d" | "all_time";
   startedWithin: "last_7d" | "last_30d" | "last_90d" | "last_6m" | "last_1y";
 }
@@ -48,7 +49,7 @@ export interface AdsLibraryScrapeResult {
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
 const ACTOR_ID = "curious_coder~facebook-ads-library-scraper";
-const MAX_ITEMS = 10;
+const MAX_ITEMS_LIMIT = 50; // absolute cap to prevent runaway costs
 const POLL_INTERVAL_MS = 5_000;
 const MAX_POLL_TIME_MS = 2 * 60 * 1_000; // 2 minutes max (actor usually finishes in ~17s)
 
@@ -73,6 +74,22 @@ export function clearAdsLibraryCache() {
   console.log("[ads-library] Cache cleared");
 }
 
+// ─── Active Run Tracking (for frontend abort) ───────────────────────────────
+
+let activeRun: { runId: string; token: string } | null = null;
+
+export async function abortActiveScrape(): Promise<{ aborted: boolean }> {
+  if (!activeRun) {
+    console.log("[ads-library] No active run to abort");
+    return { aborted: false };
+  }
+  const { runId, token } = activeRun;
+  activeRun = null;
+  console.log("[ads-library] Aborting active run:", runId);
+  await abortRun(token, runId);
+  return { aborted: true };
+}
+
 // ─── Main Function ──────────────────────────────────────────────────────────
 
 export async function scrapeAdsLibrary(
@@ -85,8 +102,10 @@ export async function scrapeAdsLibrary(
     return getMockResult(params);
   }
 
-  // Check cache first (include country in key)
-  const cacheKey = `${params.brandName.toLowerCase().trim()}:${params.country}`;
+  // Check cache first (include country + mediaType + count in key)
+  const mediaType = params.mediaType ?? "all";
+  const requestedCount = Math.min(params.topN, MAX_ITEMS_LIMIT);
+  const cacheKey = `${params.brandName.toLowerCase().trim()}:${params.country}:${mediaType}:${requestedCount}`;
   const cached = getCached(cacheKey);
   if (cached) {
     console.log("[ads-library] Cache hit for:", cacheKey);
@@ -94,17 +113,17 @@ export async function scrapeAdsLibrary(
   }
 
   try {
-    const searchUrl = buildAdsLibraryUrl(params.brandName, params.country);
+    const searchUrl = buildAdsLibraryUrl(params.brandName, params.country, mediaType);
 
     // 1. Start actor run (async)
-    console.log("[ads-library] Starting Apify run for:", params.brandName);
+    console.log("[ads-library] Starting Apify run for:", params.brandName, "count:", requestedCount);
     const startUrl = `${APIFY_BASE_URL}/acts/${ACTOR_ID}/runs?token=${token}`;
     const startRes = await fetch(startUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         urls: [{ url: searchUrl }],
-        count: Math.min(params.topN, MAX_ITEMS),
+        count: requestedCount,
       }),
     });
 
@@ -123,9 +142,11 @@ export async function scrapeAdsLibrary(
     }
 
     console.log("[ads-library] Run started:", runId);
+    activeRun = { runId, token };
 
     // 2. Poll for completion (usually ~17 seconds)
-    const rawItems = await pollForItems(token, runId, datasetId);
+    const rawItems = await pollForItems(token, runId, datasetId, requestedCount);
+    activeRun = null;
     if (!rawItems || rawItems.length === 0) {
       console.error("[ads-library] No items scraped");
       return getMockResult(params);
@@ -133,7 +154,7 @@ export async function scrapeAdsLibrary(
 
     console.log("[ads-library] Got", rawItems.length, "items from Apify");
 
-    const ads = mapCuriousCoderItems(rawItems, params);
+    const ads = mapCuriousCoderItems(rawItems, params, requestedCount);
     const result: AdsLibraryScrapeResult = {
       ads,
       totalCount: ads.length,
@@ -144,6 +165,7 @@ export async function scrapeAdsLibrary(
     setCache(cacheKey, result);
     return result;
   } catch (error) {
+    activeRun = null;
     console.error("[ads-library] Apify scrape error:", error);
     return getMockResult(params);
   }
@@ -154,7 +176,8 @@ export async function scrapeAdsLibrary(
 async function pollForItems(
   token: string,
   runId: string,
-  datasetId: string
+  datasetId: string,
+  limit: number = MAX_ITEMS_LIMIT
 ): Promise<CuriousCoderAdItem[] | null> {
   const startTime = Date.now();
 
@@ -173,13 +196,13 @@ async function pollForItems(
 
     if (status === "SUCCEEDED") {
       console.log(`[ads-library] Run succeeded in ${elapsed}s`);
-      return await fetchDatasetItems(token, datasetId);
+      return await fetchDatasetItems(token, datasetId, limit);
     }
 
     if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
       console.error("[ads-library] Run ended with status:", status);
       // Still try to grab partial results
-      const items = await fetchDatasetItems(token, datasetId);
+      const items = await fetchDatasetItems(token, datasetId, limit);
       return items.length > 0 ? items : null;
     }
   }
@@ -187,7 +210,7 @@ async function pollForItems(
   // Timed out — abort and grab partial
   console.log("[ads-library] Polling timed out, aborting run");
   await abortRun(token, runId);
-  const items = await fetchDatasetItems(token, datasetId);
+  const items = await fetchDatasetItems(token, datasetId, limit);
   return items.length > 0 ? items : null;
 }
 
@@ -203,9 +226,10 @@ async function abortRun(token: string, runId: string): Promise<void> {
 
 async function fetchDatasetItems(
   token: string,
-  datasetId: string
+  datasetId: string,
+  limit: number = MAX_ITEMS_LIMIT
 ): Promise<CuriousCoderAdItem[]> {
-  const url = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&limit=${MAX_ITEMS}`;
+  const url = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&limit=${limit}`;
   const res = await fetch(url);
   if (!res.ok) return [];
   return await res.json();
@@ -217,9 +241,14 @@ function sleep(ms: number): Promise<void> {
 
 // ─── URL Builder ────────────────────────────────────────────────────────────
 
-function buildAdsLibraryUrl(brandName: string, country: string = "ALL"): string {
+function buildAdsLibraryUrl(
+  brandName: string,
+  country: string = "ALL",
+  mediaType: string = "all"
+): string {
   const encoded = encodeURIComponent(brandName);
-  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encoded}&search_type=keyword_unordered`;
+  const mediaParam = mediaType !== "all" ? `&media_type=${mediaType}` : "";
+  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}${mediaParam}&q=${encoded}&search_type=keyword_unordered`;
 }
 
 // ─── curious_coder Response Shape ───────────────────────────────────────────
@@ -272,9 +301,19 @@ interface CuriousCoderAdItem {
 
 function mapCuriousCoderItems(
   items: CuriousCoderAdItem[],
-  params: AdsLibraryScrapeParams
+  params: AdsLibraryScrapeParams,
+  limit: number = MAX_ITEMS_LIMIT
 ): AdsLibraryAd[] {
-  return items.slice(0, MAX_ITEMS).map((item, i) => {
+  // Deduplicate by ad_archive_id before mapping
+  const seen = new Set<string>();
+  const uniqueItems = items.filter((item) => {
+    const id = item.ad_archive_id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+
+  return uniqueItems.slice(0, limit).map((item, i) => {
     const snap = item.snapshot;
     const card = snap?.cards?.[0];
     const id = item.ad_archive_id || `apify_${i}`;
@@ -356,7 +395,7 @@ function mapCuriousCoderItems(
 // ─── Mock Fallback ──────────────────────────────────────────────────────────
 
 function getMockResult(params: AdsLibraryScrapeParams): AdsLibraryScrapeResult {
-  const count = Math.min(params.topN, MAX_ITEMS);
+  const count = Math.min(params.topN, MAX_ITEMS_LIMIT);
   const mockAds: AdsLibraryAd[] = Array.from({ length: count }, (_, i) => ({
     id: `mock_${crypto.randomUUID().slice(0, 8)}`,
     pageId: `page_${params.brandName.toLowerCase().replace(/\s+/g, "_")}`,

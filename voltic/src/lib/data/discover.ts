@@ -12,17 +12,21 @@ import type {
 export async function searchAdsLibrary(
   params: DiscoverSearchParams
 ): Promise<DiscoverSearchResult> {
-  const { query, activeOnly, format, sort, country, page, perPage } = params;
+  const { query, activeOnly, format, sort, country, scrapeCount } = params;
 
   if (!query.trim()) {
-    return { ads: [], totalCount: 0, page, perPage, totalPages: 0 };
+    return { ads: [], totalCount: 0 };
   }
 
-  // Fetch from scraper (mock or real) — limited to 10 to save Apify credits
+  // Map format to scraper mediaType (carousel not supported at source, filters client-side)
+  const scraperMediaType = format === "image" || format === "video" ? format : "all";
+
+  // Fetch from scraper — count controlled by user
   const result = await scrapeAdsLibrary({
     brandName: query,
-    topN: 10,
+    topN: scrapeCount,
     country: country || "ALL",
+    mediaType: scraperMediaType,
     impressionPeriod: "last_30d",
     startedWithin: "last_90d",
   });
@@ -56,9 +60,9 @@ export async function searchAdsLibrary(
     ads = ads.filter((a) => a.isActive);
   }
 
-  // Filter: format
-  if (format !== "all") {
-    ads = ads.filter((a) => a.mediaType === format);
+  // Filter: carousel client-side (not supported at source)
+  if (format === "carousel") {
+    ads = ads.filter((a) => a.mediaType === "carousel");
   }
 
   // Sort
@@ -77,18 +81,9 @@ export async function searchAdsLibrary(
       break;
   }
 
-  // Paginate
-  const totalCount = ads.length;
-  const totalPages = Math.ceil(totalCount / perPage);
-  const start = (page - 1) * perPage;
-  const paginatedAds = ads.slice(start, start + perPage);
-
   return {
-    ads: paginatedAds,
-    totalCount,
-    page,
-    perPage,
-    totalPages,
+    ads,
+    totalCount: ads.length,
   };
 }
 

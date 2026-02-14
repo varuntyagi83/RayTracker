@@ -4,6 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { trackEvent } from "@/lib/analytics/posthog-provider";
 
 interface TopBarProps {
@@ -40,6 +41,7 @@ export function TopBar({ actions }: TopBarProps) {
 
       <div className="ml-auto flex items-center gap-2">
         {actions}
+        <ThemeToggle />
         <Button
           variant="ghost"
           size="icon"

@@ -35,8 +35,14 @@ Field guidelines:
 - targetAudience.interests: 3-5 inferred interest categories
 - targetAudience.painPoints: 2-3 pain points the ad addresses
 - strengths: 3-5 specific things that make this ad effective
-- performanceScore: 1-10 estimated effectiveness score
-- performanceRationale: Brief explanation of the score
+- performanceScore: 1-10 estimated effectiveness score. Use the FULL range critically:
+  * 1-3: Weak — generic copy, no clear hook, unclear value prop, poor targeting signals
+  * 4-5: Average — functional but unremarkable, missing key persuasion elements
+  * 6-7: Good — solid fundamentals, clear hook and CTA, but room for improvement
+  * 8-9: Excellent — strong hook, compelling copy, clear audience targeting, multiple persuasion layers
+  * 10: World-class — virtually flawless execution across all dimensions
+  Most ads should score between 4-7. Only truly exceptional ads deserve 8+. Be critical.
+- performanceRationale: Brief explanation of the score, citing specific weaknesses that prevented a higher score
 - improvements: 3-5 specific, actionable improvement suggestions`;
 
 export async function generateAdInsights(
@@ -81,7 +87,7 @@ function buildUserPrompt(input: AdInsightInput): string {
   }
 
   if (input.runtimeDays) {
-    parts.push(`**Running for:** ${input.runtimeDays} days (longer runtime suggests good performance)`);
+    parts.push(`**Running for:** ${input.runtimeDays} days`);
   }
 
   if (input.isActive) {
