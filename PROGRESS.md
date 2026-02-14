@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 19 ✅
+> Current phase: Phase 20 ✅ — ALL PHASES COMPLETE
 
 ## Phase Status
 
@@ -29,7 +29,7 @@
 | 17 | Credit System & Billing | ✅ Complete | 2026-02-14 | Credit balance indicator in top bar (Coins icon + balance + low-balance badges), /credits page with transaction history table (type filter, pagination), purchase dialog with 3 mock packages (100/$9.99, 500/$39.99, 1000/$69.99), Credits nav in sidebar. Fixed transaction type bug: checkAndDeductCredits now accepts TransactionType param, all 6 call sites fixed (ad_insight, comparison, variation, creative_enhance, competitor_report). New types: TransactionType, CreditTransaction, CreditPackage. Data layer: getCreditTransactions (paginated+filtered), addCredits, getCurrentBalance. 5 new analytics events. 7 new files, 9 modified. npx tsc --noEmit passes clean. |
 | 18 | Production Hardening | ✅ Complete | 2026-02-14 | Security headers (HSTS, X-Frame-Options, CSP-adjacent, nosniff, Referrer-Policy, Permissions-Policy) in next.config.ts. In-memory rate limiting on 4 critical API routes (checkout, studio/chat, studio/generate-image, extension/auth). Zod validation added to 6 action/route files (checkout, signup, reports, campaign-analysis, creative-studio, credits). Error boundaries (dashboard-error.tsx shared + 12 error.tsx files). Loading skeletons (11 loading.tsx files). next/image migration (16 files, 29 img→Image). Toast notifications via sonner in 7 CRUD components. Accessibility: aria-labels on 10 icon-only buttons. .env.example created. CRON_SECRET set. npx tsc --noEmit passes clean. |
 | 19 | Testing & QA | ✅ Complete | 2026-02-14 | Vitest test infrastructure with 107 unit tests across 8 test files. Coverage: 86.68% statements, 92.85% branches, 86.66% functions on tested modules. Tests cover: credits helpers (isUnlimitedCredits, generateTransactionDescription, CREDIT_PACKAGES), rate limiter (RateLimiter class with sliding window, fake timers), Slack block builders (6 helpers), 4 Slack templates (performance-digest, competitor-report, comment-digest, landing-page-report), AI prompt builders (buildBrandGuidelinesSection, buildTextPrompt, buildImagePrompt × 6 strategies). Exported RateLimiter class and 3 AI prompt builders for testing. |
-| 20 | Deployment & CI/CD | ⬜ Not started | | |
+| 20 | Deployment & CI/CD | ✅ Complete | 2026-02-14 | vercel.json with automations cron (*/5 * * * *), GitHub Actions CI pipeline (lint + typecheck + test on PR/push), Vercel Analytics + Speed Insights in root layout |
 
 ## Issues / Blockers
 
@@ -37,29 +37,23 @@
 
 ## Context for Next Session
 
-Phase 19 complete. Testing & QA implemented with 107 unit tests.
+ALL 20 PHASES COMPLETE. The project is ready for production deployment.
 
-**New Files (9):**
-- `voltic/vitest.config.ts` — Test runner config with path aliases and coverage
-- `voltic/src/types/credits.test.ts` — 18 tests for credits helpers
-- `voltic/src/lib/utils/rate-limit.test.ts` — 12 tests for rate limiter
-- `voltic/src/lib/slack/client.test.ts` — 7 tests for block builders
-- `voltic/src/lib/slack/templates/performance-digest.test.ts` — 15 tests
-- `voltic/src/lib/slack/templates/competitor-report.test.ts` — 8 tests
-- `voltic/src/lib/slack/templates/comment-digest.test.ts` — 10 tests
-- `voltic/src/lib/slack/templates/landing-page-report.test.ts` — 11 tests
-- `voltic/src/lib/ai/variations.test.ts` — 26 tests for prompt builders
+**Phase 20 — New Files (2):**
+- `voltic/vercel.json` — Vercel cron configuration (automations every 5 min)
+- `voltic/.github/workflows/ci.yml` — GitHub Actions CI pipeline (lint, typecheck, test)
 
-**Modified (4 files):**
-- `package.json` — Added vitest + @vitest/coverage-v8 devDependencies, test/test:watch/test:coverage scripts
-- `src/lib/utils/rate-limit.ts` — Exported `RateLimiter` class
-- `src/lib/ai/variations.ts` — Exported `buildBrandGuidelinesSection`, `buildTextPrompt`, `buildImagePrompt`
-- `PROGRESS.md` — Phase 19 ✅
+**Phase 20 — Modified (3 files):**
+- `voltic/src/app/layout.tsx` — Added Vercel Analytics + Speed Insights components
+- `voltic/package.json` — Added @vercel/analytics and @vercel/speed-insights dependencies
+- `PROGRESS.md` — Phase 20 ✅
 
-**Coverage:** 86.68% stmts | 92.85% branches | 86.66% functions
-**Commands:** `npm test` (run), `npm run test:watch` (watch), `npm run test:coverage` (coverage report)
-
-**Notes:**
-- E2E tests (Playwright) deferred — requires running app with real DB/auth
-- Data layer (lib/data/*) requires DB mocking — not tested in this phase
-- Phase 20 should implement Deployment & CI/CD
+**Deployment Checklist:**
+1. Push to GitHub repository
+2. Connect repository to Vercel (vercel.com → Import Project)
+3. Set all environment variables in Vercel dashboard (see .env.example)
+4. Ensure CRON_SECRET is set in Vercel environment variables
+5. Enable Analytics and Speed Insights in Vercel project dashboard
+6. Verify cron jobs are registered (Vercel dashboard → Crons tab)
+7. Verify CI pipeline runs on first push (GitHub → Actions tab)
+8. Ensure Vercel project is on Pro plan for 5-minute cron intervals
