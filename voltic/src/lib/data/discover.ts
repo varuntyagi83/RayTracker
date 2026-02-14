@@ -12,7 +12,7 @@ import type {
 export async function searchAdsLibrary(
   params: DiscoverSearchParams
 ): Promise<DiscoverSearchResult> {
-  const { query, activeOnly, format, sort, page, perPage } = params;
+  const { query, activeOnly, format, sort, country, page, perPage } = params;
 
   if (!query.trim()) {
     return { ads: [], totalCount: 0, page, perPage, totalPages: 0 };
@@ -22,6 +22,7 @@ export async function searchAdsLibrary(
   const result = await scrapeAdsLibrary({
     brandName: query,
     topN: 10,
+    country: country || "ALL",
     impressionPeriod: "last_30d",
     startedWithin: "last_90d",
   });

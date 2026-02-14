@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { searchAdsLibrary, getWorkspaceBoards, saveAdToBoard } from "@/lib/data/discover";
+import { clearAdsLibraryCache } from "@/lib/meta/ads-library";
 import { generateAdInsights } from "@/lib/ai/insights";
 import {
   getExistingInsight,
@@ -30,6 +31,11 @@ export async function saveToBoard(input: { boardId: string; ad: DiscoverAd }) {
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" } as const;
   return await saveAdToBoard(workspace.id, input.boardId, input.ad);
+}
+
+export async function clearDiscoverCache() {
+  clearAdsLibraryCache();
+  return { success: true };
 }
 
 // ─── Analyze Ad (AI Insights) ────────────────────────────────────────────────

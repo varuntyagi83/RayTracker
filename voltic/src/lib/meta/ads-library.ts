@@ -32,6 +32,7 @@ export interface AdsLibraryScrapeParams {
   brandName: string;
   adsLibraryUrl?: string;
   topN: number;
+  country: string; // ISO 2-letter code or "ALL"
   impressionPeriod: "last_7d" | "last_30d" | "last_90d" | "all_time";
   startedWithin: "last_7d" | "last_30d" | "last_90d" | "last_6m" | "last_1y";
 }
@@ -67,6 +68,11 @@ function setCache(key: string, result: AdsLibraryScrapeResult) {
   cache.set(key, { result, ts: Date.now() });
 }
 
+export function clearAdsLibraryCache() {
+  cache.clear();
+  console.log("[ads-library] Cache cleared");
+}
+
 // ─── Main Function ──────────────────────────────────────────────────────────
 
 export async function scrapeAdsLibrary(
@@ -79,8 +85,8 @@ export async function scrapeAdsLibrary(
     return getMockResult(params);
   }
 
-  // Check cache first
-  const cacheKey = params.brandName.toLowerCase().trim();
+  // Check cache first (include country in key)
+  const cacheKey = `${params.brandName.toLowerCase().trim()}:${params.country}`;
   const cached = getCached(cacheKey);
   if (cached) {
     console.log("[ads-library] Cache hit for:", cacheKey);
@@ -88,7 +94,7 @@ export async function scrapeAdsLibrary(
   }
 
   try {
-    const searchUrl = buildAdsLibraryUrl(params.brandName);
+    const searchUrl = buildAdsLibraryUrl(params.brandName, params.country);
 
     // 1. Start actor run (async)
     console.log("[ads-library] Starting Apify run for:", params.brandName);
@@ -211,9 +217,9 @@ function sleep(ms: number): Promise<void> {
 
 // ─── URL Builder ────────────────────────────────────────────────────────────
 
-function buildAdsLibraryUrl(brandName: string): string {
+function buildAdsLibraryUrl(brandName: string, country: string = "ALL"): string {
   const encoded = encodeURIComponent(brandName);
-  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encoded}&search_type=keyword_unordered`;
+  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encoded}&search_type=keyword_unordered`;
 }
 
 // ─── curious_coder Response Shape ───────────────────────────────────────────

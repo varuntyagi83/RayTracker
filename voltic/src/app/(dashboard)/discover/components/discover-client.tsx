@@ -31,6 +31,7 @@ import {
   Layers,
   Check,
   Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import {
   fetchDiscoverAds,
@@ -38,6 +39,7 @@ import {
   saveToBoard,
   analyzeAd,
   fetchExistingInsights,
+  clearDiscoverCache,
 } from "../actions";
 import { InsightsPanel } from "@/components/shared/insights-panel";
 import type {
@@ -89,6 +91,7 @@ export default function DiscoverClient() {
   const [activeOnly, setActiveOnly] = useState(true);
   const [format, setFormat] = useState<DiscoverSearchParams["format"]>("all");
   const [sort, setSort] = useState<DiscoverSearchParams["sort"]>("newest");
+  const [country, setCountry] = useState("ALL");
   const [perPage, setPerPage] = useState(12);
   const [page, setPage] = useState(1);
 
@@ -159,6 +162,7 @@ export default function DiscoverClient() {
       activeOnly,
       format,
       sort,
+      country,
       page: 1,
       perPage,
     });
@@ -171,7 +175,7 @@ export default function DiscoverClient() {
     // Pre-load insights for these ads
     const adIds = result.ads.map((a) => a.id);
     loadExistingInsights(adIds);
-  }, [query, activeOnly, format, sort, perPage, loadExistingInsights]);
+  }, [query, activeOnly, format, sort, country, perPage, loadExistingInsights]);
 
   // Paginate
   const handlePageChange = useCallback(
@@ -185,6 +189,7 @@ export default function DiscoverClient() {
         activeOnly,
         format,
         sort,
+        country,
         page: newPage,
         perPage,
       });
@@ -198,7 +203,7 @@ export default function DiscoverClient() {
       const adIds = result.ads.map((a) => a.id);
       loadExistingInsights(adIds);
     },
-    [query, activeOnly, format, sort, perPage, loadExistingInsights]
+    [query, activeOnly, format, sort, country, perPage, loadExistingInsights]
   );
 
   // Save to board
@@ -240,13 +245,21 @@ export default function DiscoverClient() {
     setAnalyzingAdId(null);
   };
 
+  // Clear cache and re-search
+  const handleClearCache = async () => {
+    await clearDiscoverCache();
+    if (hasSearched) {
+      handleSearch();
+    }
+  };
+
   // Re-search when filters change (if already searched)
   useEffect(() => {
     if (hasSearched) {
       handleSearch();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeOnly, format, sort, perPage]);
+  }, [activeOnly, format, sort, country, perPage]);
 
   return (
     <div className="space-y-6 p-8">
@@ -314,6 +327,31 @@ export default function DiscoverClient() {
           </SelectContent>
         </Select>
 
+        {/* Country / Region */}
+        <Select value={country} onValueChange={setCountry}>
+          <SelectTrigger className="w-[140px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Countries</SelectItem>
+            <SelectItem value="US">United States</SelectItem>
+            <SelectItem value="GB">United Kingdom</SelectItem>
+            <SelectItem value="CA">Canada</SelectItem>
+            <SelectItem value="AU">Australia</SelectItem>
+            <SelectItem value="DE">Germany</SelectItem>
+            <SelectItem value="FR">France</SelectItem>
+            <SelectItem value="IN">India</SelectItem>
+            <SelectItem value="BR">Brazil</SelectItem>
+            <SelectItem value="JP">Japan</SelectItem>
+            <SelectItem value="AE">UAE</SelectItem>
+            <SelectItem value="SG">Singapore</SelectItem>
+            <SelectItem value="NL">Netherlands</SelectItem>
+            <SelectItem value="ES">Spain</SelectItem>
+            <SelectItem value="IT">Italy</SelectItem>
+            <SelectItem value="MX">Mexico</SelectItem>
+          </SelectContent>
+        </Select>
+
         {/* Per Page */}
         <Select value={String(perPage)} onValueChange={(v) => setPerPage(Number(v))}>
           <SelectTrigger className="w-[100px]">
@@ -325,6 +363,20 @@ export default function DiscoverClient() {
             <SelectItem value="24">24</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Clear Cache */}
+        {hasSearched && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearCache}
+            disabled={loading}
+            title="Clear cached results and re-fetch fresh ads"
+          >
+            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+            Refresh
+          </Button>
+        )}
 
         {hasSearched && (
           <span className="text-sm text-muted-foreground ml-auto">

@@ -121,6 +121,7 @@ export async function executeAutomation(
           brandName: config.brandName,
           adsLibraryUrl: config.adsLibraryUrl || undefined,
           topN: config.scrapeSettings.topN,
+          country: "ALL",
           impressionPeriod: config.scrapeSettings.impressionPeriod,
           startedWithin: config.scrapeSettings.startedWithin,
         });

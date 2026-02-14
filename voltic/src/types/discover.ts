@@ -22,6 +22,7 @@ export interface DiscoverSearchParams {
   activeOnly: boolean;
   format: "all" | "image" | "video" | "carousel";
   sort: "newest" | "oldest" | "impressions";
+  country: string; // ISO 2-letter code or "ALL"
   page: number;
   perPage: number;
 }
