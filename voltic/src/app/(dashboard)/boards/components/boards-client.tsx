@@ -39,6 +39,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { track } from "@/lib/analytics/events";
 import {
   fetchBoards,
   createBoardAction,
@@ -103,6 +104,7 @@ export default function BoardsClient() {
         description: formDescription.trim() || undefined,
       });
       if (result.success) {
+        track("board_updated", { board_id: editingBoard.id });
         setBoards((prev) =>
           prev.map((b) =>
             b.id === editingBoard.id
@@ -116,7 +118,8 @@ export default function BoardsClient() {
         name: formName.trim(),
         description: formDescription.trim() || undefined,
       });
-      if (result.success) {
+      if (result.success && result.id) {
+        track("board_created", { board_id: result.id, name: formName.trim() });
         await loadBoards();
       }
     }
@@ -131,6 +134,7 @@ export default function BoardsClient() {
 
     const result = await deleteBoardAction({ boardId: deleteBoard.id });
     if (result.success) {
+      track("board_deleted", { board_id: deleteBoard.id });
       setBoards((prev) => prev.filter((b) => b.id !== deleteBoard.id));
     }
 

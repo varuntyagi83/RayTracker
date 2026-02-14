@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 
 interface TopBarProps {
   actions?: React.ReactNode;
@@ -13,7 +13,7 @@ interface TopBarProps {
 
 export function TopBar({ actions }: TopBarProps) {
   function handleRefresh() {
-    trackEvent("refresh_clicked");
+    track("refresh_clicked");
     // TODO: Phase 4+ will implement actual Meta sync
   }
 

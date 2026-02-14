@@ -13,6 +13,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { track } from "@/lib/analytics/events";
 import { saveStudioOutputAsAssetAction } from "../actions";
 
 interface SaveAsAssetDialogProps {
@@ -48,6 +49,10 @@ export function SaveAsAssetDialog({
     setSaving(false);
 
     if (result.success) {
+      track("studio_generation_saved_as_asset", {
+        conversation_id: "",
+        asset_name: name.trim(),
+      });
       setSaved(true);
       setTimeout(() => {
         onOpenChange(false);

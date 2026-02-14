@@ -43,6 +43,7 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
+import { track } from "@/lib/analytics/events";
 import {
   fetchBoard,
   removeAdAction,
@@ -115,6 +116,7 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
 
     const result = await removeAdAction({ adId: deletingAd.id });
     if (result.success && board) {
+      track("board_ad_removed", { board_id: boardId, ad_id: deletingAd.id });
       setBoard({
         ...board,
         ads: board.ads.filter((a) => a.id !== deletingAd.id),
@@ -161,6 +163,7 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
 
     const result = await deleteBoardAction({ boardId: board.id });
     if (result.success) {
+      track("board_deleted", { board_id: board.id });
       router.push("/boards");
     }
 
@@ -230,7 +233,10 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setShowCreativeBuilder(true)}
+              onClick={() => {
+                track("board_creative_builder_opened", { ad_id: "" });
+                setShowCreativeBuilder(true);
+              }}
             >
               <Wand2 className="mr-1.5 size-3.5" />
               Creative Builder
@@ -298,8 +304,14 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
               key={ad.id}
               ad={ad}
               onDelete={() => setDeletingAd(ad)}
-              onVariations={() => setVariationAd(ad)}
-              onAnalyze={() => setAnalyzeAd(ad)}
+              onVariations={() => {
+                track("board_variation_opened", { ad_id: ad.id });
+                setVariationAd(ad);
+              }}
+              onAnalyze={() => {
+                track("board_ad_analyzed", { ad_id: ad.id, cached: false });
+                setAnalyzeAd(ad);
+              }}
             />
           ))}
         </div>

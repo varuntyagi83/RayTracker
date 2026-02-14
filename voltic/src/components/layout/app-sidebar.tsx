@@ -50,7 +50,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { createClient } from "@/lib/supabase/client";
-import { trackEvent, resetPostHog } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
+import { resetPostHog } from "@/lib/analytics/posthog-provider";
 
 const mainNavItems = [
   { label: "Home", href: "/home", icon: Home },
@@ -85,14 +86,14 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
   const initial = workspace.name.charAt(0).toUpperCase();
 
   function handleNavClick(destination: string) {
-    trackEvent("sidebar_nav_clicked", {
+    track("sidebar_nav_clicked", {
       destination,
       current_page: pathname,
     });
   }
 
   async function handleLogout() {
-    trackEvent("user_logged_out");
+    track("user_logged_out");
     resetPostHog();
     const supabase = createClient();
     await supabase.auth.signOut();

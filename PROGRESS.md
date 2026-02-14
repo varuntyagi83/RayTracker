@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 15 ✅
+> Current phase: Phase 16 ✅
 
 ## Phase Status
 
@@ -25,7 +25,7 @@
 | 14+ | AI Brand Guidelines Builder + Creative Studio + Multi-LLM | ✅ Complete | 2026-02-14 | Extension of Phase 14 with 3 major features: (1) AI Brand Guidelines Builder — Upload images/videos, LLM analyzes them and generates structured guidelines (brand name, voice, colors, typography, audience, do's/don'ts). Multiple named entities per workspace with slugs for @mention. Professional PDF export via @react-pdf/renderer. 4-step wizard: Name → Upload → AI Generate → Review/Edit. CRUD with logo/file management. (2) Creative Studio — New /creative-studio chat page with conversation sidebar, streaming LLM responses, @mention autocomplete via Tiptap editor (brand guidelines + assets), "Save as Asset" for AI outputs. (3) Multi-LLM Support — OpenAI GPT-4o, Anthropic Claude Sonnet 4, Google Gemini 2.0 Flash with user-selectable dropdown. Vercel AI SDK (ai + @ai-sdk/*) for unified provider abstraction. New DB tables: brand_guidelines, studio_conversations, studio_messages. Settings page updated to redirect to dedicated brand guidelines page. 29 files created/modified. npx tsc --noEmit passes clean. |
 | 14++ | Competitor Intelligence + gpt-image-1 + File Upload | ✅ Complete | 2026-02-14 | (1) gpt-image-1 migration — replaced DALL-E 3 with OpenAI gpt-image-1 for image generation in variations + Creative Studio, higher quality output. (2) File Upload in Creative Studio — Upload images/documents to chat, stored in studio-attachments bucket, passed as attachments in messages. (3) Competitor Intelligence system — New /competitors page with Companies tab (multi-select, ad counts, last scraped) + Reports tab (per-ad analysis with score bars, hook/CTA analysis, target audience, copy structure, strengths/weaknesses/improvements, cross-brand insights). Save competitor brands from Discover page runs. Generate AI analysis reports (GPT-4o) with credit deduction (3 base + 2 per ad). @mention competitor reports in Creative Studio with full context injection. New DB tables: competitor_brands, competitor_reports. New types: types/competitors.ts. New data layer: lib/data/competitors.ts. New actions: competitors/actions.ts. New components: company-selector, report-viewer, competitors-client. Sidebar nav updated with Competitors item. Studio @mention extended for competitor_report type with orange badge. |
 | 15 | Chrome Extension (Meta Ad Library) | ✅ Complete | 2026-02-14 | Chrome Manifest V3 extension for saving ads from Meta Ad Library (facebook.com/ads/library) directly to Voltic boards. Auth: user copies Supabase JWT from new Settings → Chrome Extension section, extension validates via API route. 3 new API routes: /api/extension/auth (GET, validate token + return workspace), /api/extension/boards (GET, list boards), /api/extension/save-ad (POST, Zod-validated, duplicate check by meta_library_id, source="extension"). Extension popup: connect/disconnect with URL + token inputs, green connected state. Content script: connection banner (green/yellow), MutationObserver for SPA navigation, ad card detection via multiple CSS selector fallbacks, "Save to Voltic" button injection, board selector dropdown (cached 5 min), ad data parser (metaLibraryId, brandName, headline, body, format, imageUrl, landingPageUrl, platforms, startDate, runtimeDays), saved state transition. Settings page updated with Chrome Extension card (reveal/copy API token with eye toggle). 12 new files, 1 modified. |
-| 16 | PostHog Deep Integration | ⬜ Not started | | |
+| 16 | PostHog Deep Integration | ✅ Complete | 2026-02-14 | Typed event system (45+ events), posthog-node server-side client, track() wrapper with compile-time enforcement, 33 client files instrumented, 4 API routes instrumented, all trackEvent() migrated to typed track(), zero TS errors |
 | 17 | Credit System & Billing | ⬜ Not started | | |
 | 18 | Production Hardening | ⬜ Not started | | |
 | 19 | Testing & QA | ⬜ Not started | | |
@@ -37,31 +37,32 @@
 
 ## Context for Next Session
 
-Phase 15 complete. Chrome Extension for Meta Ad Library implemented. Key new files:
+Phase 16 complete. PostHog Deep Integration across entire codebase.
 
-**New API Routes:**
-- `voltic/src/app/api/extension/auth/route.ts` — GET, validates Bearer token, returns workspace info
-- `voltic/src/app/api/extension/boards/route.ts` — GET, returns boards list for workspace
-- `voltic/src/app/api/extension/save-ad/route.ts` — POST, saves ad to board with Zod validation + duplicate check
+**New Files:**
+- `voltic/src/lib/analytics/events.ts` — Typed event definitions (`EventPropertiesMap` with 45+ events), `VolticEvent` union type, `track()` wrapper with compile-time enforcement of event name + properties
+- `voltic/src/lib/analytics/posthog-server.ts` — Server-side PostHog client using `posthog-node`, singleton `getServerPostHog()`, typed `trackServer()` function
 
-**New Auth Library:**
-- `voltic/src/lib/extension/auth.ts` — `validateExtensionToken(token)` — validates Supabase JWT, resolves workspace_id via workspace_members
+**Modified (33 client files + 4 API routes):**
+- Auth pages: login_submitted, login_failed, signup_started, signup_completed
+- Discover: search_executed, ad_saved_to_board, ad_analyzed, ads_compared, run_saved
+- Boards (4 files): board CRUD, ad_removed, variation_opened, ad_analyzed, creative_builder_opened
+- Assets: asset CRUD
+- Creative Studio (4 files): conversation_created/deleted, message_sent, model_changed, generation_saved_as_asset
+- Brand Guidelines: brand_guideline_deleted
+- Competitors: report_generated, report_deleted, brands_deleted
+- Reports: date_range_changed
+- Campaign Analysis: report_exported
+- Settings: settings_updated, api_token_copied
+- Automations (6 files): migrated all trackEvent() → typed track()
+- Layout (sidebar + topbar): migrated trackEvent() → track()
+- Dashboard (tracker + top-assets): migrated trackEvent() → track()
+- API routes: automation_cron_executed, automation_cron_error, extension_auth_validated, extension_ad_saved, automation_test_run
 
-**Chrome Extension (`extension/` at project root):**
-- `manifest.json` — Manifest V3, content_scripts on facebook.com/ads/library
-- `popup/popup.html + popup.css + popup.js` — Connect/disconnect UI, stores auth in chrome.storage.sync
-- `content/content.js` — Banner injection, ad card detection (multiple CSS selector fallbacks), "Save to Voltic" button injection, board selector dropdown, ad data parser, MutationObserver for SPA
-- `content/content.css` — Styles for banner, save button, board dropdown
-- `background/service-worker.js` — Minimal install/update logging
-- `icons/icon-{16,48,128}.png` — Placeholder green "V" icons
-
-**Modified:**
-- `voltic/src/app/(dashboard)/settings/components/settings-client.tsx` — Added Chrome Extension card with reveal/copy API token
+**Dependency added:** `posthog-node` (server-side PostHog SDK)
 
 **Notes:**
-- To use: Load `extension/` as unpacked extension in Chrome (chrome://extensions → Developer mode → Load unpacked)
-- User gets API token from Settings → Chrome Extension → Reveal API Token → Copy
-- Extension popup: paste Voltic URL + API token → Connect
-- Navigate to facebook.com/ads/library → green banner + save buttons on ad cards
-- Token expires periodically (Supabase JWT lifetime), user must re-copy
-- Phase 16 should implement PostHog Deep Integration
+- All consumer files use typed `track()` from `@/lib/analytics/events` — zero raw `trackEvent()` calls remain
+- Server-side uses `trackServer()` from `@/lib/analytics/posthog-server`
+- TypeScript enforces correct event name + properties at compile time
+- Phase 17 should implement Credit System & Billing

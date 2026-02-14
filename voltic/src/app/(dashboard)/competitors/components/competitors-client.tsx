@@ -28,6 +28,7 @@ import {
 // Credit cost constants (mirrored from server actions)
 const REPORT_BASE_COST = 3;
 const REPORT_PER_AD_COST = 2;
+import { track } from "@/lib/analytics/events";
 import type { CompetitorBrand, CompetitorReport } from "@/types/competitors";
 
 export default function CompetitorsClient() {
@@ -97,6 +98,7 @@ export default function CompetitorsClient() {
         brandIds: Array.from(selected),
       });
       if (!result.success) throw new Error(result.error ?? "Delete failed");
+      track("competitor_brands_deleted", { brand_ids: Array.from(selected) });
       setSelected(new Set());
       await loadData();
     } catch (err) {
@@ -123,6 +125,10 @@ export default function CompetitorsClient() {
         brandIds: Array.from(selected),
       });
       if (result.error) throw new Error(result.error);
+      track("competitor_report_generated", {
+        report_id: result.data?.id ?? "",
+        brand_count: selected.size,
+      });
       setSelected(new Set());
       setActiveTab("reports");
       await loadData();
@@ -142,6 +148,7 @@ export default function CompetitorsClient() {
       try {
         const result = await deleteCompetitorReportAction({ reportId });
         if (!result.success) throw new Error(result.error ?? "Delete failed");
+        track("competitor_report_deleted", { report_id: reportId });
         await loadData();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Delete failed");

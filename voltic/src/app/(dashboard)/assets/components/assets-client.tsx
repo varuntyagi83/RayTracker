@@ -41,6 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { track } from "@/lib/analytics/events";
 import {
   fetchAssets,
   createAssetAction,
@@ -160,6 +161,7 @@ export default function AssetsClient() {
         setSaving(false);
         return;
       }
+      track("asset_updated", { asset_id: editingAsset.id });
     } else {
       formData.set("image", selectedFile!);
 
@@ -169,6 +171,7 @@ export default function AssetsClient() {
         setSaving(false);
         return;
       }
+      track("asset_created", { asset_id: result.id ?? "", name: formName.trim() });
     }
 
     setSaving(false);
@@ -182,6 +185,7 @@ export default function AssetsClient() {
 
     const result = await deleteAssetAction({ assetId: deleteTarget.id });
     if (result.success) {
+      track("asset_deleted", { asset_id: deleteTarget.id });
       setAssets((prev) => prev.filter((a) => a.id !== deleteTarget.id));
     }
 

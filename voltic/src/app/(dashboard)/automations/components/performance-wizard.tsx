@@ -26,7 +26,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Plus, Trash2, Slack, MessageCircle } from "lucide-react";
 import { WizardPreview } from "./wizard-preview";
 import { createAutomation, updateAutomation } from "../actions";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import {
   type PerformanceWizardState,
   type MetricKey,
@@ -129,7 +129,7 @@ export function PerformanceWizard({
   }
 
   function nextStep() {
-    trackEvent("automation_wizard_step_completed", {
+    track("automation_wizard_step_completed", {
       step: STEPS[step],
       step_number: step + 1,
     });
@@ -141,7 +141,7 @@ export function PerformanceWizard({
   }
 
   function handleClose() {
-    trackEvent("automation_wizard_abandoned", { step: STEPS[step] });
+    track("automation_wizard_abandoned", { step: STEPS[step] });
     onOpenChange(false);
   }
 
@@ -166,7 +166,7 @@ export function PerformanceWizard({
       : await createAutomation(payload);
 
     if (!result.error) {
-      trackEvent("automation_created", {
+      track("automation_created", {
         type: "performance",
         status,
         metrics_count: state.config.metrics.length,

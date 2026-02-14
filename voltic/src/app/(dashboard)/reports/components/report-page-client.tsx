@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { track } from "@/lib/analytics/events";
 import ReportTable from "./report-table-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ColumnDef, SortDirection, DatePreset, ReportResult, DateRange } from "@/types/reports";
@@ -75,6 +76,7 @@ export default function ReportPageClient<T extends Record<string, unknown>>({
   };
 
   const handleDatePresetChange = (preset: DatePreset) => {
+    track("report_date_range_changed", { range: preset });
     setDatePreset(preset);
     setPage(1);
   };

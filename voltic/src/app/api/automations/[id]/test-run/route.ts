@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAutomation } from "@/lib/automations/executor";
+import { trackServer } from "@/lib/analytics/posthog-server";
 
 /**
  * Test Run Endpoint
@@ -54,6 +55,11 @@ export async function POST(
 
   // Execute as test run
   const result = await executeAutomation(automationId, true);
+
+  trackServer("automation_test_run", user.id, {
+    automation_id: automationId,
+    success: !result.error,
+  });
 
   return NextResponse.json(result);
 }

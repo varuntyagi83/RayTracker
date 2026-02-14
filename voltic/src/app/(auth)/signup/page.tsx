@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { track } from "@/lib/analytics/events";
 import { createWorkspace } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    track("signup_started");
 
     // If user isn't already authenticated, create account first
     if (!existingUserId) {
@@ -74,6 +76,7 @@ export default function SignupPage() {
       return;
     }
 
+    track("signup_completed", { method: existingUserId ? "google" : "email" });
     router.push("/home");
     router.refresh();
   }

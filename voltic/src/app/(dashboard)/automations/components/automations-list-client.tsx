@@ -7,7 +7,7 @@ import { CreateAutomationButton } from "./create-automation-button";
 import { PerformanceWizard } from "./performance-wizard";
 import { CompetitorWizard } from "./competitor-wizard";
 import { CommentWizard } from "./comment-wizard";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import type { Automation, AutomationType } from "@/types/automation";
 
 interface AutomationsListClientProps {
@@ -23,7 +23,7 @@ export function AutomationsListClient({
   const [editAutomation, setEditAutomation] = useState<Automation | null>(null);
 
   useEffect(() => {
-    trackEvent("automations_page_viewed", { count: automations.length });
+    track("automations_page_viewed", { count: automations.length });
   }, [automations.length]);
 
   const filtered =

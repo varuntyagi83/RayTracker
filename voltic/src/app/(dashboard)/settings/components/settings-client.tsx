@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
+import { track } from "@/lib/analytics/events";
 import { createClient } from "@/lib/supabase/client";
 import { updateWorkspaceTimezoneAction } from "../actions";
 
@@ -104,6 +105,7 @@ export default function SettingsClient() {
   const copyToken = useCallback(async () => {
     if (!apiToken) return;
     await navigator.clipboard.writeText(apiToken);
+    track("api_token_copied");
     setTokenCopied(true);
     setTimeout(() => setTokenCopied(false), 2000);
   }, [apiToken]);
@@ -128,6 +130,7 @@ export default function SettingsClient() {
     const result = await updateWorkspaceTimezoneAction({ timezone: selectedTimezone });
     setSaving(false);
     if (result.success) {
+      track("settings_updated", { section: "timezone" });
       setSaved(true);
       router.refresh();
     }

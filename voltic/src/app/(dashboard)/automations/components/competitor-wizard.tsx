@@ -24,7 +24,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Slack, MessageCircle, HelpCircle } from "lucide-react";
 import { CompetitorPreview } from "./competitor-preview";
 import { createAutomation, updateAutomation } from "../actions";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import {
   type CompetitorWizardState,
   type CompetitorConfig,
@@ -128,7 +128,7 @@ export function CompetitorWizard({
   }
 
   function nextStep() {
-    trackEvent("automation_wizard_step_completed", {
+    track("automation_wizard_step_completed", {
       step: STEPS[step],
       step_number: step + 1,
       wizard_type: "competitor",
@@ -141,7 +141,7 @@ export function CompetitorWizard({
   }
 
   function handleClose() {
-    trackEvent("automation_wizard_abandoned", {
+    track("automation_wizard_abandoned", {
       step: STEPS[step],
       wizard_type: "competitor",
     });
@@ -175,7 +175,7 @@ export function CompetitorWizard({
       : await createAutomation(payload);
 
     if (!result.error) {
-      trackEvent("competitor_automation_created", {
+      track("competitor_automation_created", {
         status,
         brand_name: state.config.brandName,
         top_n: state.config.scrapeSettings.topN,

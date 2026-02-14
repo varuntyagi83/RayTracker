@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { BrandGuidelineWizard } from "./brand-guideline-wizard";
 import { BrandGuidelineEditor } from "./brand-guideline-editor";
+import { track } from "@/lib/analytics/events";
 import {
   fetchBrandGuidelinesListAction,
   fetchBrandGuidelineAction,
@@ -80,6 +81,7 @@ export default function BrandGuidelinesClient() {
 
     const result = await deleteBrandGuidelineAction({ id: deleteTarget.id });
     if (result.success) {
+      track("brand_guideline_deleted", { guideline_id: deleteTarget.id });
       setGuidelines((prev) => prev.filter((g) => g.id !== deleteTarget.id));
     }
 

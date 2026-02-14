@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreHorizontal, Pause, Play, Pencil, Zap } from "lucide-react";
 import { toggleAutomationStatus } from "../actions";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import type { Automation, PerformanceConfig, ScheduleConfig } from "@/types/automation";
 
 interface AutomationCardProps {
@@ -49,7 +49,7 @@ export function AutomationCard({ automation, onEdit }: AutomationCardProps) {
     setToggling(true);
     const result = await toggleAutomationStatus(automation.id);
     if (!result.error) {
-      trackEvent(
+      track(
         result.status === "active"
           ? "automation_activated"
           : "automation_paused",

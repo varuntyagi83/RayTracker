@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { validateExtensionToken } from "@/lib/extension/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { trackServer } from "@/lib/analytics/posthog-server";
 
 const saveAdSchema = z.object({
   boardId: z.string().uuid(),
@@ -76,6 +77,11 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (existing && existing.length > 0) {
+      trackServer("extension_ad_saved", auth.userId ?? "unknown", {
+        workspace_id: auth.workspaceId,
+        board_id: body.boardId,
+        duplicate: true,
+      });
       return NextResponse.json({
         success: true,
         duplicate: true,
@@ -107,6 +113,12 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+
+  trackServer("extension_ad_saved", auth.userId ?? "unknown", {
+    workspace_id: auth.workspaceId,
+    board_id: body.boardId,
+    duplicate: false,
+  });
 
   return NextResponse.json({ success: true });
 }

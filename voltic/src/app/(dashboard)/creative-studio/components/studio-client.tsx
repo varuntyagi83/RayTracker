@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { ChatPanel } from "./chat-panel";
+import { track } from "@/lib/analytics/events";
 import {
   fetchConversationsAction,
   fetchConversationAction,
@@ -48,6 +49,7 @@ export default function StudioClient() {
     });
 
     if (result.success && result.id) {
+      track("studio_conversation_created", { conversation_id: result.id });
       await loadConversations();
       await selectConversation(result.id);
     }
@@ -66,6 +68,7 @@ export default function StudioClient() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      track("studio_conversation_deleted", { conversation_id: id });
       await deleteConversationAction({ id });
       if (activeConversation?.id === id) {
         setActiveConversation(null);
@@ -79,6 +82,10 @@ export default function StudioClient() {
   const handleModelChange = useCallback(
     async (provider: LLMProvider, model: string) => {
       if (!activeConversation) return;
+      track("studio_model_changed", {
+        model,
+        previous_model: activeConversation.llmModel,
+      });
       await updateConversationAction({
         id: activeConversation.id,
         llmProvider: provider,

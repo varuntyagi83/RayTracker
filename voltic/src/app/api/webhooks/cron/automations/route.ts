@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAutomation } from "@/lib/automations/executor";
+import { trackServer } from "@/lib/analytics/posthog-server";
 import type { Automation } from "@/types/automation";
 
 /**
@@ -31,6 +32,9 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     console.error("[cron] Failed to load automations:", error);
+    trackServer("automation_cron_error", "system", {
+      error: error.message,
+    });
     return NextResponse.json(
       { error: "Failed to load automations" },
       { status: 500 }
@@ -64,6 +68,11 @@ export async function GET(request: NextRequest) {
   console.log(
     `[cron] Executed ${dueAutomations.length}/${automations.length} automations`
   );
+
+  trackServer("automation_cron_executed", "system", {
+    total: automations.length,
+    executed: dueAutomations.length,
+  });
 
   return NextResponse.json({
     executed: dueAutomations.length,

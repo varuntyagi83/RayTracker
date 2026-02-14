@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { CommentPreview } from "./comment-preview";
 import { createAutomation, updateAutomation } from "../actions";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import {
   type CommentWizardState,
@@ -127,7 +127,7 @@ export function CommentWizard({
   }
 
   function nextStep() {
-    trackEvent("automation_wizard_step_completed", {
+    track("automation_wizard_step_completed", {
       step: STEPS[step],
       step_number: step + 1,
       wizard_type: "comments",
@@ -140,7 +140,7 @@ export function CommentWizard({
   }
 
   function handleClose() {
-    trackEvent("automation_wizard_abandoned", {
+    track("automation_wizard_abandoned", {
       step: STEPS[step],
       wizard_type: "comments",
     });
@@ -183,7 +183,7 @@ export function CommentWizard({
       : await createAutomation(payload);
 
     if (!result.error) {
-      trackEvent("comment_automation_created", {
+      track("comment_automation_created", {
         status,
         page_count: state.config.pages.length,
         frequency: state.config.frequency,

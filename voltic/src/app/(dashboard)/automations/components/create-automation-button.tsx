@@ -8,7 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Plus, BarChart3, Search, MessageSquare } from "lucide-react";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import type { AutomationType } from "@/types/automation";
 
 interface CreateAutomationButtonProps {
@@ -19,7 +19,7 @@ export function CreateAutomationButton({
   onSelect,
 }: CreateAutomationButtonProps) {
   function handleSelect(type: AutomationType) {
-    trackEvent("create_automation_clicked", { type });
+    track("create_automation_clicked", { type });
     onSelect(type);
   }
 

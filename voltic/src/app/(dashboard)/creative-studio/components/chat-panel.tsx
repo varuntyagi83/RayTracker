@@ -8,6 +8,7 @@ import { MentionEditor, type MentionEditorRef } from "@/components/shared/mentio
 import { MessageBubble, StreamingBubble } from "./message-bubble";
 import { LLMSelector } from "./llm-selector";
 import { SaveAsAssetDialog } from "./save-as-asset-dialog";
+import { track } from "@/lib/analytics/events";
 import { fetchMentionablesAction } from "../actions";
 import type {
   StudioConversation,
@@ -149,6 +150,10 @@ export function ChatPanel({
           accumulated += finalChunk;
           setStreamContent(accumulated);
         }
+        track("studio_message_sent", {
+          conversation_id: conversation.id,
+          model: conversation.llmModel,
+        });
       } catch (err) {
         console.error("Chat error:", err);
         setUploading(false);

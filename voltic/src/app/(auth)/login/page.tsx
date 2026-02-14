@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { track } from "@/lib/analytics/events";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +29,7 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    track("login_submitted", { method: "email" });
 
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
@@ -36,6 +38,7 @@ export default function LoginPage() {
     });
 
     if (error) {
+      track("login_failed", { method: "email", error: error.message });
       setError(error.message);
       setLoading(false);
       return;
@@ -46,6 +49,7 @@ export default function LoginPage() {
   }
 
   async function handleGoogleLogin() {
+    track("login_submitted", { method: "google" });
     const supabase = createClient();
     await supabase.auth.signInWithOAuth({
       provider: "google",

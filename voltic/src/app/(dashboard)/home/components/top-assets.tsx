@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { trackEvent } from "@/lib/analytics/posthog-provider";
+import { track } from "@/lib/analytics/events";
 import type {
   TopCreative,
   TopHeadline,
@@ -45,7 +45,7 @@ export function TopAssets({
   currency = "USD",
 }: TopAssetsProps) {
   function handleTabChange(tab: string) {
-    trackEvent("top_assets_tab_switched", { tab });
+    track("top_assets_tab_switched", { tab });
   }
 
   return (

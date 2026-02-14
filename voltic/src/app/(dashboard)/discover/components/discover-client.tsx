@@ -46,6 +46,7 @@ import {
   compareAds,
   saveDiscoverRunAction,
 } from "../actions";
+import { track } from "@/lib/analytics/events";
 import { InsightsPanel } from "@/components/shared/insights-panel";
 import { useComparisonStore } from "@/lib/stores/comparison-store";
 import { ComparisonTray } from "./comparison-tray";
@@ -230,6 +231,10 @@ export default function DiscoverClient() {
 
     setRawAds(result.ads);
     setLoading(false);
+    track("discover_search_executed", {
+      query: query.trim(),
+      result_count: result.ads.length,
+    });
 
     // Pre-load insights for these ads
     const adIds = result.ads.map((a) => a.id);
@@ -251,6 +256,7 @@ export default function DiscoverClient() {
     const result = await saveToBoard({ boardId, ad });
     if (result.success) {
       setSavedAdIds((prev) => new Set(prev).add(ad.id));
+      track("discover_ad_saved_to_board", { board_id: boardId, ad_id: ad.id });
     }
     setSavingAdId(null);
   };
@@ -279,6 +285,7 @@ export default function DiscoverClient() {
     if (result.data) {
       setInsightsMap((prev) => ({ ...prev, [ad.id]: result.data! }));
       setExpandedInsightId(ad.id);
+      track("discover_ad_analyzed", { ad_id: ad.id });
     }
     // TODO: show error toast when result.error
     setAnalyzingAdId(null);
@@ -300,6 +307,7 @@ export default function DiscoverClient() {
       });
       if (result.success) {
         setRunSaved(true);
+        track("discover_run_saved", { run_id: query.trim(), ad_count: rawAds.length });
       }
     } finally {
       setSavingRun(false);
@@ -327,6 +335,7 @@ export default function DiscoverClient() {
     if (result.data) {
       setComparisonResult(result.data);
       setShowComparisonDialog(true);
+      track("discover_ads_compared", { ad_count: selectedAds.length });
     }
     setIsComparing(false);
   };

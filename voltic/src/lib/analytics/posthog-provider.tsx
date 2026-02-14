@@ -84,3 +84,6 @@ export function resetPostHog() {
     posthog.reset();
   }
 }
+
+// Re-export typed track from events module for convenience
+export { track } from "./events";

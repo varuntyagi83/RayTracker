@@ -30,6 +30,7 @@ import {
   VARIATION_CREDIT_COST,
 } from "@/types/variations";
 import type { VariationStrategy, Variation } from "@/types/variations";
+import { track } from "@/lib/analytics/events";
 import type { SavedAd } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 
@@ -168,6 +169,7 @@ export default function VariationModal({
       setError("All variations failed to generate.");
     }
 
+    track("board_variation_opened", { ad_id: savedAd.id });
     setStep("results");
     setGeneratingStrategy("");
   };

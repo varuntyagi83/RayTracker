@@ -20,6 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { track } from "@/lib/analytics/events";
 import { analyzeAdAction } from "../../actions";
 import type { SavedAd } from "@/types/boards";
 import type { AdInsightData } from "@/types/discover";
@@ -74,6 +75,7 @@ export default function AnalyzeModal({
     } else if (result.data) {
       setInsights(result.data);
       setCached(result.cached ?? false);
+      track("board_ad_analyzed", { ad_id: savedAd.id, cached: result.cached ?? false });
     }
 
     setLoading(false);

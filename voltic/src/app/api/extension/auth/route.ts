@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { validateExtensionToken } from "@/lib/extension/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { trackServer } from "@/lib/analytics/posthog-server";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -35,6 +36,10 @@ export async function GET(req: NextRequest) {
       { status: 404 }
     );
   }
+
+  trackServer("extension_auth_validated", auth.userId ?? "unknown", {
+    workspace_id: auth.workspaceId!,
+  });
 
   return NextResponse.json({
     workspace: {

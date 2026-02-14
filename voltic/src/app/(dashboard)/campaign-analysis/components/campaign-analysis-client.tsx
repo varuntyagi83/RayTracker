@@ -50,6 +50,7 @@ import type {
   ChartMetric,
   ChartType,
 } from "@/types/campaign-analysis";
+import { track } from "@/lib/analytics/events";
 import {
   getDateRangeFromPreset,
   DATE_PRESET_LABELS,
@@ -235,6 +236,7 @@ export default function CampaignAnalysisClient() {
 
   // ─── CSV Export ───────────────────────────────────────────────────────────
   const handleExportCSV = () => {
+    track("report_exported", { report_type: "campaign_analysis", format: "csv" });
     const headers = ["Name", "Status", "Objective", "Ad Account", "Spend", "Revenue", "ROAS", "Impressions", "Clicks", "CTR", "Purchases"];
     const csvRows = campaigns.map((c) => [
       c.name,
