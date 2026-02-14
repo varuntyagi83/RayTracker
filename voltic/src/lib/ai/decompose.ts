@@ -191,7 +191,15 @@ export async function generateCleanProductImage(
   decompositionId: string
 ): Promise<string> {
   // Shared: fetch image and prepare buffers
-  const imageResponse = await fetch(imageUrl);
+  // Facebook CDN URLs reject bare fetch() calls — use browser-like headers
+  const imageResponse = await fetch(imageUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+      "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Referer": "https://www.facebook.com/",
+    },
+  });
   if (!imageResponse.ok) {
     throw new Error(`Failed to fetch original image: ${imageResponse.status}`);
   }
