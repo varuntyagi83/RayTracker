@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 10 ✅
+> Current phase: Phase 11 ✅
 
 ## Phase Status
 
@@ -18,7 +18,7 @@
 | 8 | Slack Bot & Execution Engine | ✅ Complete | 2026-02-14 | Slack OAuth callback at /api/auth/slack/callback (code→token exchange, stores slack_access_token on workspace). Slack Web API client with sendSlackMessage() + 6 block builder helpers (header, section, fields, divider, context, button). 4 Slack message templates: performance-digest (classification groups, metric formatting, sort), competitor-report (numbered ads with details + "View in Ads Library" buttons), comment-digest (grouped by page, sentiment emoji, time ago), landing-page-report (URL + ROAS/Spend/CTR). Executor engine: executeAutomation(id, isTestRun) orchestrates load→fetch→format→send→record flow for all 3 types. Cron endpoint at /api/webhooks/cron/automations with CRON_SECRET auth, schedule checker (day-of-week, time window, dedup). Test Run endpoint at POST /api/automations/[id]/test-run with auth + workspace validation. Runs recorded in automation_runs table. Added SLACK_BOT_TOKEN + CRON_SECRET to .env.local. npx tsc --noEmit passes clean. |
 | 9 | Reports Module | ✅ Complete | 2026-02-14 | 6 report pages (Top Ads, Top Campaigns, Top Creatives, Top Landing Pages, Top Headlines, Top Copy) with shared ReportTable client component. Features: date range presets (Today/Yesterday/Last 7d/30d/90d), column selector popover with checkboxes, sortable table headers (asc/desc toggle), pagination with configurable page sizes (10/25/50/100), CSV export. Report types: types/reports.ts with ColumnDef, ReportSort, DateRange, ReportParams, ReportResult generics + 6 typed row interfaces. Data layer: lib/data/reports.ts with 6 data functions (getTopAdsReport, getTopCampaignsReport, getTopCreativesReport, getTopLandingPagesReport, getTopHeadlinesReport, getTopCopyReport) — all workspace-scoped with date filtering, aggregation, sort, pagination. Server actions: reports/actions.ts with 6 fetch functions wrapping workspace resolution. Shared components: ReportPageClient (state management, loading skeleton, data fetching) + ReportTable (toolbar, table, pagination). Value formatters: currency/number/percentage/multiplier/truncate. npx tsc --noEmit passes clean. |
 | 10 | Campaign Analysis | ✅ Complete | 2026-02-14 | Campaign analysis page with search, date presets (Today/Yesterday/Last 7d/30d/90d), status + objective filters, sortable campaign table, expandable drill-down (campaign → ads with KPI cards + time series charts), comparison mode (select up to 5 campaigns, side-by-side KPI cards + overlaid Recharts), 3 chart types (Line/Bar/Scatter) with metric selector (Spend/Revenue/ROAS/Impressions/Clicks/CTR/Purchases), CSV export. Types: types/campaign-analysis.ts with CampaignSummary, CampaignDetail, MetricDataPoint, CampaignCreative, ComparisonData, ChartMetric, ChartType. Data layer: lib/data/campaign-analysis.ts with getCampaignList, getCampaignDetail, getCampaignCreatives, getCampaignComparison, getCampaignFilterOptions. Server actions: campaign-analysis/actions.ts with 5 fetch functions. Components: campaign-charts.tsx (Recharts Line/Bar/Scatter with comparison overlay), campaign-analysis-client.tsx (full page with all features). npx tsc --noEmit passes clean. |
-| 11 | Discover (Ad Library Browser) | ⬜ Not started | | |
+| 11 | Discover (Ad Library Browser) | ✅ Complete | 2026-02-14 | In-app Meta Ads Library browser with search bar (brand name), active-only toggle, format filter (All/Image/Video/Carousel), sort (Newest/Oldest/Most Impressions), per-page (6/12/24), pagination. 3-col responsive grid cards with brand name, "Live" badge, runtime days badge, media thumbnail, format+date, headline, body copy, landing page URL, platform icons (FB/IG/MSG/AN), impression range. "Add to Board" popover with board selector (loads workspace boards from DB), save-to-board server action inserting into saved_ads. "View in Ads Library" external link. Types: types/discover.ts with DiscoverAd, DiscoverSearchParams, DiscoverSearchResult, BoardOption. Data layer: lib/data/discover.ts with searchAdsLibrary (wraps scrapeAdsLibrary with filter/sort/paginate), getWorkspaceBoards, saveAdToBoard. Server actions: discover/actions.ts with fetchDiscoverAds, fetchBoards, saveToBoard. Components: discover-client.tsx with AdCard sub-component. npx tsc --noEmit passes clean. |
 | 12 | Boards (Swipe Files) | ⬜ Not started | | |
 | 13 | Assets / Product Catalog | ⬜ Not started | | |
 | 14 | AI Creative Variations | ⬜ Not started | | |
@@ -35,12 +35,11 @@
 
 ## Context for Next Session
 
-Phase 10 complete. Campaign Analysis fully implemented. Key new/modified files:
-- `voltic/src/types/campaign-analysis.ts` — NEW: CampaignSummary, CampaignDetail, MetricDataPoint, CampaignCreative, ComparisonData, CampaignListParams/Result, ChartMetric, ChartType + CHART_METRIC_LABELS + CHART_COLORS constants.
-- `voltic/src/lib/data/campaign-analysis.ts` — NEW: 5 data functions (getCampaignList with search/filters/sort, getCampaignDetail with time series, getCampaignCreatives with aggregated metrics, getCampaignComparison, getCampaignFilterOptions).
-- `voltic/src/app/(dashboard)/campaign-analysis/actions.ts` — NEW: 5 server actions wrapping workspace resolution.
-- `voltic/src/app/(dashboard)/campaign-analysis/components/campaign-charts.tsx` — NEW: Recharts component with Line/Bar/Scatter chart types, metric selector, comparison data overlay, tick/tooltip formatters.
-- `voltic/src/app/(dashboard)/campaign-analysis/components/campaign-analysis-client.tsx` — NEW: Full page client with search, date presets, status/objective filters, sortable campaign table, expandable drill-down (KPIs + charts + ads table), comparison mode (checkbox select up to 5, side-by-side cards + overlaid charts), CSV export, loading skeleton.
-- `voltic/src/app/(dashboard)/campaign-analysis/page.tsx` — UPDATED: Replaced placeholder with CampaignAnalysisClient.
+Phase 11 complete. Discover (Ad Library Browser) fully implemented. Key new/modified files:
+- `voltic/src/types/discover.ts` — NEW: DiscoverAd, DiscoverSearchParams, DiscoverSearchResult, BoardOption types.
+- `voltic/src/lib/data/discover.ts` — NEW: searchAdsLibrary (wraps scrapeAdsLibrary + filter/sort/paginate), getWorkspaceBoards, saveAdToBoard.
+- `voltic/src/app/(dashboard)/discover/actions.ts` — NEW: 3 server actions (fetchDiscoverAds, fetchBoards, saveToBoard).
+- `voltic/src/app/(dashboard)/discover/components/discover-client.tsx` — NEW: Full page client with search, filters, 3-col grid with AdCard, board selector popover, save-to-board, pagination.
+- `voltic/src/app/(dashboard)/discover/page.tsx` — UPDATED: Replaced placeholder with DiscoverClient.
 - `npx tsc --noEmit` passes clean.
-- Phase 11 should implement Discover (Ad Library Browser) — search bar, 3-col grid, save to board.
+- Phase 12 should implement Boards (Swipe Files) — board list, detail, CRUD, variation buttons.
