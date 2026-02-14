@@ -5,7 +5,7 @@ import type { Asset } from "@/types/assets";
 
 // ─── Brand Guidelines Helper ────────────────────────────────────────────────
 
-function buildBrandGuidelinesSection(guidelines?: BrandGuidelines): string {
+export function buildBrandGuidelinesSection(guidelines?: BrandGuidelines): string {
   if (!guidelines) return "";
 
   const parts: string[] = [];
@@ -41,7 +41,7 @@ Guidelines:
 - Never use placeholder text or generic filler.
 - If brand guidelines are provided, strictly follow the brand voice, tone, and rules.`;
 
-function buildTextPrompt(
+export function buildTextPrompt(
   ad: { brandName: string | null; headline: string | null; body: string | null; format: string },
   asset: { name: string; description: string | null },
   strategy: VariationStrategy,
@@ -109,7 +109,7 @@ export async function generateVariationText(
 
 // ─── Image Generation (DALL-E 3) ────────────────────────────────────────────
 
-function buildImagePrompt(
+export function buildImagePrompt(
   ad: { brandName: string | null; format: string },
   asset: { name: string; description: string | null },
   strategy: VariationStrategy,

@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 18 ✅
+> Current phase: Phase 19 ✅
 
 ## Phase Status
 
@@ -28,7 +28,7 @@
 | 16 | PostHog Deep Integration | ✅ Complete | 2026-02-14 | Typed event system (45+ events), posthog-node server-side client, track() wrapper with compile-time enforcement, 33 client files instrumented, 4 API routes instrumented, all trackEvent() migrated to typed track(), zero TS errors |
 | 17 | Credit System & Billing | ✅ Complete | 2026-02-14 | Credit balance indicator in top bar (Coins icon + balance + low-balance badges), /credits page with transaction history table (type filter, pagination), purchase dialog with 3 mock packages (100/$9.99, 500/$39.99, 1000/$69.99), Credits nav in sidebar. Fixed transaction type bug: checkAndDeductCredits now accepts TransactionType param, all 6 call sites fixed (ad_insight, comparison, variation, creative_enhance, competitor_report). New types: TransactionType, CreditTransaction, CreditPackage. Data layer: getCreditTransactions (paginated+filtered), addCredits, getCurrentBalance. 5 new analytics events. 7 new files, 9 modified. npx tsc --noEmit passes clean. |
 | 18 | Production Hardening | ✅ Complete | 2026-02-14 | Security headers (HSTS, X-Frame-Options, CSP-adjacent, nosniff, Referrer-Policy, Permissions-Policy) in next.config.ts. In-memory rate limiting on 4 critical API routes (checkout, studio/chat, studio/generate-image, extension/auth). Zod validation added to 6 action/route files (checkout, signup, reports, campaign-analysis, creative-studio, credits). Error boundaries (dashboard-error.tsx shared + 12 error.tsx files). Loading skeletons (11 loading.tsx files). next/image migration (16 files, 29 img→Image). Toast notifications via sonner in 7 CRUD components. Accessibility: aria-labels on 10 icon-only buttons. .env.example created. CRON_SECRET set. npx tsc --noEmit passes clean. |
-| 19 | Testing & QA | ⬜ Not started | | |
+| 19 | Testing & QA | ✅ Complete | 2026-02-14 | Vitest test infrastructure with 107 unit tests across 8 test files. Coverage: 86.68% statements, 92.85% branches, 86.66% functions on tested modules. Tests cover: credits helpers (isUnlimitedCredits, generateTransactionDescription, CREDIT_PACKAGES), rate limiter (RateLimiter class with sliding window, fake timers), Slack block builders (6 helpers), 4 Slack templates (performance-digest, competitor-report, comment-digest, landing-page-report), AI prompt builders (buildBrandGuidelinesSection, buildTextPrompt, buildImagePrompt × 6 strategies). Exported RateLimiter class and 3 AI prompt builders for testing. |
 | 20 | Deployment & CI/CD | ⬜ Not started | | |
 
 ## Issues / Blockers
@@ -37,25 +37,29 @@
 
 ## Context for Next Session
 
-Phase 18 complete. Production Hardening implemented across the entire codebase.
+Phase 19 complete. Testing & QA implemented with 107 unit tests.
 
-**New Files (26):**
-- `voltic/src/lib/utils/rate-limit.ts` — In-memory sliding window rate limiter with apiLimiter, aiLimiter, authLimiter presets
-- `voltic/src/components/shared/dashboard-error.tsx` — Shared error boundary component (AlertTriangle + message + "Try again")
-- 12 × `error.tsx` files — automations, discover, boards, boards/[id], assets, campaign-analysis, creative-studio, settings, brand-guidelines, competitors, credits, reports
-- 11 × `loading.tsx` files — discover, boards, boards/[id], assets, campaign-analysis, creative-studio, settings, brand-guidelines, competitors, credits, reports
-- `voltic/.env.example` — Environment variable template (22 keys)
+**New Files (9):**
+- `voltic/vitest.config.ts` — Test runner config with path aliases and coverage
+- `voltic/src/types/credits.test.ts` — 18 tests for credits helpers
+- `voltic/src/lib/utils/rate-limit.test.ts` — 12 tests for rate limiter
+- `voltic/src/lib/slack/client.test.ts` — 7 tests for block builders
+- `voltic/src/lib/slack/templates/performance-digest.test.ts` — 15 tests
+- `voltic/src/lib/slack/templates/competitor-report.test.ts` — 8 tests
+- `voltic/src/lib/slack/templates/comment-digest.test.ts` — 10 tests
+- `voltic/src/lib/slack/templates/landing-page-report.test.ts` — 11 tests
+- `voltic/src/lib/ai/variations.test.ts` — 26 tests for prompt builders
 
-**Modified (~43 files):**
-- `next.config.ts` — Security headers (HSTS, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy) + images.remotePatterns
-- 4 API routes — Rate limiting (checkout 10/min, studio/chat 20/min, studio/generate-image 10/min, extension/auth 10/min)
-- 6 action files — Zod validation (checkout, signup, reports, campaign-analysis, creative-studio, credits)
-- 16 component files — `<img>` → `<Image>` migration (29 total replacements, all with `unoptimized` for external URLs)
-- 7 component files — Toast notifications via sonner for CRUD operations
-- 8 component files — aria-label attributes on icon-only buttons
-- `.env.local` — CRON_SECRET set
+**Modified (4 files):**
+- `package.json` — Added vitest + @vitest/coverage-v8 devDependencies, test/test:watch/test:coverage scripts
+- `src/lib/utils/rate-limit.ts` — Exported `RateLimiter` class
+- `src/lib/ai/variations.ts` — Exported `buildBrandGuidelinesSection`, `buildTextPrompt`, `buildImagePrompt`
+- `PROGRESS.md` — Phase 19 ✅
+
+**Coverage:** 86.68% stmts | 92.85% branches | 86.66% functions
+**Commands:** `npm test` (run), `npm run test:watch` (watch), `npm run test:coverage` (coverage report)
 
 **Notes:**
-- Rate limiting is in-memory (suitable for single-instance). For multi-instance, swap with @upstash/ratelimit
-- Real Stripe Checkout was integrated in Phase 17+
-- Phase 19 should implement Testing & QA
+- E2E tests (Playwright) deferred — requires running app with real DB/auth
+- Data layer (lib/data/*) requires DB mocking — not tested in this phase
+- Phase 20 should implement Deployment & CI/CD

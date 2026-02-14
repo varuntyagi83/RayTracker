@@ -9,7 +9,7 @@ interface RateLimitResult {
   remaining: number;
 }
 
-class RateLimiter {
+export class RateLimiter {
   private windowMs: number;
   private tokens: Map<string, number[]> = new Map();
 
