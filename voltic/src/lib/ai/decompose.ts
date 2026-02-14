@@ -1,4 +1,7 @@
+import { toFile } from "openai";
+import sharp from "sharp";
 import { getOpenAIClient } from "./openai";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { DecompositionResult } from "@/types/decomposition";
 
 // ─── System Prompt ───────────────────────────────────────────────────────────
@@ -101,26 +104,71 @@ export async function decomposeAdImage(
   return parsed;
 }
 
-// ─── Generate Clean Image (text-removed version) ────────────────────────────
+// ─── Generate Clean Product Image (inpainting via gpt-image-1) ──────────────
 
-export async function generateCleanImage(
+const STORAGE_BUCKET = "brand-assets";
+
+/**
+ * Uses gpt-image-1 to inpaint the original ad image, removing ONLY the
+ * digitally composited marketing overlay text while preserving the product
+ * (including packaging text), background, and all other elements.
+ *
+ * Returns a permanent Supabase Storage URL (not a temporary OpenAI URL).
+ */
+export async function generateCleanProductImage(
   imageUrl: string,
-  productDescription: string
+  marketingTexts: string[],
+  workspaceId: string,
+  decompositionId: string
 ): Promise<string> {
   const client = getOpenAIClient();
 
-  const response = await client.images.generate({
-    model: "dall-e-3",
-    prompt: `Recreate this product advertisement image but remove ALL text overlays, logos, and branding elements. Keep ONLY the product (${productDescription}) and the background. The product should remain in the exact same position and style. No text, no logos, no watermarks — just the clean product shot.`,
-    n: 1,
-    size: "1024x1024",
-    quality: "standard",
+  // 1. Fetch original image and convert to PNG buffer
+  const imageResponse = await fetch(imageUrl);
+  if (!imageResponse.ok) {
+    throw new Error(`Failed to fetch original image: ${imageResponse.status}`);
+  }
+  const originalBuffer = Buffer.from(await imageResponse.arrayBuffer());
+  const pngBuffer = await sharp(originalBuffer).png().toBuffer();
+
+  // 2. Build prompt listing the specific texts to remove
+  const textList = marketingTexts
+    .map((t) => `"${t}"`)
+    .join(", ");
+
+  const prompt = `Edit this advertisement image: remove ONLY the following digitally composited marketing overlay text: ${textList}. Fill the removed text areas seamlessly with the surrounding background. Keep the product with ALL its packaging text, the background, props, and styling EXACTLY as they are. Do NOT change, move, or alter the product, its packaging, or any other visual element.`;
+
+  // 3. Call gpt-image-1 images.edit() for inpainting
+  const file = await toFile(pngBuffer, "original.png", { type: "image/png" });
+
+  const response = await client.images.edit({
+    model: "gpt-image-1",
+    image: file,
+    prompt,
+    size: "1024x1024" as "1024x1024",
   });
 
-  const url = response.data?.[0]?.url;
-  if (!url) {
-    throw new Error("No image URL returned from DALL-E for clean image generation");
+  const b64 = response.data?.[0]?.b64_json;
+  if (!b64) {
+    throw new Error("No image returned from gpt-image-1 for clean product image");
   }
 
-  return url;
+  // 4. Upload to Supabase Storage for a permanent URL
+  const imageBuffer = Buffer.from(b64, "base64");
+  const storagePath = `${workspaceId}/decompose/${decompositionId}-clean.png`;
+
+  const supabase = createAdminClient();
+  const { error: uploadError } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(storagePath, imageBuffer, { contentType: "image/png", upsert: true });
+
+  if (uploadError) {
+    throw new Error(`Storage upload failed: ${uploadError.message}`);
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+
+  return publicUrl;
 }

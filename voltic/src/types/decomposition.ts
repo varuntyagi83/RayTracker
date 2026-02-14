@@ -99,6 +99,23 @@ export interface DecomposeBatchInput {
   generate_clean_images?: boolean;
 }
 
+// ─── Save as Asset / Save Texts Result Types ─────────────────────────────
+
+export interface SaveAsAssetResult {
+  asset_id: string;
+  name: string;
+  image_url: string;
+}
+
+export interface SavedTextElement {
+  content: string;
+  type: TextType;
+  role: "headline" | "body";
+  position: TextPosition;
+  estimated_font_size: FontSize;
+  confidence: number;
+}
+
 // ─── Credit Constants ────────────────────────────────────────────────────
 
 export const DECOMPOSITION_ANALYSIS_COST = 5;

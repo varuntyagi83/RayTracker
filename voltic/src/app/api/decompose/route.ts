@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
-import { decomposeAdImage, generateCleanImage } from "@/lib/ai/decompose";
+import { decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits } from "@/lib/data/insights";
 import {
   DECOMPOSITION_ANALYSIS_COST,
@@ -126,10 +126,18 @@ export async function POST(request: Request) {
     let cleanImageUrl: string | null = null;
     if (body.generate_clean_image && result.product.detected) {
       try {
-        cleanImageUrl = await generateCleanImage(
-          body.image_url,
-          result.product.description
-        );
+        const marketingTexts = result.texts
+          .filter((t) => t.type !== "brand")
+          .map((t) => t.content);
+
+        if (marketingTexts.length > 0) {
+          cleanImageUrl = await generateCleanProductImage(
+            body.image_url,
+            marketingTexts,
+            workspaceId,
+            decompositionId
+          );
+        }
       } catch (cleanErr) {
         // Non-fatal: clean image generation can fail without failing the whole decomposition
         console.error("[decompose] Clean image generation failed:", cleanErr);

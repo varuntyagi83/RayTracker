@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
-import { decomposeAdImage, generateCleanImage } from "@/lib/ai/decompose";
+import { decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits } from "@/lib/data/insights";
 import {
   DECOMPOSITION_ANALYSIS_COST,
@@ -146,10 +146,18 @@ export async function POST(request: Request) {
       let cleanImageUrl: string | null = null;
       if (body.generate_clean_images && decomResult.product.detected) {
         try {
-          cleanImageUrl = await generateCleanImage(
-            imageUrl,
-            decomResult.product.description
-          );
+          const marketingTexts = decomResult.texts
+            .filter((t) => t.type !== "brand")
+            .map((t) => t.content);
+
+          if (marketingTexts.length > 0) {
+            cleanImageUrl = await generateCleanProductImage(
+              imageUrl,
+              marketingTexts,
+              workspaceId,
+              record.id
+            );
+          }
         } catch {
           // Non-fatal
         }

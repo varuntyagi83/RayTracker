@@ -255,6 +255,62 @@ async function runTest(imageInput: string): Promise<void> {
   console.log(`   Text overlay on image: ${result.layout.text_overlay_on_image}`);
   console.log(`   Brand elements: ${result.layout.brand_elements.join(", ") || "none"}`);
 
+  // ─── Test 6: Clean Product Image (gpt-image-1 inpainting) ──────────────
+
+  let cleanImageUrl: string | null = null;
+  console.log(`\n🔬 Test 6: Clean product image generation (gpt-image-1 inpainting)...`);
+
+  if (marketingTexts.length > 0 && result.product.detected) {
+    const cleanStartTime = Date.now();
+    try {
+      const textsToRemove = marketingTexts.map((t: ExtractedText) => t.content);
+      console.log(`   Texts to remove: ${textsToRemove.map((t: string) => `"${t}"`).join(", ")}`);
+
+      // Use gpt-image-1 images.edit() to inpaint
+      const imgResp = await fetch(imageUrl.startsWith("data:") ? imageUrl : imageUrl);
+      let imgBuffer: Buffer;
+      if (imageUrl.startsWith("data:")) {
+        const base64Part = imageUrl.split(",")[1];
+        imgBuffer = Buffer.from(base64Part, "base64");
+      } else {
+        imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+      }
+
+      // Convert to PNG using sharp
+      const sharp = (await import("sharp")).default;
+      const pngBuffer = await sharp(imgBuffer).png().toBuffer();
+
+      const { toFile } = await import("openai");
+      const file = await toFile(pngBuffer, "original.png", { type: "image/png" });
+
+      const textList = textsToRemove.map((t: string) => `"${t}"`).join(", ");
+      const prompt = `Edit this advertisement image: remove ONLY the following digitally composited marketing overlay text: ${textList}. Fill the removed text areas seamlessly with the surrounding background. Keep the product with ALL its packaging text, the background, props, and styling EXACTLY as they are. Do NOT change, move, or alter the product, its packaging, or any other visual element.`;
+
+      const editResponse = await client.images.edit({
+        model: "gpt-image-1",
+        image: file,
+        prompt,
+        size: "1024x1024" as "1024x1024",
+      });
+
+      const b64 = editResponse.data?.[0]?.b64_json;
+      if (!b64) throw new Error("No image returned");
+
+      // Save to disk for visual inspection
+      const outputPath = path.join(path.dirname(path.resolve(imageInput)), "test-clean-product.png");
+      fs.writeFileSync(outputPath, Buffer.from(b64, "base64"));
+
+      const cleanDuration = Date.now() - cleanStartTime;
+      cleanImageUrl = outputPath;
+      console.log(`   ✅ Clean product image generated in ${cleanDuration}ms`);
+      console.log(`   📁 Saved to: ${outputPath}`);
+    } catch (err) {
+      console.log(`   ❌ Clean image generation failed:`, err);
+    }
+  } else {
+    console.log("   ⚠️  Skipped (no marketing text or no product detected)");
+  }
+
   // ─── Summary ──────────────────────────────────────────────────────────
 
   console.log("\n╔══════════════════════════════════════════════════════════╗");
@@ -264,6 +320,7 @@ async function runTest(imageInput: string): Promise<void> {
   console.log(`║  Marketing texts:          ${String(marketingTexts.length).padStart(3)} ${" ".repeat(25)}║`);
   console.log(`║  Product/packaging texts:  ${String(productTexts.length).padStart(3)} ${" ".repeat(25)}║`);
   console.log(`║  Product detected:         ${result.product.detected ? "Yes" : "No "} ${" ".repeat(25)}║`);
+  console.log(`║  Clean image generated:    ${cleanImageUrl ? "Yes" : "No "} ${" ".repeat(25)}║`);
   console.log(`║  Validation errors:        ${String(errors.length).padStart(3)} ${" ".repeat(25)}║`);
   console.log("╠══════════════════════════════════════════════════════════╣");
 
@@ -272,7 +329,8 @@ async function runTest(imageInput: string): Promise<void> {
     result.texts.length > 0 &&
     marketingTexts.length > 0 &&
     productTexts.length > 0 &&
-    result.product.detected;
+    result.product.detected &&
+    cleanImageUrl !== null;
 
   if (passed) {
     console.log("║  ✅ ALL TESTS PASSED                                   ║");

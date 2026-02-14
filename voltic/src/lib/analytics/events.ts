@@ -127,6 +127,7 @@ export interface EventPropertiesMap {
   ad_decomposition_completed: { decomposition_id: string; texts_found: number; product_detected: boolean; duration_ms: number; credits_used: number };
   ad_decomposition_failed: { decomposition_id?: string; error: string };
   ad_decomposition_batch_started: { count: number; total_credits: number };
+  decomposition_saved_as_asset: { decomposition_id: string; asset_id: string; has_clean_image: boolean };
 
   // AI / Credits (server-side)
   credits_deducted: {
