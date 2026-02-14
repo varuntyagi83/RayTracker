@@ -24,7 +24,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Collapsible,
   CollapsibleContent,
@@ -81,11 +80,9 @@ export default function DecompositionModal({
   // Editable texts (local copy for editing)
   const [editedTexts, setEditedTexts] = useState<ExtractedText[]>([]);
 
-  // Save as Asset form
-  const [showSaveForm, setShowSaveForm] = useState(false);
-  const [assetName, setAssetName] = useState("");
-  const [assetDescription, setAssetDescription] = useState("");
+  // Save as Asset
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   // Analysis collapsible
   const [analysisOpen, setAnalysisOpen] = useState(false);
@@ -94,7 +91,7 @@ export default function DecompositionModal({
   useEffect(() => {
     if (open && imageUrl) {
       reset();
-      setShowSaveForm(false);
+      setSaved(false);
       setAnalysisOpen(false);
       decompose(imageUrl, sourceType, sourceId);
     }
@@ -104,10 +101,6 @@ export default function DecompositionModal({
   useEffect(() => {
     if (result?.extractedTexts) {
       setEditedTexts([...result.extractedTexts]);
-      if (result.productAnalysis?.description) {
-        setAssetName(result.productAnalysis.description.slice(0, 100));
-        setAssetDescription("Extracted from ad decomposition");
-      }
     }
   }, [result]);
 
@@ -129,6 +122,7 @@ export default function DecompositionModal({
   );
 
   const handleSaveAsAsset = useCallback(async () => {
+    if (saving || saved) return;
     setSaving(true);
     try {
       const assetResult = await saveAsAsset();
@@ -137,14 +131,14 @@ export default function DecompositionModal({
         asset_id: assetResult.asset_id,
       });
       toast.success("Saved as asset", { description: assetResult.name });
-      setShowSaveForm(false);
+      setSaved(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save";
       toast.error(msg);
     } finally {
       setSaving(false);
     }
-  }, [saveAsAsset, result]);
+  }, [saveAsAsset, result, saving, saved]);
 
   const handleSendToBuilder = useCallback(async () => {
     if (!onSendToBuilder || !result) return;
@@ -413,36 +407,11 @@ export default function DecompositionModal({
               </Collapsible>
             )}
 
-            {/* ── Save as Asset Form ────────────────────────────── */}
-            {showSaveForm && (
-              <div className="space-y-3 p-4 rounded-lg border bg-card">
-                <h4 className="text-sm font-semibold flex items-center gap-1.5">
-                  <Save className="size-4" /> Save as Asset
-                </h4>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Asset name"
-                    value={assetName}
-                    onChange={(e) => setAssetName(e.target.value)}
-                    className="h-8 text-sm"
-                  />
-                  <Textarea
-                    placeholder="Description (optional)"
-                    value={assetDescription}
-                    onChange={(e) => setAssetDescription(e.target.value)}
-                    rows={2}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={handleSaveAsAsset} disabled={saving || !assetName.trim()}>
-                    {saving ? <Loader2 className="mr-1.5 size-3.5 animate-spin" /> : <CheckCircle2 className="mr-1.5 size-3.5" />}
-                    {saving ? "Saving..." : "Save"}
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setShowSaveForm(false)}>
-                    Cancel
-                  </Button>
-                </div>
+            {/* Save confirmation */}
+            {saved && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 text-sm">
+                <CheckCircle2 className="size-4 shrink-0" />
+                Saved as asset. View it on the Assets page.
               </div>
             )}
           </div>
@@ -453,11 +422,17 @@ export default function DecompositionModal({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setShowSaveForm(!showSaveForm)}
-            disabled={saving || !isDone}
+            onClick={handleSaveAsAsset}
+            disabled={saving || saved || !isDone}
           >
-            <Save className="mr-1.5 size-3.5" />
-            Save as Asset
+            {saving ? (
+              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+            ) : saved ? (
+              <CheckCircle2 className="mr-1.5 size-3.5" />
+            ) : (
+              <Save className="mr-1.5 size-3.5" />
+            )}
+            {saving ? "Saving..." : saved ? "Saved" : "Save as Asset"}
           </Button>
 
           {onSendToBuilder && (
