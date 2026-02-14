@@ -130,12 +130,13 @@ export interface EventPropertiesMap {
   decomposition_saved_as_asset: { decomposition_id: string; asset_id: string; has_clean_image: boolean };
 
   // Decomposition UI
-  decomposition_modal_opened: { source: "board" | "discover"; ad_id: string };
+  decomposition_modal_opened: { source: "board" | "discover" | "decomposition"; ad_id: string };
   decomposition_comparison_toggled: { decomposition_id: string; showing: "original" | "clean" };
   decomposition_text_edited: { decomposition_id: string; text_type: string };
   decomposition_sent_to_builder: { decomposition_id: string; image_count: number; text_count: number };
   decomposition_asset_saved: { decomposition_id: string; asset_id: string };
-  decomposition_batch_completed: { count: number; success_count: number; duration_ms: number };
+  decomposition_page_viewed: Record<string, never>;
+  decomposition_image_uploaded: { file_name: string };
 
   // AI / Credits (server-side)
   credits_deducted: {

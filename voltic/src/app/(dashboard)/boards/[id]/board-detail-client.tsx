@@ -16,7 +16,6 @@ import {
   Pencil,
   Wand2,
   Scissors,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -100,9 +99,6 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
 
   // Decompose modal
   const [decomposeAd, setDecomposeAd] = useState<SavedAd | null>(null);
-
-  // Batch decompose
-  const [batchDecomposing, setBatchDecomposing] = useState(false);
 
   // Creative builder pre-population from decomposition
   const [builderInitialImages, setBuilderInitialImages] = useState<CreativeImage[] | undefined>();
@@ -196,50 +192,6 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
     setDeleteBoardOpen(false);
   };
 
-  const handleBatchDecompose = async () => {
-    if (!board || board.ads.length === 0) return;
-    setBatchDecomposing(true);
-    const startTime = Date.now();
-
-    const imageUrls = board.ads
-      .filter((ad) => ad.imageUrl)
-      .map((ad) => ad.imageUrl!);
-
-    try {
-      const res = await fetch("/api/decompose/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image_urls: imageUrls,
-          source_type: "saved_ad",
-          generate_clean_images: true,
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Batch decomposition failed");
-      }
-
-      const successCount = data.results?.filter(
-        (r: { status: string }) => r.status === "completed"
-      ).length ?? 0;
-
-      track("decomposition_batch_completed", {
-        count: imageUrls.length,
-        success_count: successCount,
-        duration_ms: Date.now() - startTime,
-      });
-
-      toast.success(`Decomposed ${successCount} of ${imageUrls.length} ads`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Batch failed";
-      toast.error(msg);
-    } finally {
-      setBatchDecomposing(false);
-    }
-  };
-
   const handleSendToBuilder = (images: CreativeImage[], texts: CreativeText[]) => {
     setDecomposeAd(null);
     setBuilderInitialImages(images);
@@ -306,19 +258,6 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBatchDecompose}
-              disabled={batchDecomposing || board.ads.length === 0}
-            >
-              {batchDecomposing ? (
-                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-              ) : (
-                <Scissors className="mr-1.5 size-3.5" />
-              )}
-              {batchDecomposing ? "Decomposing..." : "Batch Decompose"}
-            </Button>
             <Button
               variant="outline"
               size="sm"

@@ -12,6 +12,7 @@ import {
   Image,
   BookOpen,
   MessageSquareText,
+  Scissors,
   Coins,
   Plus,
   TrendingUp,
@@ -64,6 +65,7 @@ const mainNavItems = [
   { label: "Assets", href: "/assets", icon: Image },
   { label: "Brand Guidelines", href: "/brand-guidelines", icon: BookOpen },
   { label: "Creative Studio", href: "/creative-studio", icon: MessageSquareText },
+  { label: "Decomposition", href: "/decomposition", icon: Scissors },
   { label: "Credits", href: "/credits", icon: Coins },
 ];
 
