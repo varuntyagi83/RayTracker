@@ -434,7 +434,7 @@ CRITICAL: Do NOT alter the product, product packaging text, background, props, c
 
       console.log(`   Calling Gemini 2.5 Flash...`);
       const geminiResp = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${GOOGLE_API_KEY}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
