@@ -48,8 +48,10 @@ export default function SignupPage() {
     setError(null);
     track("signup_started");
 
+    let userId = existingUserId;
+
     // If user isn't already authenticated, create account first
-    if (!existingUserId) {
+    if (!userId) {
       const supabase = createClient();
       const { data: authData, error: authError } =
         await supabase.auth.signUp({ email, password });
@@ -65,10 +67,12 @@ export default function SignupPage() {
         setLoading(false);
         return;
       }
+
+      userId = authData.user.id;
     }
 
     // Create workspace + membership via server action
-    const result = await createWorkspace(workspaceName);
+    const result = await createWorkspace(workspaceName, userId);
 
     if (result.error) {
       setError(result.error);

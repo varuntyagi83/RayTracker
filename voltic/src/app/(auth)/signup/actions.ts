@@ -1,31 +1,29 @@
 "use server";
 
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const createWorkspaceSchema = z.object({
   workspaceName: z.string().min(1, "Workspace name is required").max(100).trim(),
+  userId: z.string().uuid("Invalid user ID"),
 });
 
-export async function createWorkspace(workspaceName: string) {
-  const parsed = createWorkspaceSchema.safeParse({ workspaceName });
+export async function createWorkspace(workspaceName: string, userId: string) {
+  const parsed = createWorkspaceSchema.safeParse({ workspaceName, userId });
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
 
-  // Use regular client to verify auth
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Use admin client for DB writes (bypasses RLS)
+  const admin = createAdminClient();
 
-  if (!user) {
+  // Verify the user actually exists in Supabase Auth
+  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(parsed.data.userId);
+  if (authError || !authUser?.user) {
     return { error: "Not authenticated" };
   }
 
-  // Use admin client for DB writes (bypasses RLS)
-  const admin = createAdminClient();
+  const user = authUser.user;
 
   const slug = parsed.data.workspaceName
     .toLowerCase()
