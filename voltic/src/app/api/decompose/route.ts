@@ -55,13 +55,18 @@ export async function POST(request: Request) {
   const workspaceId = member.workspace_id;
 
   // 4. Check for cached result (same image URL + workspace)
-  const { data: cached } = await admin
+  // Use .limit(1) instead of .single() — .single() errors when multiple completed
+  // records exist (from past re-decomposition attempts), causing cache misses.
+  const { data: cachedRows } = await admin
     .from("ad_decompositions")
     .select("id, processing_status, extracted_texts, product_analysis, background_analysis, layout_analysis, clean_image_url")
     .eq("workspace_id", workspaceId)
     .eq("source_image_url", body.image_url)
     .eq("processing_status", "completed")
-    .single();
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const cached = cachedRows?.[0] ?? null;
 
   if (cached) {
     // Patch stale cache: if clean image was requested but missing, use original URL

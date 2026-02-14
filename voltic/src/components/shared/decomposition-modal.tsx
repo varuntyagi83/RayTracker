@@ -312,36 +312,25 @@ export default function DecompositionModal({
                       className="absolute inset-0 w-full h-full object-contain"
                     />
 
-                    {/* Loading overlay */}
-                    {(status === "analyzing" || status === "generating") && (
-                      <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center gap-2">
-                        <Loader2 className="size-8 text-muted-foreground/40 animate-spin" />
-                        <span className="text-xs text-muted-foreground">
-                          {status === "analyzing"
-                            ? "Analyzing..."
-                            : "Generating..."}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Error overlay */}
-                    {status === "error" && (
-                      <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center gap-2">
-                        <AlertCircle className="size-8 text-destructive/60" />
-                        <span className="text-xs text-destructive">
+                    {/* Status badge — bottom of image, never blocks the view */}
+                    <div className="absolute bottom-2 inset-x-2 text-center">
+                      {(status === "analyzing" || status === "generating") && (
+                        <Badge variant="secondary" className="text-[10px] gap-1">
+                          <Loader2 className="size-3 animate-spin" />
+                          {status === "analyzing" ? "Analyzing..." : "Generating..."}
+                        </Badge>
+                      )}
+                      {status === "error" && (
+                        <Badge variant="destructive" className="text-[10px]">
                           Failed to generate
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Badge when no inpainting was needed */}
-                    {status === "completed" && !result?.cleanImageUrl && (
-                      <div className="absolute bottom-2 inset-x-2 text-center">
+                        </Badge>
+                      )}
+                      {status === "completed" && !result?.cleanImageUrl && (
                         <Badge variant="secondary" className="text-[10px]">
                           No overlay text — original used
                         </Badge>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
