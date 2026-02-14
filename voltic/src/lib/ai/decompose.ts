@@ -71,12 +71,50 @@ Other rules:
 - dominant_colors should be valid hex color codes
 - brand_elements should list all branding elements with their approximate position`;
 
+// ─── Browser-like headers for Facebook CDN ──────────────────────────────────
+
+const BROWSER_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Referer": "https://www.facebook.com/",
+};
+
+// ─── Download Image ─────────────────────────────────────────────────────────
+
+/**
+ * Downloads an image and returns it as a Buffer.
+ * Uses browser-like headers to handle Facebook CDN URLs that reject bare fetch calls.
+ */
+export async function downloadImage(imageUrl: string): Promise<Buffer> {
+  const res = await fetch(imageUrl, { headers: BROWSER_HEADERS });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch image: ${res.status}`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
 // ─── Decompose Ad Image ──────────────────────────────────────────────────────
 
+/**
+ * Analyzes an ad image with GPT-4o Vision.
+ * Accepts either an image URL or a pre-downloaded Buffer.
+ * When a Buffer is provided, it's sent as base64 data URL to avoid
+ * OpenAI's servers needing to download the (possibly expired) Facebook CDN URL.
+ */
 export async function decomposeAdImage(
-  imageUrl: string
+  imageUrlOrBuffer: string | Buffer
 ): Promise<DecompositionResult> {
   const client = getOpenAIClient();
+
+  // Build the image content — base64 if buffer, URL otherwise
+  let imageContent: string;
+  if (Buffer.isBuffer(imageUrlOrBuffer)) {
+    const base64 = imageUrlOrBuffer.toString("base64");
+    imageContent = `data:image/jpeg;base64,${base64}`;
+  } else {
+    imageContent = imageUrlOrBuffer;
+  }
 
   const response = await client.chat.completions.create({
     model: "gpt-4o",
@@ -88,7 +126,7 @@ export async function decomposeAdImage(
           {
             type: "image_url",
             image_url: {
-              url: imageUrl,
+              url: imageContent,
               detail: "high",
             },
           },
@@ -184,27 +222,14 @@ const STORAGE_BUCKET = "brand-assets";
  * Returns a permanent Supabase Storage URL.
  */
 export async function generateCleanProductImage(
-  imageUrl: string,
+  imageBuffer: Buffer,
   marketingTexts: string[],
   boundingBoxes: BoundingBox[],
   workspaceId: string,
   decompositionId: string
 ): Promise<string> {
-  // Shared: fetch image and prepare buffers
-  // Facebook CDN URLs reject bare fetch() calls — use browser-like headers
-  const imageResponse = await fetch(imageUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-      "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Referer": "https://www.facebook.com/",
-    },
-  });
-  if (!imageResponse.ok) {
-    throw new Error(`Failed to fetch original image: ${imageResponse.status}`);
-  }
-  const originalBuffer = Buffer.from(await imageResponse.arrayBuffer());
-  const pngBuffer = await sharp(originalBuffer).png().toBuffer();
+  // Convert the pre-downloaded image to PNG for mask generation
+  const pngBuffer = await sharp(imageBuffer).png().toBuffer();
   const metadata = await sharp(pngBuffer).metadata();
   const imgWidth = metadata.width ?? 1024;
   const imgHeight = metadata.height ?? 1024;

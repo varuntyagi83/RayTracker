@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
-import { decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
+import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits } from "@/lib/data/insights";
 import {
   DECOMPOSITION_ANALYSIS_COST,
@@ -140,11 +140,15 @@ export async function POST(request: Request) {
     generate_clean_image: body.generate_clean_image,
   });
 
-  // 7. Run decomposition
+  // 7. Download image once, then run decomposition + clean image with the buffer
   const startTime = Date.now();
 
   try {
-    const result = await decomposeAdImage(body.image_url);
+    // Download once with browser headers — avoids expired/blocked FB CDN URLs
+    const imageBuffer = await downloadImage(body.image_url);
+
+    // Send base64 to GPT-4o Vision (not the URL, which OpenAI might fail to download)
+    const result = await decomposeAdImage(imageBuffer);
 
     let cleanImageUrl: string | null = null;
     if (body.generate_clean_image && result.product.detected) {
@@ -156,8 +160,9 @@ export async function POST(request: Request) {
           .map((t) => t.bounding_box!);
 
         if (marketingTexts.length > 0 && boundingBoxes.length > 0) {
+          // Pass the already-downloaded buffer — no second download needed
           cleanImageUrl = await generateCleanProductImage(
-            body.image_url,
+            imageBuffer,
             marketingTexts,
             boundingBoxes,
             workspaceId,

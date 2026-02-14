@@ -3,7 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
-import { decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
+import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits } from "@/lib/data/insights";
 import {
   DECOMPOSITION_ANALYSIS_COST,
@@ -141,7 +141,8 @@ export async function POST(request: Request) {
     }
 
     try {
-      const decomResult = await decomposeAdImage(imageUrl);
+      const imageBuffer = await downloadImage(imageUrl);
+      const decomResult = await decomposeAdImage(imageBuffer);
 
       let cleanImageUrl: string | null = null;
       if (body.generate_clean_images && decomResult.product.detected) {
@@ -154,14 +155,13 @@ export async function POST(request: Request) {
 
           if (marketingTexts.length > 0 && boundingBoxes.length > 0) {
             cleanImageUrl = await generateCleanProductImage(
-              imageUrl,
+              imageBuffer,
               marketingTexts,
               boundingBoxes,
               workspaceId,
               record.id
             );
           } else {
-            // No marketing text to remove — the original image is already clean
             cleanImageUrl = imageUrl;
           }
         } catch {
