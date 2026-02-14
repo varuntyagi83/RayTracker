@@ -298,14 +298,23 @@ export default function DecompositionModal({
                   </div>
                 </div>
 
-                {/* Clean image */}
+                {/* Clean image — always shows something */}
                 <div className="space-y-1.5">
                   <p className="text-xs text-muted-foreground font-medium">
                     Clean Product Image
                   </p>
                   <div className="relative aspect-square bg-muted rounded-lg overflow-hidden border">
-                    {status === "analyzing" || status === "generating" ? (
-                      <div className="h-full w-full flex flex-col items-center justify-center gap-2">
+                    {/* Always render the image — original as placeholder, clean when available */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={result?.cleanImageUrl || imageUrl}
+                      alt="Clean product"
+                      className="absolute inset-0 w-full h-full object-contain"
+                    />
+
+                    {/* Loading overlay */}
+                    {(status === "analyzing" || status === "generating") && (
+                      <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center gap-2">
                         <Loader2 className="size-8 text-muted-foreground/40 animate-spin" />
                         <span className="text-xs text-muted-foreground">
                           {status === "analyzing"
@@ -313,25 +322,26 @@ export default function DecompositionModal({
                             : "Generating..."}
                         </span>
                       </div>
-                    ) : status === "completed" ? (
-                      <>
-                        <Image
-                          src={result?.cleanImageUrl || imageUrl}
-                          alt="Clean product"
-                          fill
-                          className="object-contain"
-                          sizes="(max-width: 768px) 100vw, 50vw"
-                          unoptimized
-                        />
-                        {!result?.cleanImageUrl && (
-                          <div className="absolute bottom-2 inset-x-2 text-center">
-                            <Badge variant="secondary" className="text-[10px]">
-                              No overlay text — original used
-                            </Badge>
-                          </div>
-                        )}
-                      </>
-                    ) : null}
+                    )}
+
+                    {/* Error overlay */}
+                    {status === "error" && (
+                      <div className="absolute inset-0 bg-background/80 flex flex-col items-center justify-center gap-2">
+                        <AlertCircle className="size-8 text-destructive/60" />
+                        <span className="text-xs text-destructive">
+                          Failed to generate
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Badge when no inpainting was needed */}
+                    {status === "completed" && !result?.cleanImageUrl && (
+                      <div className="absolute bottom-2 inset-x-2 text-center">
+                        <Badge variant="secondary" className="text-[10px]">
+                          No overlay text — original used
+                        </Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
