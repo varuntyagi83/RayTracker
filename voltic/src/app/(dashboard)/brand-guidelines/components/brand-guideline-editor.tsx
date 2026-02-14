@@ -12,20 +12,28 @@ import {
   FileText,
   ImageIcon,
   X,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ColorPaletteEditor } from "./color-palette-editor";
 import {
   updateBrandGuidelineAction,
-  uploadBrandGuidelineLogoAction,
-  uploadBrandGuidelineFileAction,
   deleteBrandGuidelineFileAction,
   setDefaultBrandGuidelineAction,
+  regenerateBrandGuidelinesPreviewAction,
 } from "../actions";
+import { LLM_MODELS } from "@/types/creative-studio";
 import type { BrandGuidelineEntity, ColorSwatch, Typography } from "@/types/brand-guidelines";
 
 function formatFileSize(bytes: number): string {
@@ -49,6 +57,12 @@ export function BrandGuidelineEditor({
   const [saved, setSaved] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  // AI regenerate state
+  const [selectedModel, setSelectedModel] = useState(LLM_MODELS[0]);
+  const [generating, setGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiLoaded, setAiLoaded] = useState(false);
 
   // Form state
   const [name, setName] = useState(guideline.name);
@@ -92,14 +106,23 @@ export function BrandGuidelineEditor({
     if (!file) return;
 
     setUploadingLogo(true);
-    const formData = new FormData();
-    formData.append("guidelineId", guideline.id);
-    formData.append("file", file);
+    try {
+      const formData = new FormData();
+      formData.append("guidelineId", guideline.id);
+      formData.append("type", "logo");
+      formData.append("file", file);
 
-    const result = await uploadBrandGuidelineLogoAction(formData);
-    if (result.url) {
-      setLogoUrl(result.url);
-      onUpdated();
+      const res = await fetch("/api/brand-guidelines/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await res.json();
+      if (res.ok && result.url) {
+        setLogoUrl(result.url);
+        onUpdated();
+      }
+    } catch {
+      // Upload failed silently
     }
 
     setUploadingLogo(false);
@@ -111,14 +134,23 @@ export function BrandGuidelineEditor({
     if (!file) return;
 
     setUploading(true);
-    const formData = new FormData();
-    formData.append("guidelineId", guideline.id);
-    formData.append("file", file);
+    try {
+      const formData = new FormData();
+      formData.append("guidelineId", guideline.id);
+      formData.append("type", "files");
+      formData.append("files", file);
 
-    const result = await uploadBrandGuidelineFileAction(formData);
-    if (result.file) {
-      setFiles((prev) => [...prev, result.file!]);
-      onUpdated();
+      const res = await fetch("/api/brand-guidelines/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const result = await res.json();
+      if (res.ok && result.files?.[0]) {
+        setFiles((prev) => [...prev, result.files[0]]);
+        onUpdated();
+      }
+    } catch {
+      // Upload failed silently
     }
 
     setUploading(false);
@@ -143,6 +175,36 @@ export function BrandGuidelineEditor({
 
   const handleDownloadPDF = () => {
     window.open(`/api/brand-guidelines/${guideline.id}/pdf`, "_blank");
+  };
+
+  const hasImages = files.some((f) => f.type.startsWith("image/"));
+
+  const handleRegenerate = async () => {
+    setGenerating(true);
+    setAiError(null);
+    setAiLoaded(false);
+
+    const result = await regenerateBrandGuidelinesPreviewAction({
+      guidelineId: guideline.id,
+      provider: selectedModel.provider,
+      model: selectedModel.model,
+    });
+
+    setGenerating(false);
+
+    if (!result.success || !result.data) {
+      setAiError(result.error ?? "AI generation failed");
+      return;
+    }
+
+    // Populate form fields with AI results
+    setBrandName(result.data.brandName);
+    setBrandVoice(result.data.brandVoice);
+    setColorPalette(result.data.colorPalette);
+    setTypography(result.data.typography);
+    setTargetAudience(result.data.targetAudience);
+    setDosAndDonts(result.data.dosAndDonts);
+    setAiLoaded(true);
   };
 
   return (
@@ -430,6 +492,79 @@ export function BrandGuidelineEditor({
               {files.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-4">
                   No files uploaded yet
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* AI Regenerate */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Sparkles className="size-4" />
+                AI Regenerate
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Re-analyze uploaded images with AI to regenerate all fields.
+                Review the results, then Save to keep.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Select
+                value={`${selectedModel.provider}:${selectedModel.model}`}
+                onValueChange={(val) => {
+                  const found = LLM_MODELS.find(
+                    (m) => `${m.provider}:${m.model}` === val
+                  );
+                  if (found) setSelectedModel(found);
+                }}
+              >
+                <SelectTrigger className="text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LLM_MODELS.filter((m) => m.supportsVision).map((m) => (
+                    <SelectItem
+                      key={`${m.provider}:${m.model}`}
+                      value={`${m.provider}:${m.model}`}
+                    >
+                      {m.label} ({m.creditCost} credits)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Button
+                className="w-full"
+                onClick={handleRegenerate}
+                disabled={generating || !hasImages}
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="size-4 mr-1 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-4 mr-1" />
+                    Regenerate
+                  </>
+                )}
+              </Button>
+
+              {!hasImages && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Upload at least one image above to use AI
+                </p>
+              )}
+
+              {aiError && (
+                <p className="text-xs text-destructive">{aiError}</p>
+              )}
+
+              {aiLoaded && (
+                <p className="text-xs text-emerald-600">
+                  AI results loaded — review the fields and Save to keep.
                 </p>
               )}
             </CardContent>

@@ -24,7 +24,7 @@ import {
 import { ColorPaletteEditor } from "./color-palette-editor";
 import {
   createBrandGuidelineAction,
-  uploadBrandGuidelineFilesAction,
+  deleteBrandGuidelineFileAction,
   generateBrandGuidelinesAIAction,
   updateBrandGuidelineAction,
 } from "../actions";
@@ -86,7 +86,7 @@ export function BrandGuidelineWizard({ onCancel, onComplete }: BrandGuidelineWiz
     setStep("upload");
   };
 
-  // ── Step 2: Upload images (batch) ────────────────────────────────────────
+  // ── Step 2: Upload images (batch via API route) ──────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0 || !guidelineId) return;
@@ -94,31 +94,48 @@ export function BrandGuidelineWizard({ onCancel, onComplete }: BrandGuidelineWiz
     setUploading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append("guidelineId", guidelineId);
-    for (const file of Array.from(files)) {
-      formData.append("files", file);
-    }
-
-    const result = await uploadBrandGuidelineFilesAction(formData);
-
-    if (result.error) {
-      setError(result.error);
-    } else if (result.files) {
-      setUploadedFiles((prev) => [
-        ...prev,
-        ...result.files!.map((f) => ({ name: f.name, url: f.url, path: f.path })),
-      ]);
-      if (result.errors && result.errors.length > 0) {
-        setError(`Some files failed: ${result.errors.join(", ")}`);
+    try {
+      const formData = new FormData();
+      formData.append("guidelineId", guidelineId);
+      formData.append("type", "files");
+      for (const file of Array.from(files)) {
+        formData.append("files", file);
       }
+
+      const res = await fetch("/api/brand-guidelines/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        setError(result.error ?? "Upload failed");
+      } else if (result.files) {
+        setUploadedFiles((prev) => [
+          ...prev,
+          ...result.files.map((f: { name: string; url: string; path: string }) => ({
+            name: f.name,
+            url: f.url,
+            path: f.path,
+          })),
+        ]);
+        if (result.errors && result.errors.length > 0) {
+          setError(`Some files failed: ${result.errors.join(", ")}`);
+        }
+      }
+    } catch {
+      setError("Upload failed — check your connection and try again");
     }
 
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const removeUploadedFile = (path: string) => {
+  const removeUploadedFile = async (path: string) => {
+    if (guidelineId) {
+      await deleteBrandGuidelineFileAction({ id: guidelineId, filePath: path });
+    }
     setUploadedFiles((prev) => prev.filter((f) => f.path !== path));
   };
 

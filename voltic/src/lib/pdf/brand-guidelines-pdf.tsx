@@ -6,7 +6,6 @@ import {
   View,
   Image,
   StyleSheet,
-  Font,
 } from "@react-pdf/renderer";
 import type { BrandGuidelineEntity } from "@/types/brand-guidelines";
 
@@ -24,6 +23,7 @@ const colors = {
 const styles = StyleSheet.create({
   page: {
     padding: 48,
+    paddingBottom: 64,
     fontFamily: "Helvetica",
     fontSize: 11,
     color: colors.dark,
@@ -61,6 +61,9 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 6,
   },
+  section: {
+    marginBottom: 28,
+  },
   sectionTitle: {
     fontSize: 20,
     fontFamily: "Helvetica-Bold",
@@ -73,7 +76,7 @@ const styles = StyleSheet.create({
   sectionSubtitle: {
     fontSize: 13,
     fontFamily: "Helvetica-Bold",
-    marginBottom: 8,
+    marginBottom: 10,
     color: colors.dark,
   },
   paragraph: {
@@ -98,6 +101,8 @@ const styles = StyleSheet.create({
   colorSquare: {
     width: 100,
     height: 80,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   colorLabel: {
     padding: 8,
@@ -120,11 +125,12 @@ const styles = StyleSheet.create({
   column: {
     flex: 1,
   },
-  dosItem: {
+  listItem: {
     fontSize: 10,
-    lineHeight: 1.6,
-    marginBottom: 4,
+    lineHeight: 1.7,
+    marginBottom: 6,
     color: colors.muted,
+    paddingLeft: 4,
   },
   typographyRow: {
     flexDirection: "row",
@@ -162,12 +168,12 @@ const styles = StyleSheet.create({
   imageGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 8,
+    gap: 12,
     marginTop: 8,
   },
   imageThumb: {
-    width: 120,
-    height: 90,
+    width: 155,
+    height: 120,
     objectFit: "cover",
     borderRadius: 6,
     borderWidth: 1,
@@ -175,16 +181,46 @@ const styles = StyleSheet.create({
   },
 });
 
-// ─── Components ─────────────────────────────────────────────────────────────
+// ─── Do's & Don'ts parser ───────────────────────────────────────────────────
 
-function PageFooter({ pageNum }: { pageNum: number }) {
-  return (
-    <View style={styles.footer} fixed>
-      <Text>Brand Guidelines</Text>
-      <Text>{pageNum}</Text>
-    </View>
-  );
+function parseDosAndDonts(text: string): {
+  dos: string[];
+  donts: string[];
+  unstructured: string[];
+} {
+  // Split on bullet (•), newlines, or numbered prefixes
+  const rawItems = text
+    .split(/[•\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const dos: string[] = [];
+  const donts: string[] = [];
+  const unstructured: string[] = [];
+
+  for (const item of rawItems) {
+    // Match "Do:" / "Do " prefix
+    const doMatch = item.match(
+      /^(?:[-*]\s*)?do\s*[:.]?\s+(.+)/i
+    );
+    // Match "Don't:" / "Don't " / "Dont:" prefix
+    const dontMatch = item.match(
+      /^(?:[-*]\s*)?don[''\u2019]?t\s*[:.]?\s+(.+)/i
+    );
+
+    if (dontMatch) {
+      donts.push(dontMatch[1]);
+    } else if (doMatch) {
+      dos.push(doMatch[1]);
+    } else {
+      unstructured.push(item);
+    }
+  }
+
+  return { dos, donts, unstructured };
 }
+
+// ─── Cover Page ─────────────────────────────────────────────────────────────
 
 function CoverPage({ guideline }: { guideline: BrandGuidelineEntity }) {
   return (
@@ -207,55 +243,97 @@ function CoverPage({ guideline }: { guideline: BrandGuidelineEntity }) {
         </View>
       )}
       <Text style={[styles.coverSubtitle, { marginTop: 40, fontSize: 10 }]}>
-        Generated on {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+        Generated on{" "}
+        {new Date().toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })}
       </Text>
     </Page>
   );
 }
 
-function BrandVoicePage({ guideline }: { guideline: BrandGuidelineEntity }) {
-  if (!guideline.brandVoice && !guideline.targetAudience) return null;
+// ─── Content Pages (single wrapping page) ───────────────────────────────────
+
+function ContentPages({ guideline }: { guideline: BrandGuidelineEntity }) {
+  const hasVoice = !!guideline.brandVoice;
+  const hasAudience = !!guideline.targetAudience;
+  const hasColors = guideline.colorPalette.length > 0;
+  const hasTypography =
+    !!guideline.typography.headingFont || !!guideline.typography.bodyFont;
+  const hasDosAndDonts = !!guideline.dosAndDonts;
+  const imageFiles = guideline.files.filter((f) => f.type.startsWith("image/"));
+  const hasImages = imageFiles.length > 0;
+
+  const hasAnyContent =
+    hasVoice ||
+    hasAudience ||
+    hasColors ||
+    hasTypography ||
+    hasDosAndDonts ||
+    hasImages;
+
+  if (!hasAnyContent) return null;
+
+  const parsed = hasDosAndDonts
+    ? parseDosAndDonts(guideline.dosAndDonts!)
+    : null;
 
   return (
-    <Page size="A4" style={styles.page}>
-      {guideline.brandVoice && (
-        <View style={{ marginBottom: 32 }}>
+    <Page size="A4" style={styles.page} wrap>
+      {/* Dynamic footer on every content page */}
+      <View style={styles.footer} fixed>
+        <Text>{guideline.brandName ?? guideline.name}</Text>
+        <Text
+          render={({ pageNumber }) => `${pageNumber}`}
+        />
+      </View>
+
+      {/* ── Brand Voice ─────────────────────────────────────── */}
+      {hasVoice && (
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Brand Voice</Text>
           <Text style={styles.paragraph}>{guideline.brandVoice}</Text>
         </View>
       )}
-      {guideline.targetAudience && (
-        <View style={{ marginBottom: 32 }}>
+
+      {/* ── Target Audience ─────────────────────────────────── */}
+      {hasAudience && (
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Target Audience</Text>
           <Text style={styles.paragraph}>{guideline.targetAudience}</Text>
         </View>
       )}
-      <PageFooter pageNum={2} />
-    </Page>
-  );
-}
 
-function ColorPalettePage({ guideline }: { guideline: BrandGuidelineEntity }) {
-  if (guideline.colorPalette.length === 0) return null;
-
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.sectionTitle}>Color Palette</Text>
-      <View style={styles.colorGrid}>
-        {guideline.colorPalette.map((color, i) => (
-          <View key={i} style={styles.colorCard}>
-            <View style={[styles.colorSquare, { backgroundColor: color.hex }]} />
-            <View style={styles.colorLabel}>
-              <Text style={styles.colorName}>{color.name}</Text>
-              <Text style={styles.colorHex}>{color.hex.toUpperCase()}</Text>
-            </View>
+      {/* ── Color Palette ───────────────────────────────────── */}
+      {hasColors && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Color Palette</Text>
+          <View style={styles.colorGrid}>
+            {guideline.colorPalette.map((color, i) => (
+              <View key={i} style={styles.colorCard}>
+                <View
+                  style={[
+                    styles.colorSquare,
+                    { backgroundColor: color.hex },
+                  ]}
+                />
+                <View style={styles.colorLabel}>
+                  <Text style={styles.colorName}>{color.name}</Text>
+                  <Text style={styles.colorHex}>
+                    {color.hex.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            ))}
           </View>
-        ))}
-      </View>
+        </View>
+      )}
 
-      {/* Typography section on same page if it fits */}
-      {(guideline.typography.headingFont || guideline.typography.bodyFont) && (
-        <View style={{ marginTop: 24 }}>
+      {/* ── Typography ──────────────────────────────────────── */}
+      {hasTypography && (
+        <View style={styles.section} wrap={false}>
           <Text style={styles.sectionTitle}>Typography</Text>
           {guideline.typography.headingFont && (
             <View style={styles.typographyRow}>
@@ -276,87 +354,73 @@ function ColorPalettePage({ guideline }: { guideline: BrandGuidelineEntity }) {
           {guideline.typography.sizes &&
             Object.entries(guideline.typography.sizes).map(([key, value]) => (
               <View key={key} style={styles.typographyRow}>
-                <Text style={styles.typographyLabel}>{key.toUpperCase()}</Text>
+                <Text style={styles.typographyLabel}>
+                  {key.toUpperCase()}
+                </Text>
                 <Text style={styles.typographyValue}>{value}</Text>
               </View>
             ))}
         </View>
       )}
-      <PageFooter pageNum={3} />
-    </Page>
-  );
-}
 
-function DosAndDontsPage({ guideline }: { guideline: BrandGuidelineEntity }) {
-  if (!guideline.dosAndDonts) return null;
-
-  const lines = guideline.dosAndDonts.split("\n").filter((l) => l.trim());
-  const dos = lines.filter(
-    (l) => l.toLowerCase().startsWith("do:") || l.toLowerCase().startsWith("do ")
-  );
-  const donts = lines.filter(
-    (l) =>
-      l.toLowerCase().startsWith("don't:") ||
-      l.toLowerCase().startsWith("don't ") ||
-      l.toLowerCase().startsWith("dont:")
-  );
-  const other = lines.filter(
-    (l) =>
-      !dos.includes(l) && !donts.includes(l)
-  );
-
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.sectionTitle}>{"Do's & Don'ts"}</Text>
-      {dos.length > 0 || donts.length > 0 ? (
-        <View style={styles.twoColumn}>
-          <View style={styles.column}>
-            <Text style={styles.sectionSubtitle}>{"Do's"}</Text>
-            {dos.map((item, i) => (
-              <Text key={i} style={styles.dosItem}>
+      {/* ── Do's & Don'ts ───────────────────────────────────── */}
+      {hasDosAndDonts && parsed && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{"Do's & Don'ts"}</Text>
+          {parsed.dos.length > 0 || parsed.donts.length > 0 ? (
+            <View style={styles.twoColumn}>
+              {parsed.dos.length > 0 && (
+                <View style={styles.column}>
+                  <Text style={styles.sectionSubtitle}>{"Do's"}</Text>
+                  {parsed.dos.map((item, i) => (
+                    <Text key={i} style={styles.listItem}>
+                      {"  +  "}
+                      {item}
+                    </Text>
+                  ))}
+                </View>
+              )}
+              {parsed.donts.length > 0 && (
+                <View style={styles.column}>
+                  <Text style={styles.sectionSubtitle}>{"Don'ts"}</Text>
+                  {parsed.donts.map((item, i) => (
+                    <Text key={i} style={styles.listItem}>
+                      {"  -  "}
+                      {item}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            /* No clear Do/Don't structure — render as simple list */
+            parsed.unstructured.map((item, i) => (
+              <Text key={i} style={styles.listItem}>
+                {"  \u2022  "}
                 {item}
               </Text>
-            ))}
-          </View>
-          <View style={styles.column}>
-            <Text style={styles.sectionSubtitle}>{"Don'ts"}</Text>
-            {donts.map((item, i) => (
-              <Text key={i} style={styles.dosItem}>
-                {item}
-              </Text>
+            ))
+          )}
+          {/* Fallback: raw text if parser produced nothing */}
+          {parsed.dos.length === 0 &&
+            parsed.donts.length === 0 &&
+            parsed.unstructured.length === 0 && (
+              <Text style={styles.paragraph}>{guideline.dosAndDonts}</Text>
+            )}
+        </View>
+      )}
+
+      {/* ── Brand Assets ────────────────────────────────────── */}
+      {hasImages && (
+        <View style={styles.section} break>
+          <Text style={styles.sectionTitle}>Brand Assets</Text>
+          <View style={styles.imageGrid}>
+            {imageFiles.map((file, i) => (
+              <Image key={i} src={file.url} style={styles.imageThumb} />
             ))}
           </View>
         </View>
-      ) : (
-        other.map((item, i) => (
-          <Text key={i} style={styles.dosItem}>
-            {item}
-          </Text>
-        ))
       )}
-      {guideline.dosAndDonts && dos.length === 0 && donts.length === 0 && other.length === 0 && (
-        <Text style={styles.paragraph}>{guideline.dosAndDonts}</Text>
-      )}
-      <PageFooter pageNum={4} />
-    </Page>
-  );
-}
-
-function BrandAssetsPage({ guideline }: { guideline: BrandGuidelineEntity }) {
-  const imageFiles = guideline.files.filter((f) =>
-    f.type.startsWith("image/")
-  );
-  if (imageFiles.length === 0) return null;
-
-  return (
-    <Page size="A4" style={styles.page}>
-      <Text style={styles.sectionTitle}>Brand Assets</Text>
-      <View style={styles.imageGrid}>
-        {imageFiles.map((file, i) => (
-          <Image key={i} src={file.url} style={styles.imageThumb} />
-        ))}
-      </View>
-      <PageFooter pageNum={5} />
     </Page>
   );
 }
@@ -371,10 +435,7 @@ export function BrandGuidelinesPDF({
   return (
     <Document>
       <CoverPage guideline={guideline} />
-      <BrandVoicePage guideline={guideline} />
-      <ColorPalettePage guideline={guideline} />
-      <DosAndDontsPage guideline={guideline} />
-      <BrandAssetsPage guideline={guideline} />
+      <ContentPages guideline={guideline} />
     </Document>
   );
 }

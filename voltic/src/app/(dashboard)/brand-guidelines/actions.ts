@@ -276,6 +276,53 @@ export async function generateBrandGuidelinesAIAction(input: {
   }
 }
 
+// ─── AI Regenerate (Preview Only — does NOT save to DB) ─────────────────────
+
+export async function regenerateBrandGuidelinesPreviewAction(input: {
+  guidelineId: string;
+  provider: LLMProvider;
+  model: string;
+}): Promise<{
+  success: boolean;
+  data?: {
+    brandName: string;
+    brandVoice: string;
+    colorPalette: ColorSwatch[];
+    typography: Typography;
+    targetAudience: string;
+    dosAndDonts: string;
+  };
+  error?: string;
+}> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { success: false, error: "No workspace" };
+
+  const guideline = await getBrandGuidelineById(workspace.id, input.guidelineId);
+  if (!guideline) return { success: false, error: "Guideline not found" };
+
+  const imageUrls = guideline.files
+    .filter((f) => f.type.startsWith("image/"))
+    .map((f) => f.url);
+
+  if (imageUrls.length === 0) {
+    return { success: false, error: "Upload at least one image before regenerating" };
+  }
+
+  try {
+    const result = await generateBrandGuidelinesFromMedia({
+      provider: input.provider,
+      model: input.model,
+      imageUrls,
+      existingName: guideline.brandName ?? guideline.name,
+    });
+
+    return { success: true, data: result };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "AI generation failed";
+    return { success: false, error: message };
+  }
+}
+
 // ─── Import Legacy Brand Guidelines ─────────────────────────────────────────
 
 export async function importLegacyBrandGuidelinesAction(): Promise<{
