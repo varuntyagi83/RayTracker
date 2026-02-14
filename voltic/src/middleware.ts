@@ -34,11 +34,13 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Redirect unauthenticated users away from dashboard routes
+  // Allow API routes (webhooks, cron, auth callbacks) through without auth redirect
   if (
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/signup") &&
     !request.nextUrl.pathname.startsWith("/auth") &&
+    !request.nextUrl.pathname.startsWith("/api/") &&
     request.nextUrl.pathname !== "/"
   ) {
     const url = request.nextUrl.clone();
