@@ -57,16 +57,34 @@ export async function POST(request: Request) {
   // 4. Check for cached result (same image URL + workspace)
   const { data: cached } = await admin
     .from("ad_decompositions")
-    .select("id, processing_status")
+    .select("id, processing_status, extracted_texts, product_analysis, background_analysis, layout_analysis, clean_image_url")
     .eq("workspace_id", workspaceId)
     .eq("source_image_url", body.image_url)
     .eq("processing_status", "completed")
     .single();
 
   if (cached) {
+    // Patch stale cache: if clean image was requested but missing, use original URL
+    let cleanImageUrl = cached.clean_image_url;
+    if (body.generate_clean_image && !cleanImageUrl) {
+      cleanImageUrl = body.image_url;
+      // Backfill the DB record so future hits are correct
+      await admin
+        .from("ad_decompositions")
+        .update({ clean_image_url: cleanImageUrl, updated_at: new Date().toISOString() })
+        .eq("id", cached.id);
+    }
+
     return NextResponse.json({
       decomposition_id: cached.id,
       cached: true,
+      result: {
+        texts: cached.extracted_texts ?? [],
+        product: cached.product_analysis ?? { detected: false, description: "", position: "center", occupies_percent: 0 },
+        background: cached.background_analysis ?? { type: "solid_color", dominant_colors: [], description: "" },
+        layout: cached.layout_analysis ?? { style: "product_hero", text_overlay_on_image: false, brand_elements: [] },
+        clean_image_url: cleanImageUrl,
+      },
     });
   }
 

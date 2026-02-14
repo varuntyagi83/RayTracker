@@ -59,32 +59,19 @@ export function useDecomposition(): UseDecompositionReturn {
           throw new Error(data.error || "Decomposition failed");
         }
 
-        // If cached, fetch the full record
-        if (data.cached) {
-          const fullRes = await fetch(
-            `/api/decompose/${data.decomposition_id}/save-texts`
-          );
-          const fullData = await fullRes.json();
-
-          // Build a partial AdDecomposition from the save-texts endpoint + refetch save-asset info
-          const assetRes = await fetch(
-            `/api/decompose/${data.decomposition_id}/save-asset`,
-            { method: "HEAD" }
-          ).catch(() => null);
-
-          // For cached results, we need to reconstruct the result from the API
-          // Fetch the full decomposition data from the decompose endpoint with a GET-style approach
+        // Cached results now include full data from the API, same as non-cached
+        if (data.cached && data.result) {
           setResult({
             id: data.decomposition_id,
             workspaceId: "",
             sourceImageUrl: imageUrl,
             sourceType,
             sourceId: sourceId ?? null,
-            extractedTexts: fullData.texts ?? [],
-            productAnalysis: { detected: false, description: "", position: "center", occupies_percent: 0 },
-            backgroundAnalysis: { type: "solid_color", dominant_colors: [], description: "" },
-            layoutAnalysis: { style: "product_hero", text_overlay_on_image: false, brand_elements: [] },
-            cleanImageUrl: null,
+            extractedTexts: data.result.texts,
+            productAnalysis: data.result.product,
+            backgroundAnalysis: data.result.background,
+            layoutAnalysis: data.result.layout,
+            cleanImageUrl: data.result.clean_image_url,
             processingStatus: "completed",
             creditsUsed: 0,
             errorMessage: null,
