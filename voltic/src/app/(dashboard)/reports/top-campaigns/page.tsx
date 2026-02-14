@@ -1,10 +1,28 @@
+import ReportPageClient from "../components/report-page-client";
+import { fetchTopCampaignsReport } from "../actions";
+import type { ColumnDef, TopCampaignRow } from "@/types/reports";
+
+const columns: ColumnDef<TopCampaignRow>[] = [
+  { key: "name", label: "Campaign", format: "text", width: "220px" },
+  { key: "status", label: "Status", format: "text", sortable: false },
+  { key: "objective", label: "Objective", format: "text", sortable: false },
+  { key: "spend", label: "Spend", format: "currency" },
+  { key: "revenue", label: "Revenue", format: "currency" },
+  { key: "roas", label: "ROAS", format: "multiplier" },
+  { key: "impressions", label: "Impressions", format: "number" },
+  { key: "clicks", label: "Clicks", format: "number" },
+  { key: "ctr", label: "CTR", format: "percentage" },
+  { key: "purchases", label: "Purchases", format: "number" },
+];
+
 export default function TopCampaignsPage() {
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Top Campaigns</h1>
-      <p className="mt-2 text-muted-foreground">
-        Top performing campaigns report will be built in Phase 9.
-      </p>
-    </div>
+    <ReportPageClient<TopCampaignRow>
+      title="Top Campaigns"
+      description="Campaign performance ranked by key metrics."
+      columns={columns}
+      defaultSortKey="roas"
+      fetchAction={fetchTopCampaignsReport}
+    />
   );
 }

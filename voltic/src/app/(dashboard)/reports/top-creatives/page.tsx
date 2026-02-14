@@ -1,10 +1,26 @@
+import ReportPageClient from "../components/report-page-client";
+import { fetchTopCreativesReport } from "../actions";
+import type { ColumnDef, TopCreativeRow } from "@/types/reports";
+
+const columns: ColumnDef<TopCreativeRow>[] = [
+  { key: "name", label: "Creative", format: "text", width: "220px" },
+  { key: "format", label: "Format", format: "text", sortable: false },
+  { key: "spend", label: "Spend", format: "currency" },
+  { key: "revenue", label: "Revenue", format: "currency" },
+  { key: "roas", label: "ROAS", format: "multiplier" },
+  { key: "impressions", label: "Impressions", format: "number" },
+  { key: "clicks", label: "Clicks", format: "number" },
+  { key: "ctr", label: "CTR", format: "percentage" },
+];
+
 export default function TopCreativesPage() {
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Top Creatives</h1>
-      <p className="mt-2 text-muted-foreground">
-        Top performing creatives report will be built in Phase 9.
-      </p>
-    </div>
+    <ReportPageClient<TopCreativeRow>
+      title="Top Creatives"
+      description="Creative assets ranked by performance metrics."
+      columns={columns}
+      defaultSortKey="roas"
+      fetchAction={fetchTopCreativesReport}
+    />
   );
 }

@@ -1,10 +1,26 @@
+import ReportPageClient from "../components/report-page-client";
+import { fetchTopCopyReport } from "../actions";
+import type { ColumnDef, TopCopyRow } from "@/types/reports";
+
+const columns: ColumnDef<TopCopyRow>[] = [
+  { key: "body", label: "Ad Copy", format: "truncate", width: "300px" },
+  { key: "adCount", label: "Ads", format: "number" },
+  { key: "spend", label: "Spend", format: "currency" },
+  { key: "revenue", label: "Revenue", format: "currency" },
+  { key: "roas", label: "ROAS", format: "multiplier" },
+  { key: "impressions", label: "Impressions", format: "number" },
+  { key: "clicks", label: "Clicks", format: "number" },
+  { key: "ctr", label: "CTR", format: "percentage" },
+];
+
 export default function TopCopyPage() {
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold">Top Copy</h1>
-      <p className="mt-2 text-muted-foreground">
-        Top performing ad copy report will be built in Phase 9.
-      </p>
-    </div>
+    <ReportPageClient<TopCopyRow>
+      title="Top Copy"
+      description="Ad body copy grouped and ranked by aggregated performance."
+      columns={columns}
+      defaultSortKey="roas"
+      fetchAction={fetchTopCopyReport}
+    />
   );
 }
