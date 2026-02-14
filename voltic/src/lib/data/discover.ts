@@ -18,10 +18,10 @@ export async function searchAdsLibrary(
     return { ads: [], totalCount: 0, page, perPage, totalPages: 0 };
   }
 
-  // Fetch from scraper (mock or real)
+  // Fetch from scraper (mock or real) — limited to 10 to save Apify credits
   const result = await scrapeAdsLibrary({
     brandName: query,
-    topN: 50,
+    topN: 10,
     impressionPeriod: "last_30d",
     startedWithin: "last_90d",
   });

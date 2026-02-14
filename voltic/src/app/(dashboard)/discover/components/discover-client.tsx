@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +85,7 @@ export default function DiscoverClient() {
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [elapsedSecs, setElapsedSecs] = useState(0);
 
   // Board state
   const [boards, setBoards] = useState<BoardOption[]>([]);
@@ -99,6 +100,24 @@ export default function DiscoverClient() {
       }
     });
   }, []);
+
+  // Elapsed timer for loading state
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (loading) {
+      setElapsedSecs(0);
+      timerRef.current = setInterval(() => {
+        setElapsedSecs((s) => s + 1);
+      }, 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [loading]);
 
   // Search function
   const handleSearch = useCallback(async () => {
@@ -186,7 +205,7 @@ export default function DiscoverClient() {
           />
         </div>
         <Button onClick={handleSearch} disabled={!query.trim() || loading}>
-          {loading ? "Searching..." : "Search"}
+          {loading ? `Scraping... ${elapsedSecs}s` : "Search"}
         </Button>
       </div>
 
@@ -248,20 +267,39 @@ export default function DiscoverClient() {
         )}
       </div>
 
-      {/* Loading Skeleton */}
+      {/* Loading State */}
       {loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: perPage }, (_, i) => (
-            <Card key={i}>
-              <CardContent className="p-4 space-y-3">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-[200px] w-full rounded" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-8 w-full" />
-              </CardContent>
-            </Card>
-          ))}
+        <div className="space-y-4">
+          <div className="text-center py-8">
+            <div className="inline-flex items-center gap-3 bg-muted/50 rounded-lg px-6 py-3">
+              <div className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <div>
+                <p className="text-sm font-medium">
+                  Scraping Meta Ad Library for &ldquo;{query}&rdquo;...
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {elapsedSecs < 10
+                    ? "Starting scraper..."
+                    : elapsedSecs < 60
+                      ? `Fetching ads... (${elapsedSecs}s)`
+                      : `Almost there... (${Math.floor(elapsedSecs / 60)}m ${elapsedSecs % 60}s)`}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }, (_, i) => (
+              <Card key={i}>
+                <CardContent className="p-4 space-y-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-[200px] w-full rounded" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-8 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       )}
 
