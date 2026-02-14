@@ -122,6 +122,12 @@ export interface EventPropertiesMap {
   };
   automation_cron_error: { error: string };
 
+  // Ad Decomposition
+  ad_decomposition_started: { source_type: string; source_id?: string; generate_clean_image: boolean };
+  ad_decomposition_completed: { decomposition_id: string; texts_found: number; product_detected: boolean; duration_ms: number; credits_used: number };
+  ad_decomposition_failed: { decomposition_id?: string; error: string };
+  ad_decomposition_batch_started: { count: number; total_credits: number };
+
   // AI / Credits (server-side)
   credits_deducted: {
     workspace_id: string;

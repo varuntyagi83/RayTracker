@@ -6,6 +6,7 @@ export type TransactionType =
   | "ad_insight"
   | "comparison"
   | "competitor_report"
+  | "decomposition"
   | "purchase"
   | "refund"
   | "welcome_bonus";
@@ -54,6 +55,7 @@ const DESCRIPTION_MAP: Record<TransactionType, (amount: number) => string> = {
   ad_insight: (n) => `AI Ad Insight generation (-${n} credits)`,
   comparison: (n) => `AI Ad Comparison (-${n} credits)`,
   competitor_report: (n) => `Competitor Report generation (-${n} credits)`,
+  decomposition: (n) => `Ad Decomposition analysis (-${n} credits)`,
   purchase: (n) => `Credit purchase (+${n} credits)`,
   refund: (n) => `Refund (+${n} credits)`,
   welcome_bonus: (n) => `Welcome bonus (+${n} credits)`,
@@ -74,6 +76,7 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   ad_insight: "Ad Insight",
   comparison: "Comparison",
   competitor_report: "Competitor Report",
+  decomposition: "Decomposition",
   purchase: "Purchase",
   refund: "Refund",
   welcome_bonus: "Welcome Bonus",

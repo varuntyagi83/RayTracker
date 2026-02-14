@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 20 ✅ — ALL PHASES COMPLETE
+> Current phase: Phase 21 ✅
 
 ## Phase Status
 
@@ -30,6 +30,7 @@
 | 18 | Production Hardening | ✅ Complete | 2026-02-14 | Security headers (HSTS, X-Frame-Options, CSP-adjacent, nosniff, Referrer-Policy, Permissions-Policy) in next.config.ts. In-memory rate limiting on 4 critical API routes (checkout, studio/chat, studio/generate-image, extension/auth). Zod validation added to 6 action/route files (checkout, signup, reports, campaign-analysis, creative-studio, credits). Error boundaries (dashboard-error.tsx shared + 12 error.tsx files). Loading skeletons (11 loading.tsx files). next/image migration (16 files, 29 img→Image). Toast notifications via sonner in 7 CRUD components. Accessibility: aria-labels on 10 icon-only buttons. .env.example created. CRON_SECRET set. npx tsc --noEmit passes clean. |
 | 19 | Testing & QA | ✅ Complete | 2026-02-14 | Vitest test infrastructure with 107 unit tests across 8 test files. Coverage: 86.68% statements, 92.85% branches, 86.66% functions on tested modules. Tests cover: credits helpers (isUnlimitedCredits, generateTransactionDescription, CREDIT_PACKAGES), rate limiter (RateLimiter class with sliding window, fake timers), Slack block builders (6 helpers), 4 Slack templates (performance-digest, competitor-report, comment-digest, landing-page-report), AI prompt builders (buildBrandGuidelinesSection, buildTextPrompt, buildImagePrompt × 6 strategies). Exported RateLimiter class and 3 AI prompt builders for testing. |
 | 20 | Deployment & CI/CD | ✅ Complete | 2026-02-14 | vercel.json with automations cron (*/5 * * * *), GitHub Actions CI pipeline (lint + typecheck + test on PR/push), Vercel Analytics + Speed Insights in root layout |
+| 21 | Vision-Based Ad Decomposition Engine | ✅ Complete | 2026-02-14 | GPT-4o Vision decomposition service (lib/ai/decompose.ts) with structured JSON extraction of text layers (headline/subheadline/body/cta/legal/brand with position, font size, confidence), product analysis (detection, description, position, area %), background analysis (type, dominant colors, description), layout classification (style, text overlay, brand elements). Clean image generation via DALL-E 3 for text-removed product shots. New ad_decompositions table (Drizzle schema + SQL migration with RLS). 3 API routes: POST /api/decompose (single image analysis with caching, credit check), GET /api/decompose/[id] (fetch result by ID, workspace-scoped), POST /api/decompose/batch (up to 20 images, skips cached, sequential processing). Credit integration: 5 credits for analysis, +5 for clean image generation, "decomposition" transaction type added. 4 new PostHog events (ad_decomposition_started/completed/failed, ad_decomposition_batch_started). Types: types/decomposition.ts with full DecompositionResult schema. Zod validation on all API inputs. npx tsc --noEmit passes clean. |
 
 ## Issues / Blockers
 
@@ -37,23 +38,21 @@
 
 ## Context for Next Session
 
-ALL 20 PHASES COMPLETE. The project is ready for production deployment.
+Phase 21 complete. Phase 22 (Decomposer UI & Creative Builder Integration) is next.
 
-**Phase 20 — New Files (2):**
-- `voltic/vercel.json` — Vercel cron configuration (automations every 5 min)
-- `voltic/.github/workflows/ci.yml` — GitHub Actions CI pipeline (lint, typecheck, test)
+**Phase 21 — New Files (6):**
+- `voltic/src/types/decomposition.ts` — Type definitions (DecompositionResult, ExtractedText, ProductAnalysis, BackgroundAnalysis, LayoutAnalysis, credit constants)
+- `voltic/src/lib/ai/decompose.ts` — GPT-4o Vision decomposition + DALL-E clean image generation
+- `voltic/src/app/api/decompose/route.ts` — POST single image decomposition
+- `voltic/src/app/api/decompose/[id]/route.ts` — GET decomposition by ID
+- `voltic/src/app/api/decompose/batch/route.ts` — POST batch decomposition (up to 20)
+- `voltic/supabase/migrations/005_ad_decompositions.sql` — SQL migration with RLS
 
-**Phase 20 — Modified (3 files):**
-- `voltic/src/app/layout.tsx` — Added Vercel Analytics + Speed Insights components
-- `voltic/package.json` — Added @vercel/analytics and @vercel/speed-insights dependencies
-- `PROGRESS.md` — Phase 20 ✅
+**Phase 21 — Modified Files (3):**
+- `voltic/src/db/schema.ts` — Added adDecompositions table + relations
+- `voltic/src/types/credits.ts` — Added "decomposition" transaction type + label + description
+- `voltic/src/lib/analytics/events.ts` — Added 4 decomposition PostHog events
 
-**Deployment Checklist:**
-1. Push to GitHub repository
-2. Connect repository to Vercel (vercel.com → Import Project)
-3. Set all environment variables in Vercel dashboard (see .env.example)
-4. Ensure CRON_SECRET is set in Vercel environment variables
-5. Enable Analytics and Speed Insights in Vercel project dashboard
-6. Verify cron jobs are registered (Vercel dashboard → Crons tab)
-7. Verify CI pipeline runs on first push (GitHub → Actions tab)
-8. Ensure Vercel project is on Pro plan for 5-minute cron intervals
+**Before testing Phase 21:**
+1. Run `005_ad_decompositions.sql` migration in Supabase SQL editor
+2. Ensure OPENAI_API_KEY is set (for GPT-4o Vision calls)

@@ -649,6 +649,39 @@ export const studioMessages = pgTable(
   ]
 );
 
+// Phase 21 table
+
+export const adDecompositions = pgTable(
+  "ad_decompositions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    sourceImageUrl: text("source_image_url").notNull(),
+    sourceType: text("source_type").notNull().default("saved_ad"),
+    sourceId: uuid("source_id"),
+    extractedTexts: jsonb("extracted_texts").notNull().default([]),
+    productAnalysis: jsonb("product_analysis").notNull().default({}),
+    backgroundAnalysis: jsonb("background_analysis").notNull().default({}),
+    layoutAnalysis: jsonb("layout_analysis").notNull().default({}),
+    cleanImageUrl: text("clean_image_url"),
+    processingStatus: text("processing_status").notNull().default("pending"),
+    creditsUsed: integer("credits_used").notNull().default(5),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_ad_decompositions_workspace_id").on(table.workspaceId),
+    index("idx_ad_decompositions_source_image_url").on(table.sourceImageUrl),
+  ]
+);
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
@@ -672,6 +705,7 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   brandGuidelines: many(brandGuidelinesTable),
   studioConversations: many(studioConversations),
   studioMessages: many(studioMessages),
+  adDecompositions: many(adDecompositions),
 }));
 
 export const workspaceMembersRelations = relations(
@@ -912,6 +946,16 @@ export const studioMessagesRelations = relations(
     }),
     workspace: one(workspaces, {
       fields: [studioMessages.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
+
+export const adDecompositionsRelations = relations(
+  adDecompositions,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [adDecompositions.workspaceId],
       references: [workspaces.id],
     }),
   })

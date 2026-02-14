@@ -124,8 +124,8 @@ describe("CREDIT_PACKAGES", () => {
 });
 
 describe("TRANSACTION_TYPE_LABELS", () => {
-  it("has labels for all 8 transaction types", () => {
-    expect(Object.keys(TRANSACTION_TYPE_LABELS)).toHaveLength(8);
+  it("has labels for all 9 transaction types", () => {
+    expect(Object.keys(TRANSACTION_TYPE_LABELS)).toHaveLength(9);
   });
 
   it("has correct labels", () => {
