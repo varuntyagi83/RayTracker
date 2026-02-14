@@ -21,6 +21,9 @@ export const metadata: Metadata = {
   title: "Voltic",
   description:
     "Unified Meta advertising analytics, competitor intelligence, and AI-powered creative generation.",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
