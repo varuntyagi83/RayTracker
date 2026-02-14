@@ -25,6 +25,18 @@ export async function createWorkspace(workspaceName: string, userId: string) {
 
   const user = authUser.user;
 
+  // Check if user already has a workspace (prevent duplicates on retry)
+  const { data: existingMember } = await admin
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (existingMember) {
+    // User already has a workspace — just succeed silently
+    return { error: null };
+  }
+
   const slug = parsed.data.workspaceName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

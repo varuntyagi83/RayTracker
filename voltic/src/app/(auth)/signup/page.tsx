@@ -26,8 +26,9 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [existingUserId, setExistingUserId] = useState<string | null>(null);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
-  // Check if user is already authenticated (e.g. Google OAuth without workspace)
+  // Check if user is already authenticated (e.g. Google OAuth or confirmed email without workspace)
   useEffect(() => {
     async function checkAuth() {
       const supabase = createClient();
@@ -46,57 +47,110 @@ export default function SignupPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    track("signup_started");
 
-    let userId = existingUserId;
-
-    // If user isn't already authenticated, create account first
-    if (!userId) {
-      const supabase = createClient();
-      const { data: authData, error: authError } =
-        await supabase.auth.signUp({ email, password });
-
-      if (authError) {
-        setError(authError.message);
+    // If user is already authenticated, just create the workspace
+    if (existingUserId) {
+      track("signup_started");
+      try {
+        const result = await createWorkspace(workspaceName, existingUserId);
+        if (result.error) {
+          setError(result.error);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setError("Failed to create workspace. Please try again.");
         setLoading(false);
         return;
       }
-
-      if (!authData.user) {
-        setError("Signup failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      // Detect fake/obfuscated response for already-registered emails
-      // Supabase returns an empty identities array in this case
-      if (authData.user.identities?.length === 0) {
-        setError("An account with this email already exists. Please log in instead.");
-        setLoading(false);
-        return;
-      }
-
-      userId = authData.user.id;
+      track("signup_completed", { method: "google" });
+      router.push("/home");
+      router.refresh();
+      return;
     }
 
-    // Create workspace + membership via server action
-    try {
-      const result = await createWorkspace(workspaceName, userId);
+    // New user: create auth account first
+    const supabase = createClient();
+    const { data: authData, error: authError } =
+      await supabase.auth.signUp({ email, password });
 
-      if (result.error) {
-        setError(result.error);
-        setLoading(false);
-        return;
-      }
-    } catch {
-      setError("Failed to create workspace. Please try again.");
+    if (authError) {
+      setError(authError.message);
       setLoading(false);
       return;
     }
 
-    track("signup_completed", { method: existingUserId ? "google" : "email" });
-    router.push("/home");
-    router.refresh();
+    if (!authData.user) {
+      setError("Signup failed. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Detect fake/obfuscated response for already-registered emails
+    if (authData.user.identities?.length === 0) {
+      setError(
+        "An account with this email already exists. Please log in instead."
+      );
+      setLoading(false);
+      return;
+    }
+
+    // If Supabase returned a session, the user is confirmed (e.g. email confirmation disabled)
+    if (authData.session) {
+      // User is immediately confirmed — create workspace now
+      track("signup_started");
+      try {
+        const result = await createWorkspace(workspaceName, authData.user.id);
+        if (result.error) {
+          setError(result.error);
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setError("Failed to create workspace. Please try again.");
+        setLoading(false);
+        return;
+      }
+      track("signup_completed", { method: "email" });
+      router.push("/home");
+      router.refresh();
+      return;
+    }
+
+    // No session = email confirmation required. Show confirmation message.
+    setConfirmationSent(true);
+    setLoading(false);
+  }
+
+  // Show confirmation sent screen
+  if (confirmationSent) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-xl font-bold text-white">
+            V
+          </div>
+          <CardTitle className="text-2xl">Check your email</CardTitle>
+          <CardDescription>
+            We sent a confirmation link to <strong>{email}</strong>. Click the
+            link to verify your account, then you&apos;ll be able to create your
+            workspace.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="text-center">
+          <p className="text-sm text-muted-foreground">
+            Didn&apos;t receive the email? Check your spam folder or{" "}
+            <button
+              type="button"
+              className="text-emerald-600 hover:underline font-medium"
+              onClick={() => setConfirmationSent(false)}
+            >
+              try again
+            </button>
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
@@ -116,19 +170,32 @@ export default function SignupPage() {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSignup} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="workspace">Workspace name</Label>
-            <Input
-              id="workspace"
-              type="text"
-              placeholder="My Company"
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              required
-            />
-          </div>
+          {existingUserId && (
+            <div className="space-y-2">
+              <Label htmlFor="workspace">Workspace name</Label>
+              <Input
+                id="workspace"
+                type="text"
+                placeholder="My Company"
+                value={workspaceName}
+                onChange={(e) => setWorkspaceName(e.target.value)}
+                required
+              />
+            </div>
+          )}
           {!existingUserId && (
             <>
+              <div className="space-y-2">
+                <Label htmlFor="workspace">Workspace name</Label>
+                <Input
+                  id="workspace"
+                  type="text"
+                  placeholder="My Company"
+                  value={workspaceName}
+                  onChange={(e) => setWorkspaceName(e.target.value)}
+                  required
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -154,9 +221,7 @@ export default function SignupPage() {
               </div>
             </>
           )}
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <Button
             type="submit"
             className="w-full bg-emerald-600 hover:bg-emerald-700"

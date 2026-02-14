@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -9,8 +10,33 @@ export async function GET(request: Request) {
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      // Refresh session to ensure cookies are fully propagated
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        // Check if this user already has a workspace
+        const admin = createAdminClient();
+        const { data: member } = await admin
+          .from("workspace_members")
+          .select("workspace_id")
+          .eq("user_id", user.id)
+          .single();
+
+        if (!member) {
+          // New user confirmed email but has no workspace yet — send to signup
+          const response = NextResponse.redirect(`${origin}/signup`);
+          response.headers.set("Cache-Control", "no-store");
+          return response;
+        }
+      }
+
+      const response = NextResponse.redirect(`${origin}${next}`);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
     }
   }
 
