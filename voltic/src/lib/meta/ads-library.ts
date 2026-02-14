@@ -1,8 +1,8 @@
 /**
  * Meta Ads Library Scraper Service
  *
- * Uses Apify's facebook-ads-scraper actor to fetch competitor ads.
- * Uses async run + polling to avoid the 300s sync timeout.
+ * Uses curious_coder/facebook-ads-library-scraper on Apify.
+ * Supports native `count` param — fetches exactly N ads, finishes in ~15-20s.
  * Falls back to mock data when APIFY_API_TOKEN is not configured.
  *
  * Env vars:
@@ -46,10 +46,10 @@ export interface AdsLibraryScrapeResult {
 // ─── Apify Config ───────────────────────────────────────────────────────────
 
 const APIFY_BASE_URL = "https://api.apify.com/v2";
-const ACTOR_ID = "apify~facebook-ads-scraper";
+const ACTOR_ID = "curious_coder~facebook-ads-library-scraper";
 const MAX_ITEMS = 10;
 const POLL_INTERVAL_MS = 5_000;
-const MAX_POLL_TIME_MS = 5 * 60 * 1_000; // 5 minutes max wait
+const MAX_POLL_TIME_MS = 2 * 60 * 1_000; // 2 minutes max (actor usually finishes in ~17s)
 
 // ─── In-memory cache (brand → result, 10 min TTL) ──────────────────────────
 
@@ -69,11 +69,6 @@ function setCache(key: string, result: AdsLibraryScrapeResult) {
 
 // ─── Main Function ──────────────────────────────────────────────────────────
 
-/**
- * Scrape competitor ads from Meta Ads Library via Apify.
- * Uses async run + polling to handle long scrape times.
- * Results are cached for 10 minutes per brand name.
- */
 export async function scrapeAdsLibrary(
   params: AdsLibraryScrapeParams
 ): Promise<AdsLibraryScrapeResult> {
@@ -85,7 +80,7 @@ export async function scrapeAdsLibrary(
   }
 
   // Check cache first
-  const cacheKey = `${params.brandName.toLowerCase().trim()}`;
+  const cacheKey = params.brandName.toLowerCase().trim();
   const cached = getCached(cacheKey);
   if (cached) {
     console.log("[ads-library] Cache hit for:", cacheKey);
@@ -93,17 +88,17 @@ export async function scrapeAdsLibrary(
   }
 
   try {
-    // Build the Ad Library search URL for the actor
     const searchUrl = buildAdsLibraryUrl(params.brandName);
 
-    // 1. Start the actor run (async)
+    // 1. Start actor run (async)
     console.log("[ads-library] Starting Apify run for:", params.brandName);
     const startUrl = `${APIFY_BASE_URL}/acts/${ACTOR_ID}/runs?token=${token}`;
     const startRes = await fetch(startUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        startUrls: [{ url: searchUrl }],
+        urls: [{ url: searchUrl }],
+        count: Math.min(params.topN, MAX_ITEMS),
       }),
     });
 
@@ -121,10 +116,10 @@ export async function scrapeAdsLibrary(
       return getMockResult(params);
     }
 
-    console.log("[ads-library] Run started:", runId, "dataset:", datasetId);
+    console.log("[ads-library] Run started:", runId);
 
-    // 2. Poll dataset for items — abort run once we have enough
-    const rawItems = await pollDatasetAndAbort(token, runId, datasetId);
+    // 2. Poll for completion (usually ~17 seconds)
+    const rawItems = await pollForItems(token, runId, datasetId);
     if (!rawItems || rawItems.length === 0) {
       console.error("[ads-library] No items scraped");
       return getMockResult(params);
@@ -132,7 +127,7 @@ export async function scrapeAdsLibrary(
 
     console.log("[ads-library] Got", rawItems.length, "items from Apify");
 
-    const ads = mapApifyItems(rawItems, params);
+    const ads = mapCuriousCoderItems(rawItems, params);
     const result: AdsLibraryScrapeResult = {
       ads,
       totalCount: ads.length,
@@ -140,7 +135,6 @@ export async function scrapeAdsLibrary(
       brandName: params.brandName,
     };
 
-    // Cache the result
     setCache(cacheKey, result);
     return result;
   } catch (error) {
@@ -149,59 +143,46 @@ export async function scrapeAdsLibrary(
   }
 }
 
-// ─── Polling + Auto-Abort ────────────────────────────────────────────────────
+// ─── Polling ────────────────────────────────────────────────────────────────
 
-/**
- * Poll the dataset for items. Once we have >= MAX_ITEMS, abort the run
- * to stop burning Apify credits, then return the items.
- */
-async function pollDatasetAndAbort(
+async function pollForItems(
   token: string,
   runId: string,
   datasetId: string
-): Promise<ApifyAdItem[] | null> {
+): Promise<CuriousCoderAdItem[] | null> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < MAX_POLL_TIME_MS) {
     await sleep(POLL_INTERVAL_MS);
 
-    // Check how many items the dataset has
-    const countUrl = `${APIFY_BASE_URL}/datasets/${datasetId}?token=${token}`;
-    const countRes = await fetch(countUrl);
-    if (!countRes.ok) continue;
-
-    const countData = await countRes.json();
-    const itemCount = countData.data?.itemCount ?? 0;
-
-    // Also check run status
     const statusUrl = `${APIFY_BASE_URL}/actor-runs/${runId}?token=${token}`;
     const statusRes = await fetch(statusUrl);
-    const statusData = statusRes.ok ? await statusRes.json() : null;
-    const runStatus = statusData?.data?.status;
+    if (!statusRes.ok) continue;
 
-    console.log(`[ads-library] Poll: ${itemCount} items, run status: ${runStatus}, elapsed: ${Math.round((Date.now() - startTime) / 1000)}s`);
+    const statusData = await statusRes.json();
+    const status = statusData.data?.status;
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
 
-    // If we have enough items, abort the run and return
-    if (itemCount >= MAX_ITEMS) {
-      console.log(`[ads-library] Got ${itemCount} items (>= ${MAX_ITEMS}), aborting run to save credits`);
-      await abortRun(token, runId);
+    console.log(`[ads-library] Poll: status=${status}, elapsed=${elapsed}s`);
+
+    if (status === "SUCCEEDED") {
+      console.log(`[ads-library] Run succeeded in ${elapsed}s`);
       return await fetchDatasetItems(token, datasetId);
     }
 
-    // If run finished (succeeded or failed), grab whatever we got
-    if (runStatus === "SUCCEEDED" || runStatus === "FAILED" || runStatus === "ABORTED" || runStatus === "TIMED-OUT") {
-      console.log(`[ads-library] Run ended with status: ${runStatus}, got ${itemCount} items`);
-      if (itemCount > 0) {
-        return await fetchDatasetItems(token, datasetId);
-      }
-      return null;
+    if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
+      console.error("[ads-library] Run ended with status:", status);
+      // Still try to grab partial results
+      const items = await fetchDatasetItems(token, datasetId);
+      return items.length > 0 ? items : null;
     }
   }
 
-  // Timed out — abort and take whatever we have
+  // Timed out — abort and grab partial
   console.log("[ads-library] Polling timed out, aborting run");
   await abortRun(token, runId);
-  return await fetchDatasetItems(token, datasetId);
+  const items = await fetchDatasetItems(token, datasetId);
+  return items.length > 0 ? items : null;
 }
 
 async function abortRun(token: string, runId: string): Promise<void> {
@@ -209,20 +190,19 @@ async function abortRun(token: string, runId: string): Promise<void> {
     await fetch(`${APIFY_BASE_URL}/actor-runs/${runId}/abort?token=${token}`, {
       method: "POST",
     });
-    console.log("[ads-library] Run aborted:", runId);
   } catch {
-    // Ignore abort errors
+    // Ignore
   }
 }
 
 async function fetchDatasetItems(
   token: string,
   datasetId: string
-): Promise<ApifyAdItem[]> {
-  const itemsUrl = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&limit=${MAX_ITEMS}`;
-  const itemsRes = await fetch(itemsUrl);
-  if (!itemsRes.ok) return [];
-  return await itemsRes.json();
+): Promise<CuriousCoderAdItem[]> {
+  const url = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&limit=${MAX_ITEMS}`;
+  const res = await fetch(url);
+  if (!res.ok) return [];
+  return await res.json();
 }
 
 function sleep(ms: number): Promise<void> {
@@ -236,121 +216,127 @@ function buildAdsLibraryUrl(brandName: string): string {
   return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&q=${encoded}&search_type=keyword_unordered`;
 }
 
-// ─── Apify Response Mapping ─────────────────────────────────────────────────
+// ─── curious_coder Response Shape ───────────────────────────────────────────
 
-/** Loose type for Apify actor output — field names vary by actor version */
-interface ApifyAdItem {
-  id?: string;
-  adArchiveID?: string;
-  pageId?: string;
+interface CuriousCoderAdItem {
+  ad_archive_id?: string;
   page_id?: string;
-  pageName?: string;
   page_name?: string;
-  title?: string;
-  body?: string;
-  ad_creative_bodies?: string[];
-  ad_creative_link_titles?: string[];
-  ad_creative_link_captions?: string[];
-  ad_creative_link_descriptions?: string[];
-  link_url?: string;
-  link_urls?: string[];
-  image_url?: string;
-  images?: { original_image_url?: string; resized_image_url?: string }[];
-  video_url?: string;
-  videos?: { video_preview_image_url?: string }[];
-  ad_snapshot_url?: string;
-  snapshot?: { images?: { url?: string }[]; videos?: { url?: string }[] };
-  start_date?: string;
-  startDate?: string;
-  end_date?: string;
-  endDate?: string;
-  ad_delivery_start_time?: string;
-  ad_delivery_stop_time?: string;
   is_active?: boolean;
-  isActive?: boolean;
-  impressions?: { lower_bound?: number; upper_bound?: number };
-  eu_total_reach?: number;
-  publisher_platforms?: ("facebook" | "instagram" | "audience_network" | "messenger")[];
-  publisherPlatform?: string[];
+  start_date?: string;
+  end_date?: string;
+  start_date_formatted?: string;
+  end_date_formatted?: string;
+  publisher_platform?: string[];
+  impressions_with_index?: {
+    impressions_text?: string;
+    impressions_index?: number;
+  };
+  snapshot?: {
+    page_name?: string;
+    page_profile_picture_url?: string;
+    body?: { text?: string };
+    caption?: string;
+    cta_text?: string;
+    cards?: {
+      body?: string;
+      title?: string;
+      link_url?: string;
+      link_description?: string;
+      resized_image_url?: string;
+      original_image_url?: string;
+      video_hd_url?: string;
+      video_sd_url?: string;
+      video_preview_image_url?: string;
+    }[];
+    images?: { original_image_url?: string; resized_image_url?: string }[];
+    videos?: {
+      video_hd_url?: string;
+      video_sd_url?: string;
+      video_preview_image_url?: string;
+    }[];
+    link_url?: string;
+    link_description?: string;
+    link_title?: string;
+  };
   ad_library_url?: string;
   url?: string;
-  media_type?: string;
-  collationCount?: number;
+  targeted_or_reached_countries?: string[];
 }
 
-function mapApifyItems(
-  items: ApifyAdItem[],
+function mapCuriousCoderItems(
+  items: CuriousCoderAdItem[],
   params: AdsLibraryScrapeParams
 ): AdsLibraryAd[] {
   return items.slice(0, MAX_ITEMS).map((item, i) => {
-    const id = item.id || item.adArchiveID || `apify_${i}`;
+    const snap = item.snapshot;
+    const card = snap?.cards?.[0];
+    const id = item.ad_archive_id || `apify_${i}`;
+
+    // Thumbnail: card image > snapshot images > video preview
     const thumbnail =
-      item.image_url ||
-      item.images?.[0]?.original_image_url ||
-      item.images?.[0]?.resized_image_url ||
-      item.videos?.[0]?.video_preview_image_url ||
-      item.snapshot?.images?.[0]?.url ||
-      item.ad_snapshot_url ||
+      card?.resized_image_url ||
+      card?.original_image_url ||
+      card?.video_preview_image_url ||
+      snap?.images?.[0]?.resized_image_url ||
+      snap?.images?.[0]?.original_image_url ||
+      snap?.videos?.[0]?.video_preview_image_url ||
       null;
 
+    // Headline: card title > link_title > first 80 chars of body
     const headline =
-      item.title ||
-      item.ad_creative_link_titles?.[0] ||
-      item.ad_creative_bodies?.[0]?.slice(0, 80) ||
+      card?.title ||
+      snap?.link_title ||
+      card?.body?.slice(0, 80) ||
+      snap?.body?.text?.slice(0, 80) ||
       "Untitled Ad";
 
+    // Body text
     const bodyText =
-      item.body ||
-      item.ad_creative_bodies?.join(" ") ||
-      item.ad_creative_link_descriptions?.[0] ||
+      card?.body ||
+      snap?.body?.text ||
+      card?.link_description ||
+      snap?.link_description ||
       "";
 
-    const linkUrl =
-      item.link_url ||
-      item.link_urls?.[0] ||
-      item.ad_creative_link_captions?.[0] ||
-      null;
+    // Link URL
+    const linkUrl = card?.link_url || snap?.link_url || null;
 
-    const startDate =
-      item.start_date || item.startDate || item.ad_delivery_start_time || "";
-    const endDate =
-      item.end_date || item.endDate || item.ad_delivery_stop_time || null;
+    // Media type detection
+    let mediaType: AdsLibraryAd["mediaType"] = "image";
+    if (card?.video_hd_url || card?.video_sd_url || snap?.videos?.length) {
+      mediaType = "video";
+    } else if (snap?.cards && snap.cards.length > 1) {
+      mediaType = "carousel";
+    }
+
+    // Platforms
+    const platforms = (item.publisher_platform || ["facebook"]) as AdsLibraryAd["platforms"];
+
+    // Start/end dates
+    const startDate = item.start_date || "";
+    const endDate = item.end_date || null;
 
     return {
       id,
-      pageId: item.pageId || item.page_id || "",
-      pageName: item.pageName || item.page_name || params.brandName,
+      pageId: item.page_id || "",
+      pageName: item.page_name || snap?.page_name || params.brandName,
       headline,
       bodyText,
       linkUrl,
-      mediaType: inferMediaType(item),
+      mediaType,
       mediaThumbnailUrl: thumbnail,
       startDate,
       endDate,
-      isActive: item.is_active ?? item.isActive ?? true,
-      impressionRange: item.impressions
-        ? {
-            lower: item.impressions.lower_bound || 0,
-            upper: item.impressions.upper_bound || 0,
-          }
-        : null,
-      platforms: item.publisher_platforms ||
-        (item.publisherPlatform as AdsLibraryAd["platforms"]) ||
-        ["facebook"],
+      isActive: item.is_active ?? true,
+      impressionRange: null, // curious_coder uses impressions_text (e.g. "> 1M"), not numeric range
+      platforms,
       adsLibraryUrl:
         item.ad_library_url ||
         item.url ||
         `https://www.facebook.com/ads/library/?id=${id}`,
     };
   });
-}
-
-function inferMediaType(item: ApifyAdItem): AdsLibraryAd["mediaType"] {
-  if (item.media_type === "video" || item.video_url || item.videos?.length)
-    return "video";
-  if (item.media_type === "carousel" || (item.images && item.images.length > 1))
-    return "carousel";
-  return "image";
 }
 
 // ─── Mock Fallback ──────────────────────────────────────────────────────────
