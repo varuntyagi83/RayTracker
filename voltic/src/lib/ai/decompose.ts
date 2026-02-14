@@ -204,16 +204,16 @@ export async function generateCleanProductImage(
 
   const textList = marketingTexts.map((t) => `"${t}"`).join(", ");
 
-  // Try gpt-image-1 with mask first
+  // Try Gemini 2.5 Flash Image first (better preservation of original)
   try {
-    const resultBuffer = await _inpaintWithOpenAI(pngBuffer, maskBuffer, textList);
+    const resultBuffer = await _inpaintWithGemini(pngBuffer, maskBuffer, textList);
     return await _uploadCleanImage(resultBuffer, workspaceId, decompositionId);
   } catch (err) {
-    console.error("[decompose] gpt-image-1 inpainting failed, trying Gemini fallback:", err);
+    console.error("[decompose] Gemini image editing failed, trying OpenAI fallback:", err);
   }
 
-  // Fallback: Gemini conversational image editing
-  const resultBuffer = await _inpaintWithGemini(pngBuffer, maskBuffer, textList);
+  // Fallback: gpt-image-1 mask-based inpainting
+  const resultBuffer = await _inpaintWithOpenAI(pngBuffer, maskBuffer, textList);
   return await _uploadCleanImage(resultBuffer, workspaceId, decompositionId);
 }
 
