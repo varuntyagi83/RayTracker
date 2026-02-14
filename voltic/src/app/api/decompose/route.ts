@@ -140,6 +140,9 @@ export async function POST(request: Request) {
             workspaceId,
             decompositionId
           );
+        } else {
+          // No marketing text to remove — the original image is already clean
+          cleanImageUrl = body.image_url;
         }
       } catch (cleanErr) {
         // Non-fatal: clean image generation can fail without failing the whole decomposition

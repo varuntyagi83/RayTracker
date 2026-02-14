@@ -160,6 +160,9 @@ export async function POST(request: Request) {
               workspaceId,
               record.id
             );
+          } else {
+            // No marketing text to remove — the original image is already clean
+            cleanImageUrl = imageUrl;
           }
         } catch {
           // Non-fatal
