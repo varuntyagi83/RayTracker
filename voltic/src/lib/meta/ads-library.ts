@@ -223,8 +223,8 @@ interface CuriousCoderAdItem {
   page_id?: string;
   page_name?: string;
   is_active?: boolean;
-  start_date?: string;
-  end_date?: string;
+  start_date?: string | number;
+  end_date?: string | number;
   start_date_formatted?: string;
   end_date_formatted?: string;
   publisher_platform?: string[];
@@ -313,9 +313,17 @@ function mapCuriousCoderItems(
     // Platforms
     const platforms = (item.publisher_platform || ["facebook"]) as AdsLibraryAd["platforms"];
 
-    // Start/end dates
-    const startDate = item.start_date || "";
-    const endDate = item.end_date || null;
+    // Start/end dates — actor returns Unix timestamps (seconds)
+    const startDate = item.start_date
+      ? typeof item.start_date === "number"
+        ? new Date(item.start_date * 1000).toISOString().split("T")[0]
+        : String(item.start_date)
+      : "";
+    const endDate = item.end_date
+      ? typeof item.end_date === "number"
+        ? new Date(item.end_date * 1000).toISOString().split("T")[0]
+        : String(item.end_date)
+      : null;
 
     return {
       id,
