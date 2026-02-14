@@ -30,9 +30,22 @@ import {
   Video,
   Layers,
   Check,
+  Sparkles,
 } from "lucide-react";
-import { fetchDiscoverAds, fetchBoards, saveToBoard } from "../actions";
-import type { DiscoverAd, DiscoverSearchParams, BoardOption } from "@/types/discover";
+import {
+  fetchDiscoverAds,
+  fetchBoards,
+  saveToBoard,
+  analyzeAd,
+  fetchExistingInsights,
+} from "../actions";
+import { InsightsPanel } from "@/components/shared/insights-panel";
+import type {
+  DiscoverAd,
+  DiscoverSearchParams,
+  BoardOption,
+  AdInsightRecord,
+} from "@/types/discover";
 
 // ─── Platform Icons ─────────────────────────────────────────────────────────
 
@@ -92,6 +105,11 @@ export default function DiscoverClient() {
   const [savingAdId, setSavingAdId] = useState<string | null>(null);
   const [savedAdIds, setSavedAdIds] = useState<Set<string>>(new Set());
 
+  // Insight state
+  const [insightsMap, setInsightsMap] = useState<Record<string, AdInsightRecord>>({});
+  const [analyzingAdId, setAnalyzingAdId] = useState<string | null>(null);
+  const [expandedInsightId, setExpandedInsightId] = useState<string | null>(null);
+
   // Load boards on mount
   useEffect(() => {
     fetchBoards().then((result) => {
@@ -119,12 +137,22 @@ export default function DiscoverClient() {
     };
   }, [loading]);
 
+  // Pre-load existing insights for returned ads
+  const loadExistingInsights = useCallback(async (adIds: string[]) => {
+    if (adIds.length === 0) return;
+    const result = await fetchExistingInsights(adIds);
+    if (result.data) {
+      setInsightsMap((prev) => ({ ...prev, ...result.data }));
+    }
+  }, []);
+
   // Search function
   const handleSearch = useCallback(async () => {
     if (!query.trim()) return;
     setLoading(true);
     setHasSearched(true);
     setPage(1);
+    setExpandedInsightId(null);
 
     const result = await fetchDiscoverAds({
       query: query.trim(),
@@ -139,13 +167,18 @@ export default function DiscoverClient() {
     setTotalCount(result.totalCount);
     setTotalPages(result.totalPages);
     setLoading(false);
-  }, [query, activeOnly, format, sort, perPage]);
+
+    // Pre-load insights for these ads
+    const adIds = result.ads.map((a) => a.id);
+    loadExistingInsights(adIds);
+  }, [query, activeOnly, format, sort, perPage, loadExistingInsights]);
 
   // Paginate
   const handlePageChange = useCallback(
     async (newPage: number) => {
       setLoading(true);
       setPage(newPage);
+      setExpandedInsightId(null);
 
       const result = await fetchDiscoverAds({
         query: query.trim(),
@@ -160,8 +193,12 @@ export default function DiscoverClient() {
       setTotalCount(result.totalCount);
       setTotalPages(result.totalPages);
       setLoading(false);
+
+      // Pre-load insights
+      const adIds = result.ads.map((a) => a.id);
+      loadExistingInsights(adIds);
     },
-    [query, activeOnly, format, sort, perPage]
+    [query, activeOnly, format, sort, perPage, loadExistingInsights]
   );
 
   // Save to board
@@ -172,6 +209,35 @@ export default function DiscoverClient() {
       setSavedAdIds((prev) => new Set(prev).add(ad.id));
     }
     setSavingAdId(null);
+  };
+
+  // Analyze ad
+  const handleAnalyzeAd = async (ad: DiscoverAd) => {
+    // If already cached, just toggle open
+    if (insightsMap[ad.id]) {
+      setExpandedInsightId((prev) => (prev === ad.id ? null : ad.id));
+      return;
+    }
+
+    setAnalyzingAdId(ad.id);
+    const result = await analyzeAd({
+      id: ad.id,
+      pageName: ad.pageName,
+      headline: ad.headline,
+      bodyText: ad.bodyText,
+      mediaType: ad.mediaType,
+      platforms: ad.platforms,
+      linkUrl: ad.linkUrl,
+      runtimeDays: ad.runtimeDays,
+      isActive: ad.isActive,
+    });
+
+    if (result.data) {
+      setInsightsMap((prev) => ({ ...prev, [ad.id]: result.data! }));
+      setExpandedInsightId(ad.id);
+    }
+    // TODO: show error toast when result.error
+    setAnalyzingAdId(null);
   };
 
   // Re-search when filters change (if already searched)
@@ -331,7 +397,14 @@ export default function DiscoverClient() {
               boards={boards}
               isSaving={savingAdId === ad.id}
               isSaved={savedAdIds.has(ad.id)}
+              isAnalyzing={analyzingAdId === ad.id}
+              insight={insightsMap[ad.id] ?? null}
+              isExpanded={expandedInsightId === ad.id}
               onSaveToBoard={(boardId) => handleSaveToBoard(ad, boardId)}
+              onAnalyze={() => handleAnalyzeAd(ad)}
+              onToggleInsight={() =>
+                setExpandedInsightId((prev) => (prev === ad.id ? null : ad.id))
+              }
             />
           ))}
         </div>
@@ -372,10 +445,26 @@ interface AdCardProps {
   boards: BoardOption[];
   isSaving: boolean;
   isSaved: boolean;
+  isAnalyzing: boolean;
+  insight: AdInsightRecord | null;
+  isExpanded: boolean;
   onSaveToBoard: (boardId: string) => void;
+  onAnalyze: () => void;
+  onToggleInsight: () => void;
 }
 
-function AdCard({ ad, boards, isSaving, isSaved, onSaveToBoard }: AdCardProps) {
+function AdCard({
+  ad,
+  boards,
+  isSaving,
+  isSaved,
+  isAnalyzing,
+  insight,
+  isExpanded,
+  onSaveToBoard,
+  onAnalyze,
+  onToggleInsight,
+}: AdCardProps) {
   const startDate = new Date(ad.startDate + "T00:00:00");
   const dateStr = startDate.toLocaleDateString("en-US", {
     month: "short",
@@ -495,6 +584,39 @@ function AdCard({ ad, boards, isSaving, isSaved, onSaveToBoard }: AdCardProps) {
             </Button>
           )}
 
+          {/* Analyze / Insights Toggle */}
+          {insight ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onToggleInsight}
+              className="flex-shrink-0"
+            >
+              <Sparkles className="mr-1.5 h-3.5 w-3.5 text-amber-500" />
+              {isExpanded ? "Hide" : "Insights"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onAnalyze}
+              disabled={isAnalyzing}
+              className="flex-shrink-0"
+            >
+              {isAnalyzing ? (
+                <>
+                  <div className="mr-1.5 h-3.5 w-3.5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                  Analyze (2cr)
+                </>
+              )}
+            </Button>
+          )}
+
           {/* View in Ads Library */}
           <Button
             variant="ghost"
@@ -510,6 +632,13 @@ function AdCard({ ad, boards, isSaving, isSaved, onSaveToBoard }: AdCardProps) {
             </a>
           </Button>
         </div>
+
+        {/* Insights Panel (expandable) */}
+        {insight && isExpanded && (
+          <div className="border-t px-4 py-3 bg-amber-50/50">
+            <InsightsPanel insights={insight.insights} />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

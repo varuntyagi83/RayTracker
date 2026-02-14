@@ -38,3 +38,54 @@ export interface BoardOption {
   id: string;
   name: string;
 }
+
+// ─── Ad Insight Types ──────────────────────────────────────────────────────
+
+export interface AdInsightInput {
+  brandName: string;
+  headline: string;
+  bodyText: string;
+  format: string;
+  platforms: string[];
+  landingPageUrl: string | null;
+  runtimeDays: number;
+  isActive: boolean;
+}
+
+export interface AdInsightCopyStructure {
+  headlineFormula: string;
+  bodyFramework: string;
+  ctaType: string;
+}
+
+export interface AdInsightTargetAudience {
+  primary: string;
+  interests: string[];
+  painPoints: string[];
+}
+
+export interface AdInsightData {
+  hookType: string;
+  hookExplanation: string;
+  copyStructure: AdInsightCopyStructure;
+  creativeStrategy: string;
+  targetAudience: AdInsightTargetAudience;
+  strengths: string[];
+  performanceScore: number;
+  performanceRationale: string;
+  improvements: string[];
+}
+
+export interface AdInsightRecord {
+  id: string;
+  workspaceId: string;
+  metaLibraryId: string;
+  brandName: string | null;
+  headline: string | null;
+  bodyText: string | null;
+  format: string | null;
+  insights: AdInsightData;
+  model: string;
+  creditsUsed: number;
+  createdAt: string;
+}
