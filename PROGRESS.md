@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 12 ✅
+> Current phase: Phase 13 ✅
 
 ## Phase Status
 
@@ -20,7 +20,7 @@
 | 10 | Campaign Analysis | ✅ Complete | 2026-02-14 | Campaign analysis page with search, date presets (Today/Yesterday/Last 7d/30d/90d), status + objective filters, sortable campaign table, expandable drill-down (campaign → ads with KPI cards + time series charts), comparison mode (select up to 5 campaigns, side-by-side KPI cards + overlaid Recharts), 3 chart types (Line/Bar/Scatter) with metric selector (Spend/Revenue/ROAS/Impressions/Clicks/CTR/Purchases), CSV export. Types: types/campaign-analysis.ts with CampaignSummary, CampaignDetail, MetricDataPoint, CampaignCreative, ComparisonData, ChartMetric, ChartType. Data layer: lib/data/campaign-analysis.ts with getCampaignList, getCampaignDetail, getCampaignCreatives, getCampaignComparison, getCampaignFilterOptions. Server actions: campaign-analysis/actions.ts with 5 fetch functions. Components: campaign-charts.tsx (Recharts Line/Bar/Scatter with comparison overlay), campaign-analysis-client.tsx (full page with all features). npx tsc --noEmit passes clean. |
 | 11 | Discover (Ad Library Browser) | ✅ Complete | 2026-02-14 | In-app Meta Ads Library browser with search bar (brand name), active-only toggle, format filter (All/Image/Video/Carousel), sort (Newest/Oldest/Most Impressions), per-page (6/12/24), pagination. 3-col responsive grid cards with brand name, "Live" badge, runtime days badge, media thumbnail, format+date, headline, body copy, landing page URL, platform icons (FB/IG/MSG/AN), impression range. "Add to Board" popover with board selector (loads workspace boards from DB), save-to-board server action inserting into saved_ads. "View in Ads Library" external link. Types: types/discover.ts with DiscoverAd, DiscoverSearchParams, DiscoverSearchResult, BoardOption. Data layer: lib/data/discover.ts with searchAdsLibrary (wraps scrapeAdsLibrary with filter/sort/paginate), getWorkspaceBoards, saveAdToBoard. Server actions: discover/actions.ts with fetchDiscoverAds, fetchBoards, saveToBoard. Components: discover-client.tsx with AdCard sub-component. npx tsc --noEmit passes clean. |
 | 12 | Boards (Swipe Files) | ✅ Complete | 2026-02-14 | Board list page with 4-col grid cards (thumbnail mosaic, ad count, description), create/edit/delete board dialogs with confirmation. Board detail page with back nav, format filter (All/Image/Video/Carousel), 3-col saved ad grid with brand name, format badge, thumbnail, headline, body, landing page link, runtime days, source badge, "Variations" button (disabled, Phase 14), remove ad with confirmation. Full CRUD: types/boards.ts (Board, SavedAd, BoardWithAds), lib/data/boards.ts (getBoards, getBoardWithAds, createBoard, updateBoard, deleteBoard, removeAdFromBoard, getBoardThumbnails), boards/actions.ts (6 server actions with Zod validation). Added shadcn alert-dialog + toggle-group. npx tsc --noEmit passes clean. |
-| 13 | Assets / Product Catalog | ⬜ Not started | | |
+| 13 | Assets / Product Catalog | ✅ Complete | 2026-02-14 | Product catalog with 4-col grid, search with debounce, add/edit/delete modals. Image upload to Supabase Storage (assets bucket) with 5MB limit, JPG/PNG/WebP/GIF validation, drag-to-replace. Asset cards with square aspect-ratio image, name, description, date. Full CRUD: types/assets.ts (Asset), lib/data/assets.ts (getAssets, getAsset, createAsset, updateAsset, deleteAsset, uploadAssetImage, deleteAssetImage), assets/actions.ts (fetchAssets, createAssetAction, updateAssetAction, deleteAssetAction with FormData). Storage cleanup on delete/replace. npx tsc --noEmit passes clean. |
 | 14 | AI Creative Variations | ⬜ Not started | | |
 | 15 | Chrome Extension | ⬜ Not started | | |
 | 16 | PostHog Deep Integration | ⬜ Not started | | |
@@ -35,13 +35,12 @@
 
 ## Context for Next Session
 
-Phase 12 complete. Boards (Swipe Files) fully implemented. Key new/modified files:
-- `voltic/src/types/boards.ts` — NEW: Board, SavedAd, BoardWithAds types.
-- `voltic/src/lib/data/boards.ts` — NEW: getBoards, getBoardWithAds, createBoard, updateBoard, deleteBoard, removeAdFromBoard, getBoardThumbnails.
-- `voltic/src/app/(dashboard)/boards/actions.ts` — NEW: 6 server actions (fetchBoards, fetchBoard, createBoardAction, updateBoardAction, deleteBoardAction, removeAdAction).
-- `voltic/src/app/(dashboard)/boards/components/boards-client.tsx` — NEW: Board list page with grid, create/edit dialog, delete confirmation.
-- `voltic/src/app/(dashboard)/boards/[id]/board-detail-client.tsx` — NEW: Board detail with format filter, ad grid, edit/delete board, remove ad.
-- `voltic/src/app/(dashboard)/boards/[id]/page.tsx` — NEW: Dynamic route for board detail.
-- `voltic/src/app/(dashboard)/boards/page.tsx` — UPDATED: Replaced placeholder with BoardsClient.
+Phase 13 complete. Assets / Product Catalog fully implemented. Key new/modified files:
+- `voltic/src/types/assets.ts` — NEW: Asset type.
+- `voltic/src/lib/data/assets.ts` — NEW: getAssets, getAsset, createAsset, updateAsset, deleteAsset, uploadAssetImage, deleteAssetImage.
+- `voltic/src/app/(dashboard)/assets/actions.ts` — NEW: 4 server actions (fetchAssets, createAssetAction, updateAssetAction, deleteAssetAction) with FormData handling for image upload.
+- `voltic/src/app/(dashboard)/assets/components/assets-client.tsx` — NEW: Full assets page with search, grid, add/edit/delete, image upload with preview.
+- `voltic/src/app/(dashboard)/assets/page.tsx` — UPDATED: Replaced placeholder with AssetsClient.
+- **Note:** User must create an `assets` bucket in Supabase Storage (public, allow image/* uploads) for image uploads to work.
 - `npx tsc --noEmit` passes clean.
-- Phase 13 should implement Assets / Product Catalog — product grid, add/edit/delete with image upload to Supabase Storage.
+- Phase 14 should implement AI Creative Variations — 6 strategies, product selector, generation pipeline, credits.
