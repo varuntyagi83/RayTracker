@@ -7,7 +7,7 @@ import Mention from "@tiptap/extension-mention";
 import Placeholder from "@tiptap/extension-placeholder";
 import type { SuggestionProps, SuggestionKeyDownProps } from "@tiptap/suggestion";
 import tippy, { type Instance as TippyInstance } from "tippy.js";
-import { BookOpen, Image as ImageIcon } from "lucide-react";
+import { BookOpen, Image as ImageIcon, FileBarChart } from "lucide-react";
 import type { MentionableItem, Mention as MentionData } from "@/types/creative-studio";
 
 // ─── Mention List Component (dropdown) ──────────────────────────────────────
@@ -96,6 +96,10 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
               <div className="size-7 rounded bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
                 <BookOpen className="size-3.5" />
               </div>
+            ) : item.type === "competitor_report" ? (
+              <div className="size-7 rounded bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                <FileBarChart className="size-3.5" />
+              </div>
             ) : (
               <div className="size-7 rounded bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
                 <ImageIcon className="size-3.5" />
@@ -113,10 +117,16 @@ const MentionList = forwardRef<MentionListRef, MentionListProps>(
               className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${
                 item.type === "brand_guidelines"
                   ? "bg-indigo-100 text-indigo-700"
-                  : "bg-emerald-100 text-emerald-700"
+                  : item.type === "competitor_report"
+                    ? "bg-orange-100 text-orange-700"
+                    : "bg-emerald-100 text-emerald-700"
               }`}
             >
-              {item.type === "brand_guidelines" ? "Brand" : "Asset"}
+              {item.type === "brand_guidelines"
+                ? "Brand"
+                : item.type === "competitor_report"
+                  ? "Report"
+                  : "Asset"}
             </span>
           </button>
         ))}
@@ -144,6 +154,7 @@ interface MentionEditorProps {
 export const MentionEditor = forwardRef<MentionEditorRef, MentionEditorProps>(
   ({ onSubmit, onMentionQuery, disabled, placeholder }, ref) => {
     const editor = useEditor({
+      immediatelyRender: false,
       extensions: [
         StarterKit.configure({
           heading: false,

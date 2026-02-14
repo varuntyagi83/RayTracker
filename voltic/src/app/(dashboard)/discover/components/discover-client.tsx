@@ -32,6 +32,8 @@ import {
   RotateCcw,
   Square,
   Scale,
+  Save,
+  Loader2,
 } from "lucide-react";
 import {
   fetchDiscoverAds,
@@ -42,6 +44,7 @@ import {
   clearDiscoverCache,
   stopScrape,
   compareAds,
+  saveDiscoverRunAction,
 } from "../actions";
 import { InsightsPanel } from "@/components/shared/insights-panel";
 import { useComparisonStore } from "@/lib/stores/comparison-store";
@@ -129,6 +132,10 @@ export default function DiscoverClient() {
   const [comparisonResult, setComparisonResult] = useState<AdComparisonRecord | null>(null);
   const [showComparisonDialog, setShowComparisonDialog] = useState(false);
 
+  // Save run state
+  const [savingRun, setSavingRun] = useState(false);
+  const [runSaved, setRunSaved] = useState(false);
+
   // Derive displayed ads from raw data + client-side filters
   const displayedAds = useMemo(() => {
     let ads = [...rawAds];
@@ -206,6 +213,7 @@ export default function DiscoverClient() {
     setHasSearched(true);
     setCancelled(false);
     setCacheCleared(false);
+    setRunSaved(false);
     setExpandedInsightId(null);
 
     const result = await fetchDiscoverAds({
@@ -280,6 +288,22 @@ export default function DiscoverClient() {
   const handleClearCache = async () => {
     await clearDiscoverCache();
     setCacheCleared(true);
+  };
+
+  const handleSaveRun = async () => {
+    if (!query.trim() || rawAds.length === 0) return;
+    setSavingRun(true);
+    try {
+      const result = await saveDiscoverRunAction({
+        brandName: query.trim(),
+        ads: rawAds,
+      });
+      if (result.success) {
+        setRunSaved(true);
+      }
+    } finally {
+      setSavingRun(false);
+    }
   };
 
   // Compare selected ads
@@ -433,6 +457,33 @@ export default function DiscoverClient() {
           <span className="text-xs text-green-600">
             Cache cleared — click Search to fetch fresh ads
           </span>
+        )}
+
+        {/* Save Run */}
+        {hasSearched && !loading && rawAds.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSaveRun}
+            disabled={savingRun || runSaved}
+          >
+            {savingRun ? (
+              <>
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                Saving...
+              </>
+            ) : runSaved ? (
+              <>
+                <Check className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+                Saved
+              </>
+            ) : (
+              <>
+                <Save className="mr-1.5 h-3.5 w-3.5" />
+                Save Run
+              </>
+            )}
+          </Button>
         )}
 
         {hasSearched && !loading && rawAds.length > 0 && (

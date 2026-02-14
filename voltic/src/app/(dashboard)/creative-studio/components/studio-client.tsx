@@ -11,7 +11,6 @@ import {
   updateConversationAction,
   deleteConversationAction,
 } from "../actions";
-import { LLM_MODELS } from "@/types/creative-studio";
 import type {
   StudioConversation,
   StudioMessage,
@@ -42,11 +41,10 @@ export default function StudioClient() {
     }
   }, []);
 
-  const handleNewConversation = useCallback(async () => {
-    const defaultModel = LLM_MODELS[0];
+  const handleNewConversation = useCallback(async (provider: LLMProvider, model: string) => {
     const result = await createConversationAction({
-      llmProvider: defaultModel.provider,
-      llmModel: defaultModel.model,
+      llmProvider: provider,
+      llmModel: model,
     });
 
     if (result.success && result.id) {

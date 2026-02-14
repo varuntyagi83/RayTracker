@@ -451,6 +451,71 @@ export const competitorBrands = pgTable(
   ]
 );
 
+export const competitorAds = pgTable(
+  "competitor_ads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    competitorBrandId: uuid("competitor_brand_id")
+      .notNull()
+      .references(() => competitorBrands.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    metaLibraryId: text("meta_library_id").notNull(),
+    headline: text("headline"),
+    bodyText: text("body_text"),
+    format: text("format").notNull().default("image"),
+    mediaType: text("media_type").notNull().default("image"),
+    imageUrl: text("image_url"),
+    videoUrl: text("video_url"),
+    landingPageUrl: text("landing_page_url"),
+    platforms: text("platforms").array(),
+    startDate: date("start_date"),
+    runtimeDays: integer("runtime_days"),
+    isActive: boolean("is_active").notNull().default(true),
+    adsLibraryUrl: text("ads_library_url"),
+    metadata: jsonb("metadata"),
+    scrapedAt: timestamp("scraped_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_competitor_ads_brand_id").on(table.competitorBrandId),
+    index("idx_competitor_ads_workspace_id").on(table.workspaceId),
+    uniqueIndex("competitor_ads_workspace_meta_library_idx").on(
+      table.workspaceId,
+      table.metaLibraryId
+    ),
+  ]
+);
+
+export const competitorReports = pgTable(
+  "competitor_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    competitorBrandIds: text("competitor_brand_ids").array().notNull(),
+    competitorBrandNames: text("competitor_brand_names").array().notNull(),
+    adCount: integer("ad_count").notNull().default(0),
+    perAdAnalyses: jsonb("per_ad_analyses").notNull().default([]),
+    crossBrandSummary: jsonb("cross_brand_summary").notNull().default({}),
+    model: text("model").notNull().default("gpt-4o"),
+    creditsUsed: integer("credits_used").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_competitor_reports_workspace_id").on(table.workspaceId),
+  ]
+);
+
 export const facebookPages = pgTable(
   "facebook_pages",
   {
@@ -598,6 +663,8 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   variations: many(variations),
   creditTransactions: many(creditTransactions),
   competitorBrands: many(competitorBrands),
+  competitorAds: many(competitorAds),
+  competitorReports: many(competitorReports),
   facebookPages: many(facebookPages),
   comments: many(comments),
   adInsights: many(adInsights),
@@ -746,9 +813,34 @@ export const creditTransactionsRelations = relations(
 
 export const competitorBrandsRelations = relations(
   competitorBrands,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [competitorBrands.workspaceId],
+      references: [workspaces.id],
+    }),
+    ads: many(competitorAds),
+  })
+);
+
+export const competitorAdsRelations = relations(
+  competitorAds,
+  ({ one }) => ({
+    competitorBrand: one(competitorBrands, {
+      fields: [competitorAds.competitorBrandId],
+      references: [competitorBrands.id],
+    }),
+    workspace: one(workspaces, {
+      fields: [competitorAds.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
+
+export const competitorReportsRelations = relations(
+  competitorReports,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [competitorReports.workspaceId],
       references: [workspaces.id],
     }),
   })

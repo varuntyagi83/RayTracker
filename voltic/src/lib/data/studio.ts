@@ -257,6 +257,32 @@ export async function getMentionableItems(
     }
   }
 
+  // Search competitor reports
+  const { data: reports } = await supabase
+    .from("competitor_reports")
+    .select("id, title, ad_count, competitor_brand_names")
+    .eq("workspace_id", workspaceId)
+    .ilike("title", searchQuery)
+    .order("created_at", { ascending: false })
+    .limit(5);
+
+  if (reports) {
+    for (const r of reports) {
+      const brandNames = r.competitor_brand_names as string[];
+      const slug = (r.title as string)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_|_$/g, "");
+      items.push({
+        id: r.id,
+        type: "competitor_report",
+        name: r.title,
+        slug,
+        description: `${r.ad_count} ads · ${brandNames.join(", ")}`,
+      });
+    }
+  }
+
   return items;
 }
 
@@ -305,6 +331,24 @@ export async function resolveMentions(
           imageUrl: data.image_url,
         };
       }
+    } else if (mention.type === "competitor_report") {
+      const { data } = await supabase
+        .from("competitor_reports")
+        .select("*")
+        .eq("workspace_id", workspaceId)
+        .eq("id", mention.id)
+        .single();
+
+      if (data) {
+        resolved[`@${mention.slug}`] = {
+          type: "competitor_report",
+          title: data.title,
+          brandNames: data.competitor_brand_names,
+          adCount: data.ad_count,
+          perAdAnalyses: data.per_ad_analyses,
+          crossBrandSummary: data.cross_brand_summary,
+        };
+      }
     }
   }
 
@@ -341,6 +385,47 @@ export function buildMentionContext(
         `--- ASSET: ${key} ---\n` +
           `Name: ${item.name ?? "N/A"}\n` +
           `Description: ${item.description ?? "N/A"}`
+      );
+    } else if (item.type === "competitor_report") {
+      const analyses = item.perAdAnalyses as Array<Record<string, unknown>>;
+      const summary = item.crossBrandSummary as Record<string, unknown>;
+
+      let adSection = "";
+      if (Array.isArray(analyses)) {
+        adSection = analyses
+          .map((a, i) => {
+            const target = a.targetAudience as Record<string, unknown> | undefined;
+            return (
+              `  Ad ${i + 1}: ${a.brandName} — "${a.headline ?? "Untitled"}"\n` +
+              `    Score: ${a.performanceScore}/10 — ${a.performanceRationale}\n` +
+              `    Hook: ${a.hookType} — ${a.hookExplanation}\n` +
+              `    CTA: ${a.ctaType} — ${a.ctaAnalysis}\n` +
+              `    Target: ${target?.primary ?? "N/A"}\n` +
+              `    Strengths: ${(a.strengths as string[])?.join("; ") ?? "N/A"}\n` +
+              `    Weaknesses: ${(a.weaknesses as string[])?.join("; ") ?? "N/A"}\n` +
+              `    Improvements: ${(a.improvements as string[])?.join("; ") ?? "N/A"}`
+            );
+          })
+          .join("\n\n");
+      }
+
+      let summarySection = "";
+      if (summary) {
+        summarySection =
+          `  Common Patterns: ${(summary.commonPatterns as string[])?.join("; ") ?? "N/A"}\n` +
+          `  Best Practices: ${(summary.bestPractices as string[])?.join("; ") ?? "N/A"}\n` +
+          `  Gaps & Opportunities: ${(summary.gapsAndOpportunities as string[])?.join("; ") ?? "N/A"}\n` +
+          `  Market Positioning: ${summary.marketPositioning ?? "N/A"}\n` +
+          `  Recommendations: ${(summary.overallRecommendations as string[])?.join("; ") ?? "N/A"}`;
+      }
+
+      sections.push(
+        `--- COMPETITOR REPORT: ${key} ---\n` +
+          `Title: ${item.title ?? "N/A"}\n` +
+          `Brands: ${(item.brandNames as string[])?.join(", ") ?? "N/A"}\n` +
+          `Ads Analyzed: ${item.adCount ?? 0}\n\n` +
+          `PER-AD ANALYSIS:\n${adSection}\n\n` +
+          `CROSS-BRAND INSIGHTS:\n${summarySection}`
       );
     }
   }

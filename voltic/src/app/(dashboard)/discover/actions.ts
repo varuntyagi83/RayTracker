@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { searchAdsLibrary, getWorkspaceBoards, saveAdToBoard } from "@/lib/data/discover";
 import { clearAdsLibraryCache, abortActiveScrape } from "@/lib/meta/ads-library";
+import { saveCompetitorScrapeRun } from "@/lib/data/competitors";
 import { generateAdInsights } from "@/lib/ai/insights";
 import {
   getExistingInsight,
@@ -42,6 +43,15 @@ export async function saveToBoard(input: { boardId: string; ad: DiscoverAd }) {
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" } as const;
   return await saveAdToBoard(workspace.id, input.boardId, input.ad);
+}
+
+export async function saveDiscoverRunAction(input: {
+  brandName: string;
+  ads: DiscoverAd[];
+}): Promise<{ success: boolean; error?: string }> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { success: false, error: "No workspace" };
+  return await saveCompetitorScrapeRun(workspace.id, input.brandName, input.ads);
 }
 
 export async function clearDiscoverCache() {

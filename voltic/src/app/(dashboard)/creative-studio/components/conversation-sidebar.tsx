@@ -14,18 +14,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { StudioConversation } from "@/types/creative-studio";
+import { LLM_MODELS } from "@/types/creative-studio";
+import type { StudioConversation, LLMProvider } from "@/types/creative-studio";
 
 interface ConversationSidebarProps {
   conversations: StudioConversation[];
   activeId: string | null;
   onSelect: (id: string) => void;
-  onNew: () => void;
+  onNew: (provider: LLMProvider, model: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
 }
@@ -40,6 +48,9 @@ export function ConversationSidebar({
 }: ConversationSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
+  const [selectedModelKey, setSelectedModelKey] = useState(
+    `${LLM_MODELS[0].provider}:${LLM_MODELS[0].model}`
+  );
 
   const startRename = (conv: StudioConversation) => {
     setEditingId(conv.id);
@@ -55,8 +66,32 @@ export function ConversationSidebar({
 
   return (
     <div className="w-64 border-r flex flex-col bg-muted/30">
-      <div className="p-3 border-b">
-        <Button onClick={onNew} className="w-full" size="sm">
+      <div className="p-3 border-b space-y-2">
+        <Select value={selectedModelKey} onValueChange={setSelectedModelKey}>
+          <SelectTrigger className="w-full h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LLM_MODELS.map((m) => (
+              <SelectItem
+                key={`${m.provider}:${m.model}`}
+                value={`${m.provider}:${m.model}`}
+              >
+                {m.label} ({m.creditCost} cr)
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          onClick={() => {
+            const found = LLM_MODELS.find(
+              (m) => `${m.provider}:${m.model}` === selectedModelKey
+            );
+            if (found) onNew(found.provider, found.model);
+          }}
+          className="w-full"
+          size="sm"
+        >
           <Plus className="size-4 mr-1.5" />
           New Chat
         </Button>

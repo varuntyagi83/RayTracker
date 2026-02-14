@@ -40,7 +40,7 @@ export const LLM_MODELS: LLMModelOption[] = [
 
 // ─── Mentions ───────────────────────────────────────────────────────────────
 
-export type MentionType = "brand_guidelines" | "asset";
+export type MentionType = "brand_guidelines" | "asset" | "competitor_report";
 
 export interface Mention {
   type: MentionType;
