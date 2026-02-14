@@ -104,7 +104,6 @@ export async function scrapeAdsLibrary(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         startUrls: [{ url: searchUrl }],
-        maxItems: Math.min(params.topN, MAX_ITEMS),
       }),
     });
 
@@ -116,29 +115,21 @@ export async function scrapeAdsLibrary(
 
     const runData = await startRes.json();
     const runId = runData.data?.id;
-    if (!runId) {
-      console.error("[ads-library] No run ID returned");
+    const datasetId = runData.data?.defaultDatasetId;
+    if (!runId || !datasetId) {
+      console.error("[ads-library] No run ID or dataset ID returned");
       return getMockResult(params);
     }
 
-    console.log("[ads-library] Run started:", runId);
+    console.log("[ads-library] Run started:", runId, "dataset:", datasetId);
 
-    // 2. Poll for completion
-    const datasetId = await pollForCompletion(token, runId);
-    if (!datasetId) {
-      console.error("[ads-library] Run timed out or failed");
+    // 2. Poll dataset for items — abort run once we have enough
+    const rawItems = await pollDatasetAndAbort(token, runId, datasetId);
+    if (!rawItems || rawItems.length === 0) {
+      console.error("[ads-library] No items scraped");
       return getMockResult(params);
     }
 
-    // 3. Fetch dataset items
-    const itemsUrl = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&limit=${MAX_ITEMS}`;
-    const itemsRes = await fetch(itemsUrl);
-    if (!itemsRes.ok) {
-      console.error("[ads-library] Failed to fetch items:", itemsRes.status);
-      return getMockResult(params);
-    }
-
-    const rawItems: ApifyAdItem[] = await itemsRes.json();
     console.log("[ads-library] Got", rawItems.length, "items from Apify");
 
     const ads = mapApifyItems(rawItems, params);
@@ -158,40 +149,80 @@ export async function scrapeAdsLibrary(
   }
 }
 
-// ─── Polling ────────────────────────────────────────────────────────────────
+// ─── Polling + Auto-Abort ────────────────────────────────────────────────────
 
-async function pollForCompletion(
+/**
+ * Poll the dataset for items. Once we have >= MAX_ITEMS, abort the run
+ * to stop burning Apify credits, then return the items.
+ */
+async function pollDatasetAndAbort(
   token: string,
-  runId: string
-): Promise<string | null> {
+  runId: string,
+  datasetId: string
+): Promise<ApifyAdItem[] | null> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < MAX_POLL_TIME_MS) {
     await sleep(POLL_INTERVAL_MS);
 
+    // Check how many items the dataset has
+    const countUrl = `${APIFY_BASE_URL}/datasets/${datasetId}?token=${token}`;
+    const countRes = await fetch(countUrl);
+    if (!countRes.ok) continue;
+
+    const countData = await countRes.json();
+    const itemCount = countData.data?.itemCount ?? 0;
+
+    // Also check run status
     const statusUrl = `${APIFY_BASE_URL}/actor-runs/${runId}?token=${token}`;
     const statusRes = await fetch(statusUrl);
-    if (!statusRes.ok) continue;
+    const statusData = statusRes.ok ? await statusRes.json() : null;
+    const runStatus = statusData?.data?.status;
 
-    const statusData = await statusRes.json();
-    const status = statusData.data?.status;
-    const datasetId = statusData.data?.defaultDatasetId;
+    console.log(`[ads-library] Poll: ${itemCount} items, run status: ${runStatus}, elapsed: ${Math.round((Date.now() - startTime) / 1000)}s`);
 
-    if (status === "SUCCEEDED") {
-      console.log("[ads-library] Run succeeded in", Math.round((Date.now() - startTime) / 1000), "s");
-      return datasetId || null;
+    // If we have enough items, abort the run and return
+    if (itemCount >= MAX_ITEMS) {
+      console.log(`[ads-library] Got ${itemCount} items (>= ${MAX_ITEMS}), aborting run to save credits`);
+      await abortRun(token, runId);
+      return await fetchDatasetItems(token, datasetId);
     }
 
-    if (status === "FAILED" || status === "ABORTED" || status === "TIMED-OUT") {
-      console.error("[ads-library] Run ended with status:", status);
+    // If run finished (succeeded or failed), grab whatever we got
+    if (runStatus === "SUCCEEDED" || runStatus === "FAILED" || runStatus === "ABORTED" || runStatus === "TIMED-OUT") {
+      console.log(`[ads-library] Run ended with status: ${runStatus}, got ${itemCount} items`);
+      if (itemCount > 0) {
+        return await fetchDatasetItems(token, datasetId);
+      }
       return null;
     }
-
-    // Still RUNNING or READY — keep polling
   }
 
-  console.error("[ads-library] Polling timed out after", MAX_POLL_TIME_MS / 1000, "s");
-  return null;
+  // Timed out — abort and take whatever we have
+  console.log("[ads-library] Polling timed out, aborting run");
+  await abortRun(token, runId);
+  return await fetchDatasetItems(token, datasetId);
+}
+
+async function abortRun(token: string, runId: string): Promise<void> {
+  try {
+    await fetch(`${APIFY_BASE_URL}/actor-runs/${runId}/abort?token=${token}`, {
+      method: "POST",
+    });
+    console.log("[ads-library] Run aborted:", runId);
+  } catch {
+    // Ignore abort errors
+  }
+}
+
+async function fetchDatasetItems(
+  token: string,
+  datasetId: string
+): Promise<ApifyAdItem[]> {
+  const itemsUrl = `${APIFY_BASE_URL}/datasets/${datasetId}/items?token=${token}&limit=${MAX_ITEMS}`;
+  const itemsRes = await fetch(itemsUrl);
+  if (!itemsRes.ok) return [];
+  return await itemsRes.json();
 }
 
 function sleep(ms: number): Promise<void> {
