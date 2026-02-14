@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
+  Brain,
   Sparkles,
   Trash2,
   ExternalLink,
@@ -50,6 +51,7 @@ import {
 } from "../actions";
 import VariationModal from "./components/variation-modal";
 import CreativeBuilderModal from "./components/creative-builder-modal";
+import AnalyzeModal from "./components/analyze-modal";
 import type { BoardWithAds, SavedAd } from "@/types/boards";
 
 const FORMAT_OPTIONS = [
@@ -85,6 +87,9 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
 
   // Creative builder modal
   const [showCreativeBuilder, setShowCreativeBuilder] = useState(false);
+
+  // Analyze modal
+  const [analyzeAd, setAnalyzeAd] = useState<SavedAd | null>(null);
 
   const loadBoard = useCallback(async () => {
     const result = await fetchBoard({ boardId });
@@ -294,6 +299,7 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
               ad={ad}
               onDelete={() => setDeletingAd(ad)}
               onVariations={() => setVariationAd(ad)}
+              onAnalyze={() => setAnalyzeAd(ad)}
             />
           ))}
         </div>
@@ -411,6 +417,15 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
         open={showCreativeBuilder}
         onClose={() => setShowCreativeBuilder(false)}
       />
+
+      {/* Analyze Modal */}
+      {analyzeAd && (
+        <AnalyzeModal
+          savedAd={analyzeAd}
+          open={!!analyzeAd}
+          onClose={() => setAnalyzeAd(null)}
+        />
+      )}
     </div>
   );
 }
@@ -421,10 +436,12 @@ function SavedAdCard({
   ad,
   onDelete,
   onVariations,
+  onAnalyze,
 }: {
   ad: SavedAd;
   onDelete: () => void;
   onVariations: () => void;
+  onAnalyze: () => void;
 }) {
   const formatIcon =
     ad.format === "video" ? Video : ad.format === "carousel" ? Layers : ImageIcon;
@@ -521,6 +538,15 @@ function SavedAdCard({
           >
             <Sparkles className="mr-1.5 size-3.5" />
             Variations
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={onAnalyze}
+          >
+            <Brain className="mr-1.5 size-3.5" />
+            Analyze
           </Button>
           <Button
             variant="ghost"

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voltic Extension</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">V</div>
+      <h1>Voltic</h1>
+    </div>
+
+    <!-- Disconnected state -->
+    <div id="disconnected" class="section">
+      <p class="subtitle">Connect to your Voltic workspace to save ads from the Meta Ad Library.</p>
+
+      <div class="form-group">
+        <label for="voltic-url">Voltic URL</label>
+        <input
+          id="voltic-url"
+          type="url"
+          placeholder="https://your-app.vercel.app"
+          autocomplete="url"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="api-token">API Token</label>
+        <input
+          id="api-token"
+          type="password"
+          placeholder="Paste token from Settings → Chrome Extension"
+        />
+      </div>
+
+      <button id="connect-btn" class="btn btn-primary">Connect</button>
+      <p id="error-msg" class="error hidden"></p>
+    </div>
+
+    <!-- Connected state -->
+    <div id="connected" class="section hidden">
+      <div class="status-row">
+        <span class="status-dot"></span>
+        <span id="workspace-name" class="workspace-name">My Workspace</span>
+      </div>
+      <p class="subtitle">You're connected. Ads saved from the Meta Ad Library will go to your Voltic boards.</p>
+      <button id="disconnect-btn" class="btn btn-secondary">Disconnect</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

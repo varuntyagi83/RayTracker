@@ -20,12 +20,20 @@ import {
 } from "@/lib/data/variations";
 import { getBrandGuidelines } from "@/lib/data/brand-guidelines";
 import { getAsset } from "@/lib/data/assets";
-import { checkAndDeductCredits, refundCredits } from "@/lib/data/insights";
+import {
+  checkAndDeductCredits,
+  refundCredits,
+  getExistingInsight,
+  saveInsight,
+  INSIGHT_CREDIT_COST,
+} from "@/lib/data/insights";
+import { generateAdInsights } from "@/lib/ai/insights";
 import { generateVariationText, generateVariationImage } from "@/lib/ai/variations";
 import { enhanceCreativeText } from "@/lib/ai/creative-enhance";
 import { VARIATION_CREDIT_COST, CREATIVE_ENHANCE_CREDIT_COST } from "@/types/variations";
 import type { Board, BoardWithAds, SavedAd } from "@/types/boards";
 import type { Variation } from "@/types/variations";
+import type { AdInsightData } from "@/types/discover";
 
 // ─── Fetch All Boards ───────────────────────────────────────────────────────
 
@@ -379,5 +387,76 @@ export async function enhanceCreativesAction(
   } catch (err) {
     await refundCredits(workspace.id, totalCost);
     return { error: err instanceof Error ? err.message : "Enhancement failed" };
+  }
+}
+
+// ─── Analyze Ad (AI Insights) ───────────────────────────────────────────────
+
+const analyzeAdSchema = z.object({
+  savedAdId: z.string().uuid(),
+});
+
+export async function analyzeAdAction(
+  input: z.input<typeof analyzeAdSchema>
+): Promise<{ data?: AdInsightData; cached?: boolean; error?: string }> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
+  const parsed = analyzeAdSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  // Fetch the saved ad
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const supabase = createAdminClient();
+  const { data: adRow } = await supabase
+    .from("saved_ads")
+    .select("*")
+    .eq("id", parsed.data.savedAdId)
+    .eq("workspace_id", workspace.id)
+    .single();
+
+  if (!adRow) return { error: "Ad not found" };
+
+  // Check for cached insight
+  if (adRow.meta_library_id) {
+    const existing = await getExistingInsight(workspace.id, adRow.meta_library_id);
+    if (existing) {
+      return { data: existing.insights, cached: true };
+    }
+  }
+
+  // Deduct credits
+  const creditCheck = await checkAndDeductCredits(workspace.id, INSIGHT_CREDIT_COST);
+  if (!creditCheck.success) return { error: creditCheck.error };
+
+  try {
+    const insights = await generateAdInsights({
+      brandName: adRow.brand_name || "Unknown",
+      headline: adRow.headline || "",
+      bodyText: adRow.body || "",
+      format: adRow.format || "image",
+      platforms: adRow.platforms || ["facebook"],
+      landingPageUrl: adRow.landing_page_url,
+      runtimeDays: adRow.runtime_days || 0,
+      isActive: true,
+    });
+
+    // Cache the result
+    if (adRow.meta_library_id) {
+      await saveInsight(
+        workspace.id,
+        adRow.meta_library_id,
+        adRow.brand_name || "Unknown",
+        adRow.headline || "",
+        adRow.body || "",
+        adRow.format || "image",
+        insights
+      );
+    }
+
+    return { data: insights, cached: false };
+  } catch (err) {
+    await refundCredits(workspace.id, INSIGHT_CREDIT_COST);
+    return { error: err instanceof Error ? err.message : "Analysis failed" };
   }
 }

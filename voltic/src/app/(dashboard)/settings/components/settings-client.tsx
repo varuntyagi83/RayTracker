@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, ArrowRight, Check, ChevronsUpDown, Loader2, Globe } from "lucide-react";
+import { BookOpen, ArrowRight, Check, ChevronsUpDown, Loader2, Globe, Chrome, Copy, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
+import { createClient } from "@/lib/supabase/client";
 import { updateWorkspaceTimezoneAction } from "../actions";
 
 // ─── Timezone helpers ────────────────────────────────────────────────────────
@@ -82,6 +83,30 @@ export default function SettingsClient() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // API Token state
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const [tokenVisible, setTokenVisible] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [tokenLoading, setTokenLoading] = useState(false);
+
+  const fetchApiToken = useCallback(async () => {
+    setTokenLoading(true);
+    try {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getSession();
+      setApiToken(data.session?.access_token ?? null);
+    } finally {
+      setTokenLoading(false);
+    }
+  }, []);
+
+  const copyToken = useCallback(async () => {
+    if (!apiToken) return;
+    await navigator.clipboard.writeText(apiToken);
+    setTokenCopied(true);
+    setTimeout(() => setTokenCopied(false), 2000);
+  }, [apiToken]);
 
   const timezoneOptions = useMemo(() => buildTimezoneOptions(), []);
   const grouped = useMemo(() => groupByRegion(timezoneOptions), [timezoneOptions]);
@@ -200,6 +225,113 @@ export default function SettingsClient() {
                     Timezone updated
                   </p>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Chrome Extension */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Chrome className="size-5" />
+                Chrome Extension
+              </CardTitle>
+              <CardDescription>
+                Connect the Voltic Chrome Extension to save ads directly from the
+                Meta Ad Library to your boards. Copy the token below and paste it
+                in the extension popup.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {apiToken ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded-md border bg-muted px-3 py-2 text-sm font-mono truncate">
+                      {tokenVisible
+                        ? apiToken
+                        : `${apiToken.slice(0, 20)}${"•".repeat(30)}`}
+                    </code>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setTokenVisible((v) => !v)}
+                      title={tokenVisible ? "Hide token" : "Show token"}
+                    >
+                      {tokenVisible ? (
+                        <EyeOff className="size-4" />
+                      ) : (
+                        <Eye className="size-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={copyToken}
+                      title="Copy token"
+                    >
+                      {tokenCopied ? (
+                        <Check className="size-4 text-emerald-600" />
+                      ) : (
+                        <Copy className="size-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    This token expires periodically. If the extension disconnects,
+                    generate a fresh token and reconnect.
+                  </p>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={fetchApiToken}
+                  disabled={tokenLoading}
+                >
+                  {tokenLoading ? (
+                    <>
+                      <Loader2 className="mr-1.5 size-4 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    "Reveal API Token"
+                  )}
+                </Button>
+              )}
+
+              {/* Setup Instructions */}
+              <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+                <h4 className="text-sm font-semibold">Setup Instructions</h4>
+                <ol className="text-xs text-muted-foreground space-y-2 list-decimal list-inside">
+                  <li>
+                    <span className="font-medium text-foreground">Install the extension</span>
+                    {" "}&mdash; Open{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[11px]">chrome://extensions</code>,
+                    enable <span className="font-medium">Developer mode</span>, click{" "}
+                    <span className="font-medium">Load unpacked</span>, and select the{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[11px]">extension/</code> folder.
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">Connect</span>
+                    {" "}&mdash; Click the Voltic icon in your Chrome toolbar, enter your app URL and
+                    the API token from above, then click <span className="font-medium">Connect</span>.
+                  </li>
+                  <li>
+                    <span className="font-medium text-foreground">Save ads</span>
+                    {" "}&mdash; Go to{" "}
+                    <code className="rounded bg-muted px-1 py-0.5 text-[11px]">facebook.com/ads/library</code>{" "}
+                    and search for any brand. A green banner confirms your connection.
+                    Click <span className="font-medium">Save to Voltic</span> on any ad card,
+                    pick a board, and the ad is saved instantly.
+                  </li>
+                </ol>
+                <div className="flex items-start gap-2 pt-1 text-xs text-muted-foreground">
+                  <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    The API token expires periodically. If the extension shows
+                    &ldquo;Not connected&rdquo;, reveal a fresh token here and
+                    reconnect from the extension popup.
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
