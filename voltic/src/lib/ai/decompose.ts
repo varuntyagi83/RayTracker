@@ -5,6 +5,12 @@ import type { DecompositionResult } from "@/types/decomposition";
 
 const VISION_SYSTEM_PROMPT = `You are an expert ad creative analyst. Analyze this advertisement image and extract structured data about its composition.
 
+CRITICAL DISTINCTION — You must separate two categories of text:
+1. **Marketing/overlay text** — text digitally composited onto the ad (headlines, taglines, descriptions, CTAs, legal disclaimers). This text is NOT physically on the product.
+2. **Product/packaging text** — text physically printed on the product packaging itself (brand name, product name, variant name, ingredients, certifications, weight/volume).
+
+If the SAME text appears as both a marketing overlay AND on the product packaging, create TWO separate entries — one as marketing type and one as "brand" type.
+
 Return ONLY valid JSON matching this exact schema:
 {
   "texts": [
@@ -34,11 +40,16 @@ Return ONLY valid JSON matching this exact schema:
   }
 }
 
-Rules:
-- Capture EVERY piece of visible text exactly as written, no matter how small
+Type classification rules:
+- "headline" / "subheadline" / "body" / "cta" / "legal" → ONLY for marketing overlay text (digitally added to the ad)
+- "brand" → ONLY for text physically printed on the product packaging
+
+Other rules:
+- Capture EVERY piece of visible text exactly as written — even tiny text on product labels
 - For product detection, describe what you see without assuming brand names unless clearly visible
 - Be precise about text positions relative to the image
 - Confidence should reflect how certain you are about the text extraction (OCR quality)
+- Lower confidence for small or partially obscured packaging text
 - dominant_colors should be valid hex color codes
 - brand_elements should list all branding elements with their approximate position`;
 
