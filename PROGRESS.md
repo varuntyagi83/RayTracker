@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 21 ✅
+> Current phase: Phase 22 ✅
 
 ## Phase Status
 
@@ -31,7 +31,8 @@
 | 19 | Testing & QA | ✅ Complete | 2026-02-14 | Vitest test infrastructure with 107 unit tests across 8 test files. Coverage: 86.68% statements, 92.85% branches, 86.66% functions on tested modules. Tests cover: credits helpers (isUnlimitedCredits, generateTransactionDescription, CREDIT_PACKAGES), rate limiter (RateLimiter class with sliding window, fake timers), Slack block builders (6 helpers), 4 Slack templates (performance-digest, competitor-report, comment-digest, landing-page-report), AI prompt builders (buildBrandGuidelinesSection, buildTextPrompt, buildImagePrompt × 6 strategies). Exported RateLimiter class and 3 AI prompt builders for testing. |
 | 20 | Deployment & CI/CD | ✅ Complete | 2026-02-14 | vercel.json with automations cron (*/5 * * * *), GitHub Actions CI pipeline (lint + typecheck + test on PR/push), Vercel Analytics + Speed Insights in root layout |
 | 21 | Vision-Based Ad Decomposition Engine | ✅ Complete | 2026-02-14 | GPT-4o Vision decomposition service (lib/ai/decompose.ts) with structured JSON extraction of text layers (headline/subheadline/body/cta/legal/brand with position, font size, confidence), product analysis (detection, description, position, area %), background analysis (type, dominant colors, description), layout classification (style, text overlay, brand elements). Clean image generation via DALL-E 3 for text-removed product shots. New ad_decompositions table (Drizzle schema + SQL migration with RLS). 3 API routes: POST /api/decompose (single image analysis with caching, credit check), GET /api/decompose/[id] (fetch result by ID, workspace-scoped), POST /api/decompose/batch (up to 20 images, skips cached, sequential processing). Credit integration: 5 credits for analysis, +5 for clean image generation, "decomposition" transaction type added. 4 new PostHog events (ad_decomposition_started/completed/failed, ad_decomposition_batch_started). Types: types/decomposition.ts with full DecompositionResult schema. Zod validation on all API inputs. npx tsc --noEmit passes clean. |
-| 21+ | Image-Level Decomposition & Element Saving | ✅ Complete | 2026-02-14 | Replaced DALL-E 3 regeneration with gpt-image-1 inpainting for true image-level decomposition. New `generateCleanProductImage()` fetches original image, converts to PNG via sharp, calls `images.edit()` with gpt-image-1 listing specific marketing texts to remove, uploads result to Supabase Storage (permanent URL). Pipeline now produces: (1) clean product image with marketing overlay text inpainted out, product packaging text preserved, (2) extracted marketing text strings saved as structured elements. New API routes: POST /api/decompose/[id]/save-asset (saves clean product image as Asset via existing createAsset()), GET /api/decompose/[id]/save-texts (returns marketing texts in Creative Builder-ready format with headline/body role mapping). New types: SaveAsAssetResult, SavedTextElement. New PostHog event: decomposition_saved_as_asset. E2E tested with Kollagen Plus ad — marketing text removed, product packaging text preserved. npx tsc --noEmit passes clean, 107/107 tests pass. |
+| 21+ | Image-Level Decomposition & Element Saving | ✅ Complete | 2026-02-14 | Replaced DALL-E 3 regeneration with mask-based inpainting. GPT-4o Vision now returns bounding boxes (% of image) for each text element. sharp generates pixel-accurate PNG mask with transparent rectangles over marketing text. Gemini 2.5 Flash Image is primary provider (better original preservation), gpt-image-1 mask-based inpainting as fallback. Orchestrator pattern: `generateCleanProductImage()` → `_inpaintWithGemini()` → `_inpaintWithOpenAI()` → `_uploadCleanImage()`. New API routes: POST /api/decompose/[id]/save-asset, GET /api/decompose/[id]/save-texts (Creative Builder-ready format). New types: BoundingBox, SaveAsAssetResult, SavedTextElement. E2E tested: Gemini 6.6s, OpenAI 25s, all 8 tests pass, zero TS errors. |
+| 22 | Decomposer UI & Creative Builder Integration | ✅ Complete | 2026-02-14 | DecompositionModal shared component (components/shared/decomposition-modal.tsx) with 3-section layout: side-by-side original/clean images with toggle, editable marketing texts with type/position badges + read-only brand texts, collapsible detailed analysis (product, background, layout with color swatches). use-decomposition hook (hooks/use-decomposition.ts) encapsulates API calls for decompose/saveAsAsset/getTextsForBuilder. Creative Builder extended with initialImages/initialTexts props for pre-population from decomposition. Board Detail: per-card "Decompose" button + "Batch Decompose" header button + "Send to Creative Builder" flow. Discover page: per-card Decompose button. Save as Asset inline form in modal. 6 new PostHog events (decomposition_modal_opened, comparison_toggled, text_edited, sent_to_builder, asset_saved, batch_completed). shadcn Collapsible component added. 2 new files, 4 modified files. 107 tests pass, zero TS errors. |
 
 ## Issues / Blockers
 
@@ -39,20 +40,9 @@
 
 ## Context for Next Session
 
-Phase 21+ complete. Phase 22 (Decomposer UI & Creative Builder Integration) is next.
-
-**Phase 21+ — New Files (2):**
-- `voltic/src/app/api/decompose/[id]/save-asset/route.ts` — POST save clean product image as Asset
-- `voltic/src/app/api/decompose/[id]/save-texts/route.ts` — GET marketing texts in Creative Builder format
-
-**Phase 21+ — Modified Files (5):**
-- `voltic/src/lib/ai/decompose.ts` — Replaced generateCleanImage() (DALL-E 3) with generateCleanProductImage() (gpt-image-1 inpainting + Supabase upload)
-- `voltic/src/app/api/decompose/route.ts` — Uses new function with workspace context + marketing text list
-- `voltic/src/app/api/decompose/batch/route.ts` — Same update
-- `voltic/src/types/decomposition.ts` — Added SaveAsAssetResult, SavedTextElement interfaces
-- `voltic/src/lib/analytics/events.ts` — Added decomposition_saved_as_asset event
-
-**Before testing Phase 21+:**
-1. Run `005_ad_decompositions.sql` migration in Supabase SQL editor (if not already done)
-2. Ensure `brand-assets` Supabase Storage bucket exists (used by clean image upload)
-2. Ensure OPENAI_API_KEY is set (for GPT-4o Vision calls)
+Phase 22 complete. All decomposition features are now end-to-end functional:
+- Board Detail: Decompose per card → modal with analysis → Save as Asset → Send to Creative Builder (pre-populated)
+- Board Detail: Batch Decompose all ads in board
+- Discover: Decompose per card → modal with analysis → Save as Asset
+- Creative Builder: accepts initialImages/initialTexts from decomposition flow
+- DecompositionModal is a shared component reusable from any context

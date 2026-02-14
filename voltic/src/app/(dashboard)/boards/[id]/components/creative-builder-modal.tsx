@@ -36,6 +36,8 @@ import type { CreativeImage, CreativeText, CreativeCombination } from "@/types/v
 interface CreativeBuilderModalProps {
   open: boolean;
   onClose: () => void;
+  initialImages?: CreativeImage[];
+  initialTexts?: CreativeText[];
 }
 
 let nextImageId = 1;
@@ -44,6 +46,8 @@ let nextTextId = 1;
 export default function CreativeBuilderModal({
   open,
   onClose,
+  initialImages,
+  initialTexts,
 }: CreativeBuilderModalProps) {
   const [images, setImages] = useState<CreativeImage[]>([]);
   const [texts, setTexts] = useState<CreativeText[]>([]);
@@ -74,8 +78,6 @@ export default function CreativeBuilderModal({
 
   useEffect(() => {
     if (open) {
-      setImages([]);
-      setTexts([]);
       setMode("manual");
       setEnhanced({});
       setError("");
@@ -83,9 +85,24 @@ export default function CreativeBuilderModal({
       setNewBody("");
       nextImageId = 1;
       nextTextId = 1;
+
+      // Pre-populate from decomposition if provided
+      if (initialImages && initialImages.length > 0) {
+        setImages(initialImages);
+        nextImageId = initialImages.length + 1;
+      } else {
+        setImages([]);
+      }
+      if (initialTexts && initialTexts.length > 0) {
+        setTexts(initialTexts);
+        nextTextId = initialTexts.length + 1;
+      } else {
+        setTexts([]);
+      }
+
       checkBrandGuidelines();
     }
-  }, [open, checkBrandGuidelines]);
+  }, [open, checkBrandGuidelines, initialImages, initialTexts]);
 
   // Image handlers
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -35,6 +35,7 @@ import {
   Scale,
   Save,
   Loader2,
+  Scissors,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -53,6 +54,7 @@ import { InsightsPanel } from "@/components/shared/insights-panel";
 import { useComparisonStore } from "@/lib/stores/comparison-store";
 import { ComparisonTray } from "./comparison-tray";
 import { ComparisonResultDialog } from "./comparison-result-dialog";
+import DecompositionModal from "@/components/shared/decomposition-modal";
 import type {
   DiscoverAd,
   DiscoverSearchParams,
@@ -138,6 +140,9 @@ export default function DiscoverClient() {
   // Save run state
   const [savingRun, setSavingRun] = useState(false);
   const [runSaved, setRunSaved] = useState(false);
+
+  // Decompose state
+  const [decomposeAd, setDecomposeAd] = useState<DiscoverAd | null>(null);
 
   // Derive displayed ads from raw data + client-side filters
   const displayedAds = useMemo(() => {
@@ -605,6 +610,10 @@ export default function DiscoverClient() {
               onToggleComparison={() =>
                 isSelected(ad.id) ? removeAd(ad.id) : addAd(ad)
               }
+              onDecompose={() => {
+                track("decomposition_modal_opened", { source: "discover", ad_id: ad.id });
+                setDecomposeAd(ad);
+              }}
             />
           ))}
         </div>
@@ -619,6 +628,16 @@ export default function DiscoverClient() {
         onOpenChange={setShowComparisonDialog}
         result={comparisonResult?.result ?? null}
       />
+
+      {/* Decomposition Modal */}
+      {decomposeAd && decomposeAd.mediaThumbnailUrl && (
+        <DecompositionModal
+          open={!!decomposeAd}
+          onClose={() => setDecomposeAd(null)}
+          imageUrl={decomposeAd.mediaThumbnailUrl}
+          sourceType="discover"
+        />
+      )}
     </div>
   );
 }
@@ -639,6 +658,7 @@ interface AdCardProps {
   onAnalyze: () => void;
   onToggleInsight: () => void;
   onToggleComparison: () => void;
+  onDecompose: () => void;
 }
 
 function AdCard({
@@ -655,6 +675,7 @@ function AdCard({
   onAnalyze,
   onToggleInsight,
   onToggleComparison,
+  onDecompose,
 }: AdCardProps) {
   const startDate = new Date(ad.startDate + "T00:00:00");
   const dateStr = startDate.toLocaleDateString("en-US", {
@@ -820,6 +841,17 @@ function AdCard({
           >
             <Scale className="mr-1.5 h-3.5 w-3.5" />
             {isSelectedForComparison ? "Selected" : "Compare"}
+          </Button>
+
+          {/* Decompose */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDecompose}
+            disabled={!ad.mediaThumbnailUrl}
+            className="flex-shrink-0"
+          >
+            <Scissors className="h-3.5 w-3.5" />
           </Button>
 
           {/* View in Ads Library */}

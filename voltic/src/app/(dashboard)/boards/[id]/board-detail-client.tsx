@@ -15,6 +15,8 @@ import {
   LayoutGrid,
   Pencil,
   Wand2,
+  Scissors,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -55,7 +57,9 @@ import {
 import VariationModal from "./components/variation-modal";
 import CreativeBuilderModal from "./components/creative-builder-modal";
 import AnalyzeModal from "./components/analyze-modal";
+import DecompositionModal from "@/components/shared/decomposition-modal";
 import type { BoardWithAds, SavedAd } from "@/types/boards";
+import type { CreativeImage, CreativeText } from "@/types/variations";
 
 const FORMAT_OPTIONS = [
   { value: "all", label: "All", icon: LayoutGrid },
@@ -93,6 +97,16 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
 
   // Analyze modal
   const [analyzeAd, setAnalyzeAd] = useState<SavedAd | null>(null);
+
+  // Decompose modal
+  const [decomposeAd, setDecomposeAd] = useState<SavedAd | null>(null);
+
+  // Batch decompose
+  const [batchDecomposing, setBatchDecomposing] = useState(false);
+
+  // Creative builder pre-population from decomposition
+  const [builderInitialImages, setBuilderInitialImages] = useState<CreativeImage[] | undefined>();
+  const [builderInitialTexts, setBuilderInitialTexts] = useState<CreativeText[] | undefined>();
 
   const loadBoard = useCallback(async () => {
     const result = await fetchBoard({ boardId });
@@ -182,6 +196,57 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
     setDeleteBoardOpen(false);
   };
 
+  const handleBatchDecompose = async () => {
+    if (!board || board.ads.length === 0) return;
+    setBatchDecomposing(true);
+    const startTime = Date.now();
+
+    const imageUrls = board.ads
+      .filter((ad) => ad.imageUrl)
+      .map((ad) => ad.imageUrl!);
+
+    try {
+      const res = await fetch("/api/decompose/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_urls: imageUrls,
+          source_type: "saved_ad",
+          generate_clean_images: true,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Batch decomposition failed");
+      }
+
+      const successCount = data.results?.filter(
+        (r: { status: string }) => r.status === "completed"
+      ).length ?? 0;
+
+      track("decomposition_batch_completed", {
+        count: imageUrls.length,
+        success_count: successCount,
+        duration_ms: Date.now() - startTime,
+      });
+
+      toast.success(`Decomposed ${successCount} of ${imageUrls.length} ads`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Batch failed";
+      toast.error(msg);
+    } finally {
+      setBatchDecomposing(false);
+    }
+  };
+
+  const handleSendToBuilder = (images: CreativeImage[], texts: CreativeText[]) => {
+    setDecomposeAd(null);
+    setBuilderInitialImages(images);
+    setBuilderInitialTexts(texts);
+    setShowCreativeBuilder(true);
+  };
+
   if (loading) {
     return (
       <div className="space-y-6 p-8">
@@ -244,8 +309,23 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
             <Button
               variant="outline"
               size="sm"
+              onClick={handleBatchDecompose}
+              disabled={batchDecomposing || board.ads.length === 0}
+            >
+              {batchDecomposing ? (
+                <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+              ) : (
+                <Scissors className="mr-1.5 size-3.5" />
+              )}
+              {batchDecomposing ? "Decomposing..." : "Batch Decompose"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
                 track("board_creative_builder_opened", { ad_id: "" });
+                setBuilderInitialImages(undefined);
+                setBuilderInitialTexts(undefined);
                 setShowCreativeBuilder(true);
               }}
             >
@@ -322,6 +402,10 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
               onAnalyze={() => {
                 track("board_ad_analyzed", { ad_id: ad.id, cached: false });
                 setAnalyzeAd(ad);
+              }}
+              onDecompose={() => {
+                track("decomposition_modal_opened", { source: "board", ad_id: ad.id });
+                setDecomposeAd(ad);
               }}
             />
           ))}
@@ -438,7 +522,13 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
       {/* Creative Builder Modal */}
       <CreativeBuilderModal
         open={showCreativeBuilder}
-        onClose={() => setShowCreativeBuilder(false)}
+        onClose={() => {
+          setShowCreativeBuilder(false);
+          setBuilderInitialImages(undefined);
+          setBuilderInitialTexts(undefined);
+        }}
+        initialImages={builderInitialImages}
+        initialTexts={builderInitialTexts}
       />
 
       {/* Analyze Modal */}
@@ -447,6 +537,18 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
           savedAd={analyzeAd}
           open={!!analyzeAd}
           onClose={() => setAnalyzeAd(null)}
+        />
+      )}
+
+      {/* Decomposition Modal */}
+      {decomposeAd && decomposeAd.imageUrl && (
+        <DecompositionModal
+          open={!!decomposeAd}
+          onClose={() => setDecomposeAd(null)}
+          imageUrl={decomposeAd.imageUrl}
+          sourceType="saved_ad"
+          sourceId={decomposeAd.id}
+          onSendToBuilder={handleSendToBuilder}
         />
       )}
     </div>
@@ -460,11 +562,13 @@ function SavedAdCard({
   onDelete,
   onVariations,
   onAnalyze,
+  onDecompose,
 }: {
   ad: SavedAd;
   onDelete: () => void;
   onVariations: () => void;
   onAnalyze: () => void;
+  onDecompose: () => void;
 }) {
   const formatIcon =
     ad.format === "video" ? Video : ad.format === "carousel" ? Layers : ImageIcon;
@@ -564,6 +668,15 @@ function SavedAdCard({
           >
             <Brain className="mr-1.5 size-3.5" />
             Analyze
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={onDecompose}
+          >
+            <Scissors className="mr-1.5 size-3.5" />
+            Decompose
           </Button>
           <Button
             variant="ghost"
