@@ -52,6 +52,25 @@ export async function updateWorkspaceTimezoneAction(
   return { success: true };
 }
 
+// ─── Meta Disconnect ─────────────────────────────────────────────────────────
+
+export async function disconnectMetaAction(): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { success: false, error: "No workspace" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("workspaces")
+    .update({ meta_access_token: null })
+    .eq("id", workspace.id);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 // ─── Fetch Brand Guidelines ────────────────────────────────────────────────
 
 export async function fetchBrandGuidelines(): Promise<{

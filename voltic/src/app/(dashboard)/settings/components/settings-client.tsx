@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, ArrowRight, Check, ChevronsUpDown, Loader2, Globe, Chrome, Copy, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { BookOpen, ArrowRight, Check, ChevronsUpDown, Loader2, Globe, Chrome, Copy, Eye, EyeOff, AlertCircle, Unlink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -25,7 +25,7 @@ import { toast } from "sonner";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { track } from "@/lib/analytics/events";
 import { createClient } from "@/lib/supabase/client";
-import { updateWorkspaceTimezoneAction } from "../actions";
+import { updateWorkspaceTimezoneAction, disconnectMetaAction } from "../actions";
 
 // ─── Timezone helpers ────────────────────────────────────────────────────────
 
@@ -85,6 +85,10 @@ export default function SettingsClient() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Meta connection state
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // API Token state
   const [apiToken, setApiToken] = useState<string | null>(null);
@@ -153,6 +157,121 @@ export default function SettingsClient() {
 
         {/* ── General ─────────────────────────────────────────────────── */}
         <TabsContent value="general" className="mt-6 space-y-6">
+          {/* Meta Connection */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-blue-600">
+                  <path
+                    d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"
+                    fill="currentColor"
+                  />
+                </svg>
+                Meta Connection
+              </CardTitle>
+              <CardDescription>
+                Connect your Meta (Facebook) account to sync ad accounts, campaigns,
+                and performance metrics.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {workspace.meta_connected ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-emerald-600">
+                    <Check className="size-4" />
+                    <span className="font-medium">Meta account connected</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        setSyncing(true);
+                        try {
+                          const res = await fetch("/api/meta/sync", { method: "POST" });
+                          const data = await res.json();
+                          if (data.success) {
+                            track("meta_ad_accounts_synced", { account_count: data.synced_accounts });
+                            toast.success(
+                              `Synced ${data.synced_campaigns} campaigns from ${data.synced_accounts} accounts`
+                            );
+                          } else {
+                            toast.error(data.error || "Sync failed");
+                          }
+                        } finally {
+                          setSyncing(false);
+                        }
+                      }}
+                      disabled={syncing}
+                    >
+                      {syncing ? (
+                        <>
+                          <Loader2 className="mr-1.5 size-4 animate-spin" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-1.5 size-4" />
+                          Sync Now
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        track("meta_connect_initiated");
+                        window.location.href = "/api/auth/meta";
+                      }}
+                    >
+                      Reconnect
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={async () => {
+                        setDisconnecting(true);
+                        const res = await disconnectMetaAction();
+                        setDisconnecting(false);
+                        if (res.success) {
+                          track("meta_disconnected");
+                          toast.success("Meta account disconnected");
+                          router.refresh();
+                        } else {
+                          toast.error(res.error || "Failed to disconnect");
+                        }
+                      }}
+                      disabled={disconnecting}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      {disconnecting ? (
+                        <Loader2 className="mr-1.5 size-4 animate-spin" />
+                      ) : (
+                        <Unlink className="mr-1.5 size-4" />
+                      )}
+                      Disconnect
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  onClick={() => {
+                    track("meta_connect_initiated");
+                    window.location.href = "/api/auth/meta";
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="mr-1.5">
+                    <path
+                      d="M12 2C6.477 2 2 6.477 2 12c0 4.991 3.657 9.128 8.438 9.879V14.89h-2.54V12h2.54V9.797c0-2.506 1.492-3.89 3.777-3.89 1.094 0 2.238.195 2.238.195v2.46h-1.26c-1.243 0-1.63.771-1.63 1.562V12h2.773l-.443 2.89h-2.33v6.989C18.343 21.129 22 16.99 22 12c0-5.523-4.477-10-10-10z"
+                      fill="currentColor"
+                    />
+                  </svg>
+                  Connect Meta Account
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center gap-2">

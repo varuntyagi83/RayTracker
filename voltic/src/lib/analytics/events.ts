@@ -99,6 +99,14 @@ export interface EventPropertiesMap {
   settings_updated: { section: string };
   api_token_copied: Record<string, never>;
 
+  // Meta Connection
+  meta_connect_initiated: Record<string, never>;
+  meta_connected: { ad_account_count: number };
+  meta_connect_failed: { error: string };
+  meta_disconnected: Record<string, never>;
+  meta_ad_accounts_synced: { account_count: number };
+  meta_campaigns_synced: { workspace_id: string; ad_account_id: string; campaign_count: number };
+
   // Extension (server-side)
   extension_auth_validated: { workspace_id: string };
   extension_ad_saved: {

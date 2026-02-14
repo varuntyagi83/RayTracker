@@ -10,6 +10,7 @@ export interface Workspace {
   currency: string;
   credit_balance: number;
   settings: Record<string, unknown>;
+  meta_connected: boolean;
 }
 
 interface WorkspaceContextValue {
