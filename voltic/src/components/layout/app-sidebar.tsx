@@ -9,6 +9,8 @@ import {
   Search,
   LayoutGrid,
   Image,
+  BookOpen,
+  MessageSquareText,
   Plus,
   TrendingUp,
   LineChart,
@@ -56,6 +58,8 @@ const mainNavItems = [
   { label: "Discover", href: "/discover", icon: Search },
   { label: "Boards", href: "/boards", icon: LayoutGrid },
   { label: "Assets", href: "/assets", icon: Image },
+  { label: "Brand Guidelines", href: "/brand-guidelines", icon: BookOpen },
+  { label: "Creative Studio", href: "/creative-studio", icon: MessageSquareText },
 ];
 
 const reportItems = [
@@ -262,7 +266,10 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
                 side="top"
                 sideOffset={4}
               >
-                <DropdownMenuItem className="gap-2">
+                <DropdownMenuItem
+                  className="gap-2"
+                  onClick={() => router.push("/settings")}
+                >
                   <Settings className="size-4" />
                   Settings
                 </DropdownMenuItem>

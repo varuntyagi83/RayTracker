@@ -500,6 +500,90 @@ export const comments = pgTable(
   ]
 );
 
+// Phase 14 Extension tables
+
+export const brandGuidelinesTable = pgTable(
+  "brand_guidelines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    brandName: text("brand_name"),
+    brandVoice: text("brand_voice"),
+    colorPalette: jsonb("color_palette").notNull().default([]),
+    typography: jsonb("typography").notNull().default({}),
+    targetAudience: text("target_audience"),
+    dosAndDonts: text("dos_and_donts"),
+    logoUrl: text("logo_url"),
+    files: jsonb("files").notNull().default([]),
+    isDefault: boolean("is_default").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("brand_guidelines_workspace_slug_idx").on(
+      table.workspaceId,
+      table.slug
+    ),
+    index("idx_brand_guidelines_workspace_id").on(table.workspaceId),
+  ]
+);
+
+export const studioConversations = pgTable(
+  "studio_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    title: text("title").notNull().default("New Conversation"),
+    llmProvider: text("llm_provider").notNull().default("openai"),
+    llmModel: text("llm_model").notNull().default("gpt-4o"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_studio_conversations_workspace_id").on(table.workspaceId),
+  ]
+);
+
+export const studioMessages = pgTable(
+  "studio_messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => studioConversations.id, { onDelete: "cascade" }),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+    mentions: jsonb("mentions").notNull().default([]),
+    resolvedContext: jsonb("resolved_context"),
+    attachments: jsonb("attachments").notNull().default([]),
+    creditsUsed: integer("credits_used").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_studio_messages_conversation_id").on(table.conversationId),
+    index("idx_studio_messages_workspace_id").on(table.workspaceId),
+  ]
+);
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
@@ -518,6 +602,9 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   comments: many(comments),
   adInsights: many(adInsights),
   adComparisons: many(adComparisons),
+  brandGuidelines: many(brandGuidelinesTable),
+  studioConversations: many(studioConversations),
+  studioMessages: many(studioMessages),
 }));
 
 export const workspaceMembersRelations = relations(
@@ -702,3 +789,38 @@ export const commentsRelations = relations(comments, ({ one }) => ({
     references: [facebookPages.id],
   }),
 }));
+
+export const brandGuidelinesRelations = relations(
+  brandGuidelinesTable,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [brandGuidelinesTable.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);
+
+export const studioConversationsRelations = relations(
+  studioConversations,
+  ({ one, many }) => ({
+    workspace: one(workspaces, {
+      fields: [studioConversations.workspaceId],
+      references: [workspaces.id],
+    }),
+    messages: many(studioMessages),
+  })
+);
+
+export const studioMessagesRelations = relations(
+  studioMessages,
+  ({ one }) => ({
+    conversation: one(studioConversations, {
+      fields: [studioMessages.conversationId],
+      references: [studioConversations.id],
+    }),
+    workspace: one(workspaces, {
+      fields: [studioMessages.workspaceId],
+      references: [workspaces.id],
+    }),
+  })
+);

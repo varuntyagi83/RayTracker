@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
 > Last updated: 2026-02-14
-> Current phase: Phase 13 ✅
+> Current phase: Phase 14 Extension ✅
 
 ## Phase Status
 
@@ -21,7 +21,8 @@
 | 11 | Discover (Ad Library Browser) | ✅ Complete | 2026-02-14 | In-app Meta Ads Library browser with search bar (brand name), active-only toggle, format filter (All/Image/Video/Carousel), sort (Newest/Oldest/Most Impressions), per-page (6/12/24), pagination. 3-col responsive grid cards with brand name, "Live" badge, runtime days badge, media thumbnail, format+date, headline, body copy, landing page URL, platform icons (FB/IG/MSG/AN), impression range. "Add to Board" popover with board selector (loads workspace boards from DB), save-to-board server action inserting into saved_ads. "View in Ads Library" external link. Types: types/discover.ts with DiscoverAd, DiscoverSearchParams, DiscoverSearchResult, BoardOption. Data layer: lib/data/discover.ts with searchAdsLibrary (wraps scrapeAdsLibrary with filter/sort/paginate), getWorkspaceBoards, saveAdToBoard. Server actions: discover/actions.ts with fetchDiscoverAds, fetchBoards, saveToBoard. Components: discover-client.tsx with AdCard sub-component. npx tsc --noEmit passes clean. |
 | 12 | Boards (Swipe Files) | ✅ Complete | 2026-02-14 | Board list page with 4-col grid cards (thumbnail mosaic, ad count, description), create/edit/delete board dialogs with confirmation. Board detail page with back nav, format filter (All/Image/Video/Carousel), 3-col saved ad grid with brand name, format badge, thumbnail, headline, body, landing page link, runtime days, source badge, "Variations" button (disabled, Phase 14), remove ad with confirmation. Full CRUD: types/boards.ts (Board, SavedAd, BoardWithAds), lib/data/boards.ts (getBoards, getBoardWithAds, createBoard, updateBoard, deleteBoard, removeAdFromBoard, getBoardThumbnails), boards/actions.ts (6 server actions with Zod validation). Added shadcn alert-dialog + toggle-group. npx tsc --noEmit passes clean. |
 | 13 | Assets / Product Catalog | ✅ Complete | 2026-02-14 | Product catalog with 4-col grid, search with debounce, add/edit/delete modals. Image upload to Supabase Storage (assets bucket) with 5MB limit, JPG/PNG/WebP/GIF validation, drag-to-replace. Asset cards with square aspect-ratio image, name, description, date. Full CRUD: types/assets.ts (Asset), lib/data/assets.ts (getAssets, getAsset, createAsset, updateAsset, deleteAsset, uploadAssetImage, deleteAssetImage), assets/actions.ts (fetchAssets, createAssetAction, updateAssetAction, deleteAssetAction with FormData). Storage cleanup on delete/replace. npx tsc --noEmit passes clean. |
-| 14 | AI Creative Variations | ⬜ Not started | | |
+| 14 | AI Creative Variations + Brand Guidelines + Creative Builder | ✅ Complete | 2026-02-14 | Three interconnected features: (1) Brand Guidelines Settings page — text fields (brand name, voice, color palette, target audience, do's & don'ts) + file uploads (PDF/PNG/JPG/SVG, max 5 files, 10MB each) stored in workspace settings JSONB + Supabase Storage brand-assets bucket. Settings wired into sidebar navigation. (2) AI Variations — 6 strategies (Hero Product, Curiosity, Pain Point, Proof Point, Image Only, Text Only) using GPT-4o for text + DALL-E 3 for images, brand guidelines injected into prompts, 10 credits per variation, variation modal with asset selector + strategy checkboxes + results view. (3) Creative Builder — N×M combination grid from uploaded images + text entries, Manual mode (free) + AI-Enhanced mode (5 credits per combo, GPT-4o improves copy), brand guidelines applied. New files: types/variations.ts (expanded), lib/data/brand-guidelines.ts, lib/ai/creative-enhance.ts, lib/ai/variations.ts (modified), settings/page.tsx, settings/components/settings-client.tsx, settings/actions.ts, boards/actions.ts (expanded), boards/[id]/components/variation-modal.tsx, boards/[id]/components/creative-builder-modal.tsx, boards/[id]/board-detail-client.tsx (modified), app-sidebar.tsx (modified). npx tsc --noEmit passes clean. |
+| 14+ | AI Brand Guidelines Builder + Creative Studio + Multi-LLM | ✅ Complete | 2026-02-14 | Extension of Phase 14 with 3 major features: (1) AI Brand Guidelines Builder — Upload images/videos, LLM analyzes them and generates structured guidelines (brand name, voice, colors, typography, audience, do's/don'ts). Multiple named entities per workspace with slugs for @mention. Professional PDF export via @react-pdf/renderer. 4-step wizard: Name → Upload → AI Generate → Review/Edit. CRUD with logo/file management. (2) Creative Studio — New /creative-studio chat page with conversation sidebar, streaming LLM responses, @mention autocomplete via Tiptap editor (brand guidelines + assets), "Save as Asset" for AI outputs. (3) Multi-LLM Support — OpenAI GPT-4o, Anthropic Claude Sonnet 4, Google Gemini 2.0 Flash with user-selectable dropdown. Vercel AI SDK (ai + @ai-sdk/*) for unified provider abstraction. New DB tables: brand_guidelines, studio_conversations, studio_messages. Settings page updated to redirect to dedicated brand guidelines page. 29 files created/modified. npx tsc --noEmit passes clean. |
 | 15 | Chrome Extension | ⬜ Not started | | |
 | 16 | PostHog Deep Integration | ⬜ Not started | | |
 | 17 | Credit System & Billing | ⬜ Not started | | |
@@ -35,12 +36,47 @@
 
 ## Context for Next Session
 
-Phase 13 complete. Assets / Product Catalog fully implemented. Key new/modified files:
-- `voltic/src/types/assets.ts` — NEW: Asset type.
-- `voltic/src/lib/data/assets.ts` — NEW: getAssets, getAsset, createAsset, updateAsset, deleteAsset, uploadAssetImage, deleteAssetImage.
-- `voltic/src/app/(dashboard)/assets/actions.ts` — NEW: 4 server actions (fetchAssets, createAssetAction, updateAssetAction, deleteAssetAction) with FormData handling for image upload.
-- `voltic/src/app/(dashboard)/assets/components/assets-client.tsx` — NEW: Full assets page with search, grid, add/edit/delete, image upload with preview.
-- `voltic/src/app/(dashboard)/assets/page.tsx` — UPDATED: Replaced placeholder with AssetsClient.
-- **Note:** User must create an `assets` bucket in Supabase Storage (public, allow image/* uploads) for image uploads to work.
-- `npx tsc --noEmit` passes clean.
-- Phase 14 should implement AI Creative Variations — 6 strategies, product selector, generation pipeline, credits.
+Phase 14 Extension complete. AI Brand Guidelines Builder + Creative Studio + Multi-LLM fully implemented. Key new/modified files:
+
+**New DB (migration: `003_creative_studio.sql`):**
+- `brand_guidelines` — Named brand guideline entities (name, slug, brand_name, brand_voice, color_palette JSONB, typography JSONB, target_audience, dos_and_donts, logo_url, files JSONB, is_default)
+- `studio_conversations` — Chat sessions with LLM provider/model selection
+- `studio_messages` — Chat messages with mentions, resolved_context, attachments, credits_used
+- `studio-attachments` Storage bucket
+
+**New Types:**
+- `voltic/src/types/brand-guidelines.ts` — ColorSwatch, Typography, BrandGuidelineFile, BrandGuidelineEntity, BrandGuidelineInput, GeneratedBrandGuidelines
+- `voltic/src/types/creative-studio.ts` — LLMProvider, LLM_MODELS, Mention, StudioConversation, StudioMessage, MentionableItem
+
+**New Data Layer:**
+- `voltic/src/lib/data/brand-guidelines-entities.ts` — Full CRUD for brand_guidelines table (list, getById, getBySlug, getDefault, create, update, delete, setDefault, uploadLogo, uploadFile, deleteFile)
+- `voltic/src/lib/data/studio.ts` — Conversations CRUD, messages CRUD, getMentionableItems (autocomplete), resolveMentions, buildMentionContext
+
+**New AI Layer:**
+- `voltic/src/lib/ai/providers.ts` — Multi-LLM abstraction (OpenAI, Anthropic, Google via Vercel AI SDK)
+- `voltic/src/lib/ai/brand-guidelines-generator.ts` — Vision-based brand analysis from uploaded images
+
+**New PDF:**
+- `voltic/src/lib/pdf/brand-guidelines-pdf.tsx` — Professional @react-pdf/renderer template
+- `voltic/src/app/api/brand-guidelines/[id]/pdf/route.ts` — PDF download endpoint
+
+**New Pages:**
+- `/brand-guidelines` — 4-col card grid, AI wizard (4 steps), editor with logo/file management, PDF export, set default
+- `/creative-studio` — Conversation sidebar + streaming chat + @mention Tiptap editor + LLM selector + Save as Asset
+- `voltic/src/app/api/studio/chat/route.ts` — Streaming chat API with mention resolution
+
+**Modified:**
+- `voltic/src/lib/data/brand-guidelines.ts` — Backward compat (checks new table first, falls back to legacy JSONB)
+- `voltic/src/db/schema.ts` — 3 new Drizzle tables + relations
+- `voltic/src/components/layout/app-sidebar.tsx` — Added Brand Guidelines + Creative Studio nav items
+- `voltic/src/app/(dashboard)/settings/components/settings-client.tsx` — Replaced form with link to /brand-guidelines
+
+**Shared Components:**
+- `voltic/src/components/shared/mention-editor.tsx` — Tiptap @mention editor with async autocomplete dropdown
+
+**Notes:**
+- User must run `003_creative_studio.sql` migration in Supabase
+- User must create `studio-attachments` Storage bucket in Supabase (public)
+- User must add `ANTHROPIC_API_KEY` and `GOOGLE_GENERATIVE_AI_API_KEY` to .env.local
+- `npx tsc --noEmit` passes clean
+- Phase 15 should implement the Chrome Extension

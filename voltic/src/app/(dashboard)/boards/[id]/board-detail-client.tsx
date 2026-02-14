@@ -12,6 +12,7 @@ import {
   Layers,
   LayoutGrid,
   Pencil,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -47,6 +48,8 @@ import {
   updateBoardAction,
   deleteBoardAction,
 } from "../actions";
+import VariationModal from "./components/variation-modal";
+import CreativeBuilderModal from "./components/creative-builder-modal";
 import type { BoardWithAds, SavedAd } from "@/types/boards";
 
 const FORMAT_OPTIONS = [
@@ -76,6 +79,12 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
   // Delete board
   const [deleteBoardOpen, setDeleteBoardOpen] = useState(false);
   const [deletingBoard, setDeletingBoard] = useState(false);
+
+  // Variation modal
+  const [variationAd, setVariationAd] = useState<SavedAd | null>(null);
+
+  // Creative builder modal
+  const [showCreativeBuilder, setShowCreativeBuilder] = useState(false);
 
   const loadBoard = useCallback(async () => {
     const result = await fetchBoard({ boardId });
@@ -213,6 +222,14 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCreativeBuilder(true)}
+            >
+              <Wand2 className="mr-1.5 size-3.5" />
+              Creative Builder
+            </Button>
             <Button variant="outline" size="sm" onClick={openEditDialog}>
               <Pencil className="mr-1.5 size-3.5" />
               Edit
@@ -276,6 +293,7 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
               key={ad.id}
               ad={ad}
               onDelete={() => setDeletingAd(ad)}
+              onVariations={() => setVariationAd(ad)}
             />
           ))}
         </div>
@@ -378,6 +396,21 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Variation Modal */}
+      {variationAd && (
+        <VariationModal
+          savedAd={variationAd}
+          open={!!variationAd}
+          onClose={() => setVariationAd(null)}
+        />
+      )}
+
+      {/* Creative Builder Modal */}
+      <CreativeBuilderModal
+        open={showCreativeBuilder}
+        onClose={() => setShowCreativeBuilder(false)}
+      />
     </div>
   );
 }
@@ -387,9 +420,11 @@ export default function BoardDetailClient({ boardId }: { boardId: string }) {
 function SavedAdCard({
   ad,
   onDelete,
+  onVariations,
 }: {
   ad: SavedAd;
   onDelete: () => void;
+  onVariations: () => void;
 }) {
   const formatIcon =
     ad.format === "video" ? Video : ad.format === "carousel" ? Layers : ImageIcon;
@@ -478,7 +513,12 @@ function SavedAdCard({
 
         {/* Actions */}
         <div className="border-t px-4 py-2 flex items-center gap-2">
-          <Button variant="outline" size="sm" className="flex-1" disabled>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={onVariations}
+          >
             <Sparkles className="mr-1.5 size-3.5" />
             Variations
           </Button>
