@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { track } from "@/lib/analytics/events";
@@ -19,7 +18,6 @@ import {
 } from "@/components/ui/card";
 
 export default function SignupPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
@@ -64,8 +62,7 @@ export default function SignupPage() {
         return;
       }
       track("signup_completed", { method: "google" });
-      router.push("/home");
-      router.refresh();
+      window.location.href = "/home";
       return;
     }
 
@@ -112,8 +109,7 @@ export default function SignupPage() {
         return;
       }
       track("signup_completed", { method: "email" });
-      router.push("/home");
-      router.refresh();
+      window.location.href = "/home";
       return;
     }
 
