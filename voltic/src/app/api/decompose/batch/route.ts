@@ -146,14 +146,17 @@ export async function POST(request: Request) {
       let cleanImageUrl: string | null = null;
       if (body.generate_clean_images && decomResult.product.detected) {
         try {
-          const marketingTexts = decomResult.texts
-            .filter((t) => t.type !== "brand")
-            .map((t) => t.content);
+          const overlayTexts = decomResult.texts.filter((t) => t.type !== "brand");
+          const marketingTexts = overlayTexts.map((t) => t.content);
+          const boundingBoxes = overlayTexts
+            .filter((t) => t.bounding_box)
+            .map((t) => t.bounding_box!);
 
-          if (marketingTexts.length > 0) {
+          if (marketingTexts.length > 0 && boundingBoxes.length > 0) {
             cleanImageUrl = await generateCleanProductImage(
               imageUrl,
               marketingTexts,
+              boundingBoxes,
               workspaceId,
               record.id
             );

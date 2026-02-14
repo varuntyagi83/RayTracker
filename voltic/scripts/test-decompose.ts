@@ -44,7 +44,13 @@ Return ONLY valid JSON matching this exact schema:
       "type": "headline" | "subheadline" | "body" | "cta" | "legal" | "brand",
       "position": "top" | "center" | "bottom" | "overlay",
       "estimated_font_size": "large" | "medium" | "small",
-      "confidence": 0.0 to 1.0
+      "confidence": 0.0 to 1.0,
+      "bounding_box": {
+        "x": 0 to 100,
+        "y": 0 to 100,
+        "width": 0 to 100,
+        "height": 0 to 100
+      }
     }
   ],
   "product": {
@@ -68,6 +74,15 @@ Return ONLY valid JSON matching this exact schema:
 Type classification rules:
 - "headline" / "subheadline" / "body" / "cta" / "legal" → ONLY for marketing overlay text (digitally added to the ad)
 - "brand" → ONLY for text physically printed on the product packaging
+
+Bounding box rules:
+- bounding_box values are PERCENTAGES of the image dimensions (0 to 100)
+- x = left edge of the text block as % from image left
+- y = top edge of the text block as % from image top
+- width = width of the text block as % of image width
+- height = height of the text block as % of image height
+- Be generous with bounding boxes — include some padding around the text (add ~2-3% padding on all sides)
+- Every text entry MUST have a bounding_box
 
 Other rules:
 - Capture EVERY piece of visible text exactly as written — even tiny text on product labels
@@ -255,40 +270,91 @@ async function runTest(imageInput: string): Promise<void> {
   console.log(`   Text overlay on image: ${result.layout.text_overlay_on_image}`);
   console.log(`   Brand elements: ${result.layout.brand_elements.join(", ") || "none"}`);
 
-  // ─── Test 6: Clean Product Image (gpt-image-1 inpainting) ──────────────
+  // ─── Test 6: Bounding Box Validation ─────────────────────────────────
+
+  console.log(`\n🔬 Test 6: Bounding box validation...`);
+  const textsWithBoxes = result.texts.filter((t: ExtractedText) => t.bounding_box);
+  const textsWithoutBoxes = result.texts.filter((t: ExtractedText) => !t.bounding_box);
+  console.log(`   Texts with bounding boxes: ${textsWithBoxes.length}/${result.texts.length}`);
+  if (textsWithoutBoxes.length > 0) {
+    console.log(`   ⚠️  Missing bounding boxes for: ${textsWithoutBoxes.map((t: ExtractedText) => t.content).join(", ")}`);
+  }
+  for (const t of textsWithBoxes) {
+    const bb = t.bounding_box!;
+    console.log(`      [${t.type.toUpperCase()}] "${t.content}" → box(x:${bb.x}%, y:${bb.y}%, w:${bb.width}%, h:${bb.height}%)`);
+  }
+
+  // ─── Test 7: Mask-Based Clean Product Image (gpt-image-1 inpainting) ──
 
   let cleanImageUrl: string | null = null;
-  console.log(`\n🔬 Test 6: Clean product image generation (gpt-image-1 inpainting)...`);
+  console.log(`\n🔬 Test 7: Mask-based clean product image (gpt-image-1 inpainting)...`);
 
-  if (marketingTexts.length > 0 && result.product.detected) {
+  const overlayTextsWithBoxes = marketingTexts.filter((t: ExtractedText) => t.bounding_box);
+
+  if (overlayTextsWithBoxes.length > 0 && result.product.detected) {
     const cleanStartTime = Date.now();
     try {
-      const textsToRemove = marketingTexts.map((t: ExtractedText) => t.content);
+      const textsToRemove = overlayTextsWithBoxes.map((t: ExtractedText) => t.content);
+      const boxes = overlayTextsWithBoxes.map((t: ExtractedText) => t.bounding_box!);
       console.log(`   Texts to remove: ${textsToRemove.map((t: string) => `"${t}"`).join(", ")}`);
+      console.log(`   Bounding boxes: ${boxes.length}`);
 
-      // Use gpt-image-1 images.edit() to inpaint
-      const imgResp = await fetch(imageUrl.startsWith("data:") ? imageUrl : imageUrl);
+      // Fetch and convert image
       let imgBuffer: Buffer;
       if (imageUrl.startsWith("data:")) {
         const base64Part = imageUrl.split(",")[1];
         imgBuffer = Buffer.from(base64Part, "base64");
       } else {
+        const imgResp = await fetch(imageUrl);
         imgBuffer = Buffer.from(await imgResp.arrayBuffer());
       }
 
-      // Convert to PNG using sharp
       const sharp = (await import("sharp")).default;
       const pngBuffer = await sharp(imgBuffer).png().toBuffer();
+      const metadata = await sharp(pngBuffer).metadata();
+      const imgWidth = metadata.width ?? 1024;
+      const imgHeight = metadata.height ?? 1024;
+      console.log(`   Image dimensions: ${imgWidth}x${imgHeight}`);
 
+      // Generate mask
+      let mask = sharp({
+        create: {
+          width: imgWidth,
+          height: imgHeight,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 255 },
+        },
+      }).png();
+
+      const overlays = boxes.map((box: { x: number; y: number; width: number; height: number }) => {
+        const x = Math.max(0, Math.round((box.x / 100) * imgWidth));
+        const y = Math.max(0, Math.round((box.y / 100) * imgHeight));
+        const w = Math.min(imgWidth - x, Math.round((box.width / 100) * imgWidth));
+        const h = Math.min(imgHeight - y, Math.round((box.height / 100) * imgHeight));
+        console.log(`      Mask rect: x=${x}, y=${y}, w=${w}, h=${h} (px)`);
+        const rect = Buffer.alloc(w * h * 4, 0);
+        return { input: rect, raw: { width: w, height: h, channels: 4 as const }, left: x, top: y };
+      });
+
+      const maskBuffer = await mask.composite(overlays).png().toBuffer();
+
+      // Save mask for visual inspection
+      const maskPath = path.join(path.dirname(path.resolve(imageInput)), "test-mask.png");
+      fs.writeFileSync(maskPath, maskBuffer);
+      console.log(`   📁 Mask saved to: ${maskPath}`);
+
+      // Call gpt-image-1 with mask
       const { toFile } = await import("openai");
-      const file = await toFile(pngBuffer, "original.png", { type: "image/png" });
+      const imageFile = await toFile(pngBuffer, "original.png", { type: "image/png" });
+      const maskFile = await toFile(maskBuffer, "mask.png", { type: "image/png" });
 
       const textList = textsToRemove.map((t: string) => `"${t}"`).join(", ");
-      const prompt = `Edit this advertisement image: remove ONLY the following digitally composited marketing overlay text: ${textList}. Fill the removed text areas seamlessly with the surrounding background. Keep the product with ALL its packaging text, the background, props, and styling EXACTLY as they are. Do NOT change, move, or alter the product, its packaging, or any other visual element.`;
+      const prompt = `Fill the masked areas seamlessly with the surrounding background. The masked areas previously contained marketing text: ${textList}. Match the background color, texture, and lighting exactly. Do NOT alter any unmasked areas.`;
 
       const editResponse = await client.images.edit({
         model: "gpt-image-1",
-        image: file,
+        image: imageFile,
+        mask: maskFile,
         prompt,
         size: "1024x1024" as "1024x1024",
       });
@@ -302,13 +368,120 @@ async function runTest(imageInput: string): Promise<void> {
 
       const cleanDuration = Date.now() - cleanStartTime;
       cleanImageUrl = outputPath;
-      console.log(`   ✅ Clean product image generated in ${cleanDuration}ms`);
+      console.log(`   ✅ Mask-based clean product image generated in ${cleanDuration}ms`);
       console.log(`   📁 Saved to: ${outputPath}`);
     } catch (err) {
       console.log(`   ❌ Clean image generation failed:`, err);
     }
   } else {
-    console.log("   ⚠️  Skipped (no marketing text or no product detected)");
+    console.log("   ⚠️  Skipped (no marketing text with bounding boxes or no product detected)");
+  }
+
+  // ─── Test 8: Gemini 2.5 Flash Fallback Image Editing ────────────────
+
+  let geminiCleanImageUrl: string | null = null;
+  console.log(`\n🔬 Test 8: Gemini 2.5 Flash fallback image editing...`);
+
+  const GOOGLE_API_KEY = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!GOOGLE_API_KEY) {
+    console.log("   ⚠️  Skipped (GOOGLE_GENERATIVE_AI_API_KEY not set)");
+  } else if (overlayTextsWithBoxes.length === 0 || !result.product.detected) {
+    console.log("   ⚠️  Skipped (no marketing text with bounding boxes or no product detected)");
+  } else {
+    const geminiStartTime = Date.now();
+    try {
+      const textsToRemove = overlayTextsWithBoxes.map((t: ExtractedText) => t.content);
+      const boxes = overlayTextsWithBoxes.map((t: ExtractedText) => t.bounding_box!);
+
+      // Reuse image/mask buffers from Test 7
+      let imgBuffer: Buffer;
+      if (imageUrl.startsWith("data:")) {
+        const base64Part = imageUrl.split(",")[1];
+        imgBuffer = Buffer.from(base64Part, "base64");
+      } else {
+        const imgResp = await fetch(imageUrl);
+        imgBuffer = Buffer.from(await imgResp.arrayBuffer());
+      }
+
+      const sharp = (await import("sharp")).default;
+      const geminiPngBuffer = await sharp(imgBuffer).png().toBuffer();
+      const geminiMetadata = await sharp(geminiPngBuffer).metadata();
+      const gW = geminiMetadata.width ?? 1024;
+      const gH = geminiMetadata.height ?? 1024;
+
+      // Generate mask
+      let gmask = sharp({
+        create: { width: gW, height: gH, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 255 } },
+      }).png();
+
+      const gOverlays = boxes.map((box: { x: number; y: number; width: number; height: number }) => {
+        const x = Math.max(0, Math.round((box.x / 100) * gW));
+        const y = Math.max(0, Math.round((box.y / 100) * gH));
+        const w = Math.min(gW - x, Math.round((box.width / 100) * gW));
+        const h = Math.min(gH - y, Math.round((box.height / 100) * gH));
+        const rect = Buffer.alloc(w * h * 4, 0);
+        return { input: rect, raw: { width: w, height: h, channels: 4 as const }, left: x, top: y };
+      });
+
+      const geminiMaskBuffer = await gmask.composite(gOverlays).png().toBuffer();
+
+      const textList = textsToRemove.map((t: string) => `"${t}"`).join(", ");
+      const prompt = `Edit this advertisement image to remove ONLY the marketing overlay text: ${textList}.
+
+Fill the removed text areas seamlessly with the surrounding background color, texture, and lighting. The second image is a reference mask — the lighter/transparent rectangular areas show exactly where the marketing text is located.
+
+CRITICAL: Do NOT alter the product, product packaging text, background, props, colors, or composition. ONLY remove the digitally-added marketing overlay text and fill with background.`;
+
+      console.log(`   Calling Gemini 2.5 Flash...`);
+      const geminiResp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GOOGLE_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { text: prompt },
+                  { inlineData: { mimeType: "image/png", data: geminiPngBuffer.toString("base64") } },
+                  { text: "Reference mask (lighter areas = text to remove):" },
+                  { inlineData: { mimeType: "image/png", data: geminiMaskBuffer.toString("base64") } },
+                ],
+              },
+            ],
+            generationConfig: {
+              responseModalities: ["TEXT", "IMAGE"],
+            },
+          }),
+        }
+      );
+
+      if (!geminiResp.ok) {
+        const errText = await geminiResp.text();
+        throw new Error(`Gemini API error: ${geminiResp.status} — ${errText}`);
+      }
+
+      const geminiData = await geminiResp.json();
+      const geminiParts = geminiData.candidates?.[0]?.content?.parts;
+      if (!geminiParts) throw new Error("Empty response from Gemini");
+
+      const imagePart = geminiParts.find(
+        (p: { inlineData?: { mimeType?: string; data?: string } }) =>
+          p.inlineData?.mimeType?.startsWith("image/")
+      );
+
+      if (!imagePart?.inlineData?.data) throw new Error("No image in Gemini response");
+
+      const geminiOutputPath = path.join(path.dirname(path.resolve(imageInput)), "test-clean-product-gemini.png");
+      fs.writeFileSync(geminiOutputPath, Buffer.from(imagePart.inlineData.data, "base64"));
+
+      const geminiDuration = Date.now() - geminiStartTime;
+      geminiCleanImageUrl = geminiOutputPath;
+      console.log(`   ✅ Gemini clean product image generated in ${geminiDuration}ms`);
+      console.log(`   📁 Saved to: ${geminiOutputPath}`);
+    } catch (err) {
+      console.log(`   ❌ Gemini image editing failed:`, err);
+    }
   }
 
   // ─── Summary ──────────────────────────────────────────────────────────
@@ -320,7 +493,8 @@ async function runTest(imageInput: string): Promise<void> {
   console.log(`║  Marketing texts:          ${String(marketingTexts.length).padStart(3)} ${" ".repeat(25)}║`);
   console.log(`║  Product/packaging texts:  ${String(productTexts.length).padStart(3)} ${" ".repeat(25)}║`);
   console.log(`║  Product detected:         ${result.product.detected ? "Yes" : "No "} ${" ".repeat(25)}║`);
-  console.log(`║  Clean image generated:    ${cleanImageUrl ? "Yes" : "No "} ${" ".repeat(25)}║`);
+  console.log(`║  Clean image (OpenAI):     ${cleanImageUrl ? "Yes" : "No "} ${" ".repeat(25)}║`);
+  console.log(`║  Clean image (Gemini):     ${geminiCleanImageUrl ? "Yes" : "No "} ${" ".repeat(25)}║`);
   console.log(`║  Validation errors:        ${String(errors.length).padStart(3)} ${" ".repeat(25)}║`);
   console.log("╠══════════════════════════════════════════════════════════╣");
 

@@ -30,12 +30,21 @@ export type ProcessingStatus = "pending" | "analyzing" | "completed" | "failed";
 
 // ─── GPT-4o Vision Response Schema ───────────────────────────────────────
 
+/** Bounding box as percentages of image dimensions (0-100) */
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface ExtractedText {
   content: string;
   type: TextType;
   position: TextPosition;
   estimated_font_size: FontSize;
   confidence: number;
+  bounding_box?: BoundingBox;
 }
 
 export interface ProductAnalysis {
