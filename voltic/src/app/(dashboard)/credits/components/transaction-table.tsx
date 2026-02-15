@@ -39,6 +39,7 @@ const TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "variation", label: "Variation" },
   { value: "creative_enhance", label: "Enhancement" },
   { value: "competitor_report", label: "Competitor Report" },
+  { value: "decomposition", label: "Decomposition" },
   { value: "purchase", label: "Purchase" },
   { value: "refund", label: "Refund" },
   { value: "welcome_bonus", label: "Welcome Bonus" },

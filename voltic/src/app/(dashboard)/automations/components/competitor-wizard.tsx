@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -94,6 +94,12 @@ export function CompetitorWizard({
     initState(editAutomation)
   );
   const [saving, setSaving] = useState(false);
+
+  // Re-initialize state when switching between create/edit mode
+  useEffect(() => {
+    setState(initState(editAutomation));
+    setStep(0);
+  }, [editAutomation?.id]);
 
   function update(partial: Partial<CompetitorWizardState>) {
     setState((prev) => ({ ...prev, ...partial }));

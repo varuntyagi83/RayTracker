@@ -20,6 +20,7 @@ export async function getBoards(workspaceId: string): Promise<Board[]> {
   const { data: countRows } = await supabase
     .from("saved_ads")
     .select("board_id")
+    .eq("workspace_id", workspaceId)
     .in("board_id", boardIds);
 
   const countMap: Record<string, number> = {};

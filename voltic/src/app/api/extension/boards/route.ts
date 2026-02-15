@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
     .from("boards")
     .select("id, name")
     .eq("workspace_id", auth.workspaceId)
-    .order("name");
+    .order("name")
+    .limit(50);
 
   return NextResponse.json({
     boards: (boards ?? []).map((b) => ({ id: b.id, name: b.name })),

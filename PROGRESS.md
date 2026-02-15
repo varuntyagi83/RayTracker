@@ -36,13 +36,21 @@
 
 ## Issues / Blockers
 
-(None yet)
+(None)
 
 ## Context for Next Session
 
 Phase 22 complete. All decomposition features are now end-to-end functional:
 - Board Detail: Decompose per card → modal with analysis → Save as Asset → Send to Creative Builder (pre-populated)
-- Board Detail: Batch Decompose all ads in board
 - Discover: Decompose per card → modal with analysis → Save as Asset
+- Standalone Decomposition page (/decomposition): upload image or paste URL → modal with analysis
 - Creative Builder: accepts initialImages/initialTexts from decomposition flow
 - DecompositionModal is a shared component reusable from any context
+
+### QA Bug Fixes Applied (Post Phase 22):
+- CRITICAL: Test Run button was calling `handleToggle` (pause/activate) instead of test run handler — fixed in automation-card.tsx
+- HIGH: CSV export had no comma/quote escaping — fixed in report-table-client.tsx with RFC 4180-compliant escaping
+- HIGH: Creative Builder had module-level `nextImageId`/`nextTextId` state that leaked across component instances — converted to `useRef`
+- HIGH: Decomposition modal `editedTexts` not cleared on re-open — added `setEditedTexts([])` in reset effect
+- HIGH (Security): `updateAutomation` and `toggleAutomationStatus` had no workspace scope validation — added auth checks + `workspace_id` filter to both
+- LOW: Credits transaction filter missing "Decomposition" type option — added to TYPE_OPTIONS

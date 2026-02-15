@@ -67,6 +67,12 @@ export interface EventPropertiesMap {
   asset_updated: { asset_id: string };
   asset_deleted: { asset_id: string };
 
+  // Creative Builder
+  creative_builder_images_added: { count: number };
+  creative_builder_texts_added: { count: number };
+  creative_builder_enhance_clicked: { combination_count: number; credit_cost: number };
+  creative_builder_enhance_completed: { combination_count: number; success_count: number };
+
   // Creative Studio
   studio_conversation_created: { conversation_id: string };
   studio_message_sent: { conversation_id: string; model: string };

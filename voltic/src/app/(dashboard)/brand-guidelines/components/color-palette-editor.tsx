@@ -58,12 +58,14 @@ export function ColorPaletteEditor({ value, onChange, disabled }: ColorPaletteEd
                   onChange={(e) => updateColor(i, "name", e.target.value)}
                   className="h-6 text-xs border-0 bg-transparent p-0 w-20"
                   disabled={disabled}
+                  aria-label={`Color ${i + 1} name`}
                 />
                 <Input
                   value={color.hex}
                   onChange={(e) => updateColor(i, "hex", e.target.value)}
                   className="h-5 text-xs text-muted-foreground border-0 bg-transparent p-0 w-20 font-mono"
                   disabled={disabled}
+                  aria-label={`Color ${i + 1} hex value`}
                 />
               </div>
               {!disabled && (
@@ -93,6 +95,7 @@ export function ColorPaletteEditor({ value, onChange, disabled }: ColorPaletteEd
             onChange={(e) => setNewHex(e.target.value)}
             placeholder="#FF6B35"
             className="w-28 font-mono text-sm"
+            aria-label="New color hex value"
           />
           <Input
             value={newName}
@@ -100,6 +103,7 @@ export function ColorPaletteEditor({ value, onChange, disabled }: ColorPaletteEd
             placeholder="Color name"
             className="flex-1 text-sm"
             onKeyDown={(e) => e.key === "Enter" && addColor()}
+            aria-label="New color name"
           />
           <Button
             variant="outline"

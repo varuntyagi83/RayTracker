@@ -102,7 +102,8 @@ export async function uploadImageAction(
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const rawSafeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeName = rawSafeName.replace(/^_+|_+$/g, "") || "upload";
   const path = `${member.workspace_id}/uploads/${Date.now()}-${safeName}`;
 
   const { error: uploadError } = await admin.storage

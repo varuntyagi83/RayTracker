@@ -342,7 +342,7 @@ function BoardCard({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-7 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="size-7 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
                   onClick={(e) => e.stopPropagation()}
                   aria-label="More options"
                 >

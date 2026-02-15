@@ -11,10 +11,21 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getUser();
+  let user;
+  let workspace;
+
+  try {
+    user = await getUser();
+  } catch {
+    redirect("/login");
+  }
   if (!user) redirect("/login");
 
-  const workspace = await getWorkspace();
+  try {
+    workspace = await getWorkspace();
+  } catch {
+    redirect("/login");
+  }
   if (!workspace) redirect("/signup");
 
   return (

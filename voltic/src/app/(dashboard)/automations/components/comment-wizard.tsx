@@ -106,6 +106,12 @@ export function CommentWizard({
   );
   const [saving, setSaving] = useState(false);
 
+  // Re-initialize state when switching between create/edit mode
+  useEffect(() => {
+    setState(initState(editAutomation));
+    setStep(0);
+  }, [editAutomation?.id]);
+
   function update(partial: Partial<CommentWizardState>) {
     setState((prev) => ({ ...prev, ...partial }));
   }
@@ -352,6 +358,7 @@ function StepCommentBasics({
   }, []);
 
   const selectedCount = state.config.pages.length;
+  const totalCount = availablePages.length;
   const igCount = state.config.pages.filter((p) => p.hasInstagram).length;
 
   return (
@@ -383,7 +390,7 @@ function StepCommentBasics({
           <Label>Pages</Label>
           {selectedCount > 0 && (
             <Badge variant="secondary" className="text-xs">
-              {selectedCount} page{selectedCount !== 1 ? "s" : ""}
+              {selectedCount}/{totalCount} page{totalCount !== 1 ? "s" : ""}
               {igCount > 0 ? ` · ${igCount} with Instagram` : ""}
             </Badge>
           )}

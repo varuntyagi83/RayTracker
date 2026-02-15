@@ -11,7 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, Pause, Play, Pencil, Zap } from "lucide-react";
+import { MoreHorizontal, Pause, Play, Pencil, Zap, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { toggleAutomationStatus } from "../actions";
 import { track } from "@/lib/analytics/events";
@@ -46,6 +46,8 @@ export function AutomationCard({ automation, onEdit }: AutomationCardProps) {
       ? config.metrics
       : [];
 
+  const [testRunning, setTestRunning] = useState(false);
+
   async function handleToggle() {
     setToggling(true);
     const result = await toggleAutomationStatus(automation.id);
@@ -62,6 +64,25 @@ export function AutomationCard({ automation, onEdit }: AutomationCardProps) {
       toast.error(result.error || "Failed to update automation");
     }
     setToggling(false);
+  }
+
+  async function handleTestRun() {
+    setTestRunning(true);
+    try {
+      const res = await fetch(`/api/automations/${automation.id}/test-run`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        track("automation_test_run", { automation_id: automation.id, success: true });
+        toast.success("Test run completed", { description: "Check your Slack channel for the message." });
+      } else {
+        toast.error(data.error || "Test run failed");
+      }
+    } catch {
+      toast.error("Failed to run test");
+    }
+    setTestRunning(false);
   }
 
   const updatedAt = new Date(automation.updated_at).toLocaleDateString(
@@ -122,9 +143,13 @@ export function AutomationCard({ automation, onEdit }: AutomationCardProps) {
                   </>
                 )}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleToggle} disabled={toggling}>
-                <Zap className="mr-2 h-4 w-4" />
-                Test Run
+              <DropdownMenuItem onClick={handleTestRun} disabled={testRunning}>
+                {testRunning ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Zap className="mr-2 h-4 w-4" />
+                )}
+                {testRunning ? "Running..." : "Test Run"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -68,6 +68,7 @@ export async function createVariation(
 // ─── Update Variation with Generated Content ────────────────────────────────
 
 export async function completeVariation(
+  workspaceId: string,
   variationId: string,
   content: {
     generatedHeadline?: string;
@@ -85,7 +86,8 @@ export async function completeVariation(
       generated_image_url: content.generatedImageUrl ?? null,
       status: "completed",
     })
-    .eq("id", variationId);
+    .eq("id", variationId)
+    .eq("workspace_id", workspaceId);
 
   if (error) return { success: false, error: error.message };
   return { success: true };
@@ -94,13 +96,15 @@ export async function completeVariation(
 // ─── Mark Variation as Failed ───────────────────────────────────────────────
 
 export async function failVariation(
+  workspaceId: string,
   variationId: string
 ): Promise<void> {
   const supabase = createAdminClient();
   await supabase
     .from("variations")
     .update({ status: "failed" })
-    .eq("id", variationId);
+    .eq("id", variationId)
+    .eq("workspace_id", workspaceId);
 }
 
 // ─── Delete Variation ───────────────────────────────────────────────────────

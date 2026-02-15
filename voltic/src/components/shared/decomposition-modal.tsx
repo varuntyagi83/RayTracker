@@ -93,6 +93,7 @@ export default function DecompositionModal({
       reset();
       setSaved(false);
       setAnalysisOpen(false);
+      setEditedTexts([]);
       decompose(imageUrl, sourceType, sourceId);
     }
   }, [open, imageUrl, sourceType, sourceId, decompose, reset]);

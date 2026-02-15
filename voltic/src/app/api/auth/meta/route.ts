@@ -37,6 +37,10 @@ export async function GET(request: NextRequest) {
   const metaAuthUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
   metaAuthUrl.searchParams.set("client_id", process.env.META_APP_ID!);
   metaAuthUrl.searchParams.set("redirect_uri", redirectUri);
+  // OAuth scopes:
+  //   ads_read        — Read ad accounts, campaigns, and creatives for analytics
+  //   read_insights   — Access campaign metrics (spend, revenue, impressions, etc.)
+  //   pages_show_list — List Facebook Pages for comment monitoring automations
   metaAuthUrl.searchParams.set(
     "scope",
     "ads_read,read_insights,pages_show_list"

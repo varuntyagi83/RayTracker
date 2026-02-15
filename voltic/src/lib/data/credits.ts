@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { CreditTransaction, TransactionType } from "@/types/credits";
-import { generateTransactionDescription } from "@/types/credits";
+import { generateTransactionDescription, isUnlimitedCredits } from "@/types/credits";
 
 // ─── Get Paginated Transactions ──────────────────────────────────────────
 
@@ -73,6 +73,11 @@ export async function addCredits(
 
   if (fetchErr || !workspace) {
     return { success: false, newBalance: 0, error: "Workspace not found" };
+  }
+
+  // Skip balance updates for unlimited accounts (avoid noisy transactions)
+  if (isUnlimitedCredits(workspace.credit_balance)) {
+    return { success: true, newBalance: workspace.credit_balance };
   }
 
   const newBalance = workspace.credit_balance + amount;

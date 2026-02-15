@@ -146,7 +146,7 @@ export async function refundCredits(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  // Increment balance
+  // Increment balance with optimistic concurrency
   const { data: workspace } = await supabase
     .from("workspaces")
     .select("credit_balance")
@@ -154,10 +154,28 @@ export async function refundCredits(
     .single();
 
   if (workspace) {
-    await supabase
+    // Optimistic lock: only update if balance hasn't changed since read
+    const { error: updateErr } = await supabase
       .from("workspaces")
       .update({ credit_balance: workspace.credit_balance + amount })
-      .eq("id", workspaceId);
+      .eq("id", workspaceId)
+      .eq("credit_balance", workspace.credit_balance);
+
+    if (updateErr) {
+      // Retry once on conflict — re-read and re-apply
+      const { data: retry } = await supabase
+        .from("workspaces")
+        .select("credit_balance")
+        .eq("id", workspaceId)
+        .single();
+      if (retry) {
+        await supabase
+          .from("workspaces")
+          .update({ credit_balance: retry.credit_balance + amount })
+          .eq("id", workspaceId)
+          .eq("credit_balance", retry.credit_balance);
+      }
+    }
   }
 
   // Record refund transaction
@@ -165,7 +183,7 @@ export async function refundCredits(
     workspace_id: workspaceId,
     amount: amount,
     type: "refund",
-    description: "AI Insight generation failed - credit refund",
+    description: `Credit refund: ${amount} credits returned`,
   });
 }
 

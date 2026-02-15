@@ -48,12 +48,27 @@ export function ChatPanel({
   const editorRef = useRef<MentionEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages — target the Viewport, not the Root
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      const viewport = scrollRef.current.querySelector('[data-slot="scroll-area-viewport"]');
+      if (viewport) {
+        viewport.scrollTop = viewport.scrollHeight;
+      }
     }
   }, [messages, streamContent]);
+
+  // Create stable object URLs for pending file previews (avoid leak on every render)
+  const [filePreviewUrls, setFilePreviewUrls] = useState<(string | null)[]>([]);
+  useEffect(() => {
+    const urls = pendingFiles.map((file) =>
+      file.type.startsWith("image/") ? URL.createObjectURL(file) : null
+    );
+    setFilePreviewUrls(urls);
+    return () => {
+      urls.forEach((url) => url && URL.revokeObjectURL(url));
+    };
+  }, [pendingFiles]);
 
   const handleMentionQuery = useCallback(async (query: string): Promise<MentionableItem[]> => {
     const result = await fetchMentionablesAction({ query });
@@ -243,7 +258,7 @@ export function ChatPanel({
                   key={`${file.name}-${i}`}
                   className="relative group flex items-center gap-1.5 rounded-md border bg-muted/50 px-2 py-1.5 text-xs"
                 >
-                  {file.type.startsWith("image/") ? (                    <Image src={URL.createObjectURL(file) || "/placeholder.svg"} alt={file.name} width={32} height={32} className="rounded object-cover" unoptimized />
+                  {file.type.startsWith("image/") ? (                    <Image src={filePreviewUrls[i] || "/placeholder.svg"} alt={file.name} width={32} height={32} className="rounded object-cover" unoptimized />
                   ) : (
                     <FileText className="size-4 text-muted-foreground" />
                   )}

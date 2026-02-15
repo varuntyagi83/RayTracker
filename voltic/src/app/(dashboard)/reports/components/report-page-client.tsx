@@ -43,6 +43,11 @@ export default function ReportPageClient<T extends Record<string, unknown>>({
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // ─── Track Page View ─────────────────────────────────────────────────────
+  useEffect(() => {
+    track("report_viewed", { report_type: title });
+  }, [title]);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     const dateRange = getDateRangeFromPreset(datePreset);

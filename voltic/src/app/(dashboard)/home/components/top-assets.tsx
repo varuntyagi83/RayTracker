@@ -76,7 +76,7 @@ export function TopAssets({
                 <Card key={c.id} className="w-[220px] shrink-0">
                   <CardContent className="p-0">
                     <div className="relative h-32 w-full overflow-hidden rounded-t-lg bg-muted">
-                      {c.imageUrl ? (                        <Image src={c.imageUrl || "/placeholder.svg"} alt={c.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
+                      {c.imageUrl ? (                        <Image src={c.imageUrl} alt={c.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                       ) : (
                         <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
                           No image
@@ -134,7 +134,7 @@ export function TopAssets({
               </p>
             )}
             {headlines.map((h, i) => (
-              <Card key={i}>
+              <Card key={`headline-${h.headline}-${i}`}>
                 <CardContent className="flex items-center justify-between p-4">
                   <p className="max-w-md truncate text-sm font-medium">
                     {h.headline}
@@ -173,7 +173,7 @@ export function TopAssets({
               </p>
             )}
             {copy.map((c, i) => (
-              <Card key={i}>
+              <Card key={`copy-${c.body}-${i}`}>
                 <CardContent className="flex items-center justify-between p-4">
                   <p className="max-w-md truncate text-sm font-medium">
                     {c.body}
@@ -212,7 +212,7 @@ export function TopAssets({
               </p>
             )}
             {landingPages.map((lp, i) => (
-              <Card key={i}>
+              <Card key={`lp-${lp.landingPageUrl}-${i}`}>
                 <CardContent className="flex items-center justify-between p-4">
                   <p className="max-w-md truncate text-sm font-medium text-blue-600">
                     {lp.landingPageUrl}

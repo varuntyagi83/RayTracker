@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Image from "next/image";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   Save,
@@ -123,7 +124,7 @@ export function BrandGuidelineEditor({
         onUpdated();
       }
     } catch {
-      // Upload failed silently
+      toast.error("Logo upload failed. Please try again.");
     }
 
     setUploadingLogo(false);
@@ -151,7 +152,7 @@ export function BrandGuidelineEditor({
         onUpdated();
       }
     } catch {
-      // Upload failed silently
+      toast.error("File upload failed. Please try again.");
     }
 
     setUploading(false);

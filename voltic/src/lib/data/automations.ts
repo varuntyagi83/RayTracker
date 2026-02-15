@@ -10,6 +10,7 @@ export async function getAutomations(
     .from("automations")
     .select("*")
     .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
   if (error || !data) return [];
@@ -18,6 +19,7 @@ export async function getAutomations(
 }
 
 export async function getAutomation(
+  workspaceId: string,
   automationId: string
 ): Promise<Automation | null> {
   const supabase = createAdminClient();
@@ -26,6 +28,8 @@ export async function getAutomation(
     .from("automations")
     .select("*")
     .eq("id", automationId)
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
     .single();
 
   if (error || !data) return null;

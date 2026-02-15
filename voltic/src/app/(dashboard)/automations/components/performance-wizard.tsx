@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -106,6 +106,12 @@ export function PerformanceWizard({
   );
   const [saving, setSaving] = useState(false);
 
+  // Re-initialize state when switching between create/edit mode
+  useEffect(() => {
+    setState(initState(editAutomation));
+    setStep(0);
+  }, [editAutomation?.id]);
+
   function update(partial: Partial<PerformanceWizardState>) {
     setState((prev) => ({ ...prev, ...partial }));
   }
@@ -183,7 +189,14 @@ export function PerformanceWizard({
     const next = current.includes(m)
       ? current.filter((x) => x !== m)
       : [...current, m];
-    if (next.length > 0) updateConfig({ metrics: next });
+    if (next.length > 0) {
+      const updates: Partial<typeof state.config> = { metrics: next };
+      // Keep sortBy.metric in sync: if current sort metric is removed, default to first
+      if (!next.includes(state.config.sortBy.metric)) {
+        updates.sortBy = { ...state.config.sortBy, metric: next[0] };
+      }
+      updateConfig(updates);
+    }
   }
 
   function togglePeriod(p: TimePeriod) {

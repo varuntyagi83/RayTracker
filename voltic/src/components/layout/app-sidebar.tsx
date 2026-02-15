@@ -14,14 +14,12 @@ import {
   MessageSquareText,
   Scissors,
   Coins,
-  Plus,
   TrendingUp,
   LineChart,
   Palette,
   Link2,
   Type,
   FileText,
-  FolderPlus,
   ChevronDown,
   Settings,
   LogOut,
@@ -33,7 +31,6 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
@@ -190,14 +187,10 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
         {/* Reports Section */}
         <SidebarGroup>
           <SidebarGroupLabel>Reports</SidebarGroupLabel>
-          <SidebarGroupAction title="Create report">
-            <Plus />
-            <span className="sr-only">Create report</span>
-          </SidebarGroupAction>
           <SidebarGroupContent>
             <SidebarMenu>
               {reportItems.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
@@ -225,25 +218,6 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarSeparator />
-
-        {/* Folders Section */}
-        <SidebarGroup>
-          <SidebarGroupLabel>Folders</SidebarGroupLabel>
-          <SidebarGroupAction title="Create folder">
-            <FolderPlus />
-            <span className="sr-only">Create folder</span>
-          </SidebarGroupAction>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton className="text-muted-foreground" disabled>
-                  <span className="text-xs">No folders yet</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
       </SidebarContent>
 
       {/* User Footer */}

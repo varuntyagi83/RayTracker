@@ -161,10 +161,18 @@ export default function DiscoverClient() {
     // Sort
     switch (sort) {
       case "newest":
-        ads.sort((a, b) => b.startDate.localeCompare(a.startDate));
+        ads.sort((a, b) => {
+          const ta = new Date(a.startDate).getTime() || 0;
+          const tb = new Date(b.startDate).getTime() || 0;
+          return tb - ta;
+        });
         break;
       case "oldest":
-        ads.sort((a, b) => a.startDate.localeCompare(b.startDate));
+        ads.sort((a, b) => {
+          const ta = new Date(a.startDate).getTime() || 0;
+          const tb = new Date(b.startDate).getTime() || 0;
+          return ta - tb;
+        });
         break;
       case "impressions":
         ads.sort(
@@ -296,8 +304,9 @@ export default function DiscoverClient() {
       setInsightsMap((prev) => ({ ...prev, [ad.id]: result.data! }));
       setExpandedInsightId(ad.id);
       track("discover_ad_analyzed", { ad_id: ad.id });
+    } else if (result.error) {
+      toast.error(result.error);
     }
-    // TODO: show error toast when result.error
     setAnalyzingAdId(null);
   };
 
@@ -346,6 +355,8 @@ export default function DiscoverClient() {
       setComparisonResult(result.data);
       setShowComparisonDialog(true);
       track("discover_ads_compared", { ad_count: selectedAds.length });
+    } else if (result.error) {
+      toast.error(result.error);
     }
     setIsComparing(false);
   };

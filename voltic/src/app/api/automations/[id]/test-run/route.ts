@@ -58,7 +58,7 @@ export async function POST(
 
   trackServer("automation_test_run", user.id, {
     automation_id: automationId,
-    success: !result.error,
+    success: result.success,
   });
 
   return NextResponse.json(result);

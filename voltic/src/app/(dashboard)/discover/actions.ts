@@ -30,6 +30,8 @@ import type {
 // ─── Existing Actions ────────────────────────────────────────────────────────
 
 export async function fetchDiscoverAds(params: DiscoverSearchParams) {
+  const workspace = await getWorkspace();
+  if (!workspace) return { ads: [], totalCount: 0, error: "No workspace" };
   return await searchAdsLibrary(params);
 }
 

@@ -222,6 +222,7 @@ export async function generateVariationsAction(
     .from("saved_ads")
     .select("*")
     .eq("id", savedAdId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (!adRow) {
@@ -300,7 +301,7 @@ export async function generateVariationsAction(
       }
 
       // Complete variation
-      await completeVariation(variationId, {
+      await completeVariation(workspace.id, variationId, {
         generatedHeadline: textResult.headline,
         generatedBody: textResult.body,
         generatedImageUrl: imageUrl ?? undefined,
@@ -308,7 +309,7 @@ export async function generateVariationsAction(
 
       results.push({ strategy, success: true, variationId });
     } catch (err) {
-      await failVariation(variationId);
+      await failVariation(workspace.id, variationId);
       await refundCredits(workspace.id, VARIATION_CREDIT_COST);
       results.push({
         strategy,

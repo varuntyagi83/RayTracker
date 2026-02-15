@@ -15,13 +15,26 @@ export default async function HomePage() {
   const workspace = await getWorkspace();
   if (!workspace) redirect("/login");
 
-  const [kpis, creatives, headlines, copy, landingPages] = await Promise.all([
+  const emptyKPIs = {
+    adAccountCount: 0,
+    today: { spend: 0, revenue: 0, profit: 0 },
+    yesterday: { spend: 0, revenue: 0, profit: 0 },
+    last7Days: { spend: 0, revenue: 0, profit: 0 },
+  };
+
+  const results = await Promise.allSettled([
     getWorkspaceKPIs(workspace.id),
     getTopCreatives(workspace.id),
     getTopHeadlines(workspace.id),
     getTopCopy(workspace.id),
     getTopLandingPages(workspace.id),
   ]);
+
+  const kpis = results[0].status === "fulfilled" ? results[0].value : emptyKPIs;
+  const creatives = results[1].status === "fulfilled" ? results[1].value : [];
+  const headlines = results[2].status === "fulfilled" ? results[2].value : [];
+  const copy = results[3].status === "fulfilled" ? results[3].value : [];
+  const landingPages = results[4].status === "fulfilled" ? results[4].value : [];
 
   const now = new Date();
   const lastSynced = now.toLocaleString("en-US", {

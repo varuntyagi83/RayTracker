@@ -376,7 +376,7 @@ function VariationCard({ variation }: { variation: Variation }) {
       </div>
 
       {variation.generatedImageUrl && (
-        <div className="aspect-video rounded-md overflow-hidden bg-muted">
+        <div className="relative aspect-video rounded-md overflow-hidden bg-muted">
           <Image src={variation.generatedImageUrl || "/placeholder.svg"} alt="Generated variation" fill className="h-full w-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
         </div>
       )}

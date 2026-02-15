@@ -54,11 +54,15 @@ export async function updateAutomation(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("automations")
     .update(updates)
     .eq("id", automationId)
+    .eq("workspace_id", workspace.id)
     .select()
     .single();
 
@@ -69,11 +73,19 @@ export async function updateAutomation(
 }
 
 export async function toggleAutomationStatus(automationId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
   const admin = createAdminClient();
   const { data: current } = await admin
     .from("automations")
     .select("status")
     .eq("id", automationId)
+    .eq("workspace_id", workspace.id)
     .single();
 
   if (!current) return { error: "Not found" };
@@ -82,7 +94,8 @@ export async function toggleAutomationStatus(automationId: string) {
   const { error } = await admin
     .from("automations")
     .update({ status: newStatus })
-    .eq("id", automationId);
+    .eq("id", automationId)
+    .eq("workspace_id", workspace.id);
 
   if (error) return { error: error.message };
 

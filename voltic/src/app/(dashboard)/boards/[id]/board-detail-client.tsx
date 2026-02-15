@@ -582,7 +582,7 @@ function SavedAdCard({
               className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block"
               onClick={(e) => e.stopPropagation()}
             >
-              {new URL(ad.landingPageUrl).hostname}
+              {(() => { try { return new URL(ad.landingPageUrl).hostname; } catch { return ad.landingPageUrl; } })()}
               <ExternalLink className="inline-block size-3 ml-0.5 -mt-0.5" />
             </a>
           )}

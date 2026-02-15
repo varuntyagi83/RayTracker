@@ -33,9 +33,11 @@ export async function searchAdsLibrary(
 
   // Map to DiscoverAd
   let ads: DiscoverAd[] = result.ads.map((ad) => {
-    const start = new Date(ad.startDate);
-    const end = ad.endDate ? new Date(ad.endDate) : new Date();
-    const runtimeDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
+    const startMs = new Date(ad.startDate).getTime();
+    const endMs = ad.endDate ? new Date(ad.endDate).getTime() : Date.now();
+    const runtimeDays = Number.isFinite(startMs) && Number.isFinite(endMs)
+      ? Math.max(1, Math.ceil((endMs - startMs) / 86_400_000))
+      : 1;
 
     return {
       id: ad.id,

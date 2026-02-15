@@ -52,7 +52,9 @@ interface TimezoneOption {
 }
 
 function buildTimezoneOptions(): TimezoneOption[] {
-  const allTimezones = Intl.supportedValuesOf("timeZone");
+  const allTimezones = typeof Intl?.supportedValuesOf === "function"
+    ? Intl.supportedValuesOf("timeZone")
+    : [Intl.DateTimeFormat().resolvedOptions().timeZone];
   return allTimezones.map((tz) => {
     const offset = getUtcOffset(tz);
     const region = tz.split("/")[0];

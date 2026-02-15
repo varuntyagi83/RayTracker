@@ -32,6 +32,7 @@ import {
 import { enhanceCreativesAction } from "../../actions";
 import { CREATIVE_ENHANCE_CREDIT_COST } from "@/types/variations";
 import type { CreativeImage, CreativeText, CreativeCombination } from "@/types/variations";
+import { track } from "@/lib/analytics/events";
 
 interface CreativeBuilderModalProps {
   open: boolean;
@@ -39,9 +40,6 @@ interface CreativeBuilderModalProps {
   initialImages?: CreativeImage[];
   initialTexts?: CreativeText[];
 }
-
-let nextImageId = 1;
-let nextTextId = 1;
 
 export default function CreativeBuilderModal({
   open,
@@ -62,6 +60,8 @@ export default function CreativeBuilderModal({
   const [newBody, setNewBody] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const nextImageIdRef = useRef(1);
+  const nextTextIdRef = useRef(1);
 
   const checkBrandGuidelines = useCallback(async () => {
     const { fetchBrandGuidelines } = await import(
@@ -83,19 +83,19 @@ export default function CreativeBuilderModal({
       setError("");
       setNewHeadline("");
       setNewBody("");
-      nextImageId = 1;
-      nextTextId = 1;
+      nextImageIdRef.current = 1;
+      nextTextIdRef.current = 1;
 
       // Pre-populate from decomposition if provided
       if (initialImages && initialImages.length > 0) {
         setImages(initialImages);
-        nextImageId = initialImages.length + 1;
+        nextImageIdRef.current = initialImages.length + 1;
       } else {
         setImages([]);
       }
       if (initialTexts && initialTexts.length > 0) {
         setTexts(initialTexts);
-        nextTextId = initialTexts.length + 1;
+        nextTextIdRef.current = initialTexts.length + 1;
       } else {
         setTexts([]);
       }
@@ -114,12 +114,13 @@ export default function CreativeBuilderModal({
       const file = files[i];
       const url = URL.createObjectURL(file);
       newImages.push({
-        id: `img-${nextImageId++}`,
+        id: `img-${nextImageIdRef.current++}`,
         url,
         name: file.name,
       });
     }
     setImages((prev) => [...prev, ...newImages]);
+    track("creative_builder_images_added", { count: newImages.length });
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -140,13 +141,14 @@ export default function CreativeBuilderModal({
     setTexts((prev) => [
       ...prev,
       {
-        id: `txt-${nextTextId++}`,
+        id: `txt-${nextTextIdRef.current++}`,
         headline: newHeadline.trim(),
         body: newBody.trim(),
       },
     ]);
     setNewHeadline("");
     setNewBody("");
+    track("creative_builder_texts_added", { count: 1 });
   };
 
   const removeText = (id: string) => {
@@ -176,6 +178,10 @@ export default function CreativeBuilderModal({
     if (combinations.length === 0) return;
     setEnhancing(true);
     setError("");
+    track("creative_builder_enhance_clicked", {
+      combination_count: combinations.length,
+      credit_cost: totalEnhanceCost,
+    });
 
     const result = await enhanceCreativesAction({
       combinations: combinations.map((c) => ({
@@ -198,6 +204,10 @@ export default function CreativeBuilderModal({
         }
       });
       setEnhanced(newEnhanced);
+      track("creative_builder_enhance_completed", {
+        combination_count: combinations.length,
+        success_count: Object.keys(newEnhanced).length,
+      });
     }
 
     setEnhancing(false);
@@ -252,7 +262,7 @@ export default function CreativeBuilderModal({
               {images.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {images.map((img) => (
-                    <div key={img.id} className="relative group">
+                    <div key={img.id} className="relative group aspect-square">
                       <Image src={img.url || "/placeholder.svg"} alt={img.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                       <button
                         type="button"
@@ -378,7 +388,7 @@ export default function CreativeBuilderModal({
                       mode === "ai_enhanced" && combo.enhancedHeadline;
                     return (
                       <Card key={combo.id} className="overflow-hidden">
-                        <CardContent className="p-0">
+                        <CardContent className="p-0 relative aspect-video">
                           <Image src={combo.image.url || "/placeholder.svg"} alt={combo.image.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                           <div className="p-3 space-y-1">
                             {showEnhanced && (

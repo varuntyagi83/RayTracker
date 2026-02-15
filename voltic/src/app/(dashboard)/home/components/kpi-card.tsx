@@ -50,8 +50,8 @@ function formatCurrency(value: number, currency: string): string {
 }
 
 function percentChange(current: number, previous: number): number {
-  if (previous === 0) return current > 0 ? 100 : 0;
-  return ((current - previous) / previous) * 100;
+  if (previous === 0) return current > 0 ? 100 : current < 0 ? -100 : 0;
+  return ((current - previous) / Math.abs(previous)) * 100;
 }
 
 export function KPICard({
@@ -64,6 +64,8 @@ export function KPICard({
 }: KPICardProps) {
   const Icon = icons[type];
   const change = percentChange(today, yesterday);
+  // For spend, lower is better. For revenue/profit, higher is better.
+  // When both values are negative (losses), moving toward 0 is positive.
   const isPositive = type === "spend" ? change <= 0 : change >= 0;
 
   const chartData = [

@@ -129,6 +129,11 @@ export default function CampaignAnalysisClient() {
     return () => clearTimeout(timer);
   }, [search]);
 
+  // ─── Track Page View ─────────────────────────────────────────────────────
+  useEffect(() => {
+    track("campaign_analysis_viewed", { report_type: "campaign_analysis" });
+  }, []);
+
   // ─── Fetch Filter Options ─────────────────────────────────────────────────
   useEffect(() => {
     fetchFilterOptions().then((result) => {
@@ -239,6 +244,10 @@ export default function CampaignAnalysisClient() {
   const handleExportCSV = () => {
     track("report_exported", { report_type: "campaign_analysis", format: "csv" });
     const headers = ["Name", "Status", "Objective", "Ad Account", "Spend", "Revenue", "ROAS", "Impressions", "Clicks", "CTR", "Purchases"];
+    const escapeCsv = (val: string | number): string => {
+      const s = String(val);
+      return s.includes(",") || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const csvRows = campaigns.map((c) => [
       c.name,
       c.status,
@@ -252,7 +261,7 @@ export default function CampaignAnalysisClient() {
       c.ctr.toFixed(2),
       c.purchases,
     ]);
-    const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
+    const csv = [headers.join(","), ...csvRows.map((r) => r.map((v) => escapeCsv(v)).join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -691,7 +700,7 @@ function CampaignRow({
                                   <TableCell className="font-medium">
                                     <div className="flex items-center gap-2">
                                       {creative.imageUrl && (
-                                        <div className="w-8 h-8 rounded bg-muted flex-shrink-0 overflow-hidden">
+                                        <div className="relative w-8 h-8 rounded bg-muted flex-shrink-0 overflow-hidden">
                                           <Image src={creative.imageUrl || "/placeholder.svg"} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                                         </div>
                                       )}

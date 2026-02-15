@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
-import { checkAndDeductCredits } from "@/lib/data/insights";
+import { checkAndDeductCredits, refundCredits } from "@/lib/data/insights";
 import {
   DECOMPOSITION_ANALYSIS_COST,
   DECOMPOSITION_CLEAN_IMAGE_COST,
@@ -216,6 +216,9 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
+    // Refund credits on failure
+    await refundCredits(workspaceId, totalCost);
+
     // Mark as failed
     await admin
       .from("ad_decompositions")
@@ -232,6 +235,9 @@ export async function POST(request: Request) {
     });
 
     console.error("[decompose] Error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: `${message}. Credits have been refunded.` },
+      { status: 500 }
+    );
   }
 }

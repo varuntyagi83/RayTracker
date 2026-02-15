@@ -133,12 +133,19 @@ export default function ReportTable<T extends Record<string, unknown>>({
   };
 
   const handleExportCSV = () => {
-    const headers = activeColumns.map((c) => c.label);
+    const escapeCsvCell = (value: string): string => {
+      if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+        return `"${value.replace(/"/g, '""')}"`;
+      }
+      return value;
+    };
+
+    const headers = activeColumns.map((c) => escapeCsvCell(c.label));
     const csvRows = data.map((row) =>
       activeColumns.map((col) => {
         const val = row[col.key];
         if (val === null || val === undefined) return "";
-        return String(val);
+        return escapeCsvCell(String(val));
       })
     );
     const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
