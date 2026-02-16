@@ -41,11 +41,20 @@ Guidelines:
 - Never use placeholder text or generic filler.
 - If brand guidelines are provided, strictly follow the brand voice, tone, and rules.`;
 
+const CHANNEL_INSTRUCTIONS: Record<string, string> = {
+  facebook: "Write for Facebook feed — conversational, emoji-friendly, engagement-focused.",
+  instagram: "Write for Instagram — visual-first, hashtag-ready, shorter punchy copy.",
+  tiktok: "Write for TikTok — Gen-Z tone, trend-aware, ultra-short and punchy.",
+  linkedin: "Write for LinkedIn — professional, thought-leadership tone, B2B-friendly.",
+  google: "Write for Google Ads — keyword-focused, direct response, respect character limits.",
+};
+
 export function buildTextPrompt(
   ad: { brandName: string | null; headline: string | null; body: string | null; format: string },
   asset: { name: string; description: string | null },
   strategy: VariationStrategy,
-  brandGuidelines?: BrandGuidelines
+  brandGuidelines?: BrandGuidelines,
+  channel?: string
 ): string {
   const strategyInstructions: Record<VariationStrategy, string> = {
     hero_product:
@@ -62,10 +71,15 @@ export function buildTextPrompt(
       "Write a longer, more detailed headline and body since there's no image. The text must carry all the persuasive weight.",
   };
 
+  const channelLine = channel && CHANNEL_INSTRUCTIONS[channel]
+    ? `\n**Channel:** ${channel.toUpperCase()} — ${CHANNEL_INSTRUCTIONS[channel]}`
+    : "";
+
   return [
     "Create ad copy for the following product, inspired by the competitor ad below.",
     "",
     `**Strategy:** ${strategy.replace(/_/g, " ").toUpperCase()} — ${strategyInstructions[strategy]}`,
+    channelLine,
     "",
     "--- COMPETITOR AD (inspiration) ---",
     `Brand: ${ad.brandName ?? "Unknown"}`,
@@ -86,7 +100,8 @@ export async function generateVariationText(
   ad: Pick<SavedAd, "brandName" | "headline" | "body" | "format">,
   asset: Pick<Asset, "name" | "description">,
   strategy: VariationStrategy,
-  brandGuidelines?: BrandGuidelines
+  brandGuidelines?: BrandGuidelines,
+  channel?: string
 ): Promise<VariationTextResult> {
   const client = getOpenAIClient();
 
@@ -94,7 +109,7 @@ export async function generateVariationText(
     model: "gpt-4o",
     messages: [
       { role: "system", content: TEXT_SYSTEM_PROMPT },
-      { role: "user", content: buildTextPrompt(ad, asset, strategy, brandGuidelines) },
+      { role: "user", content: buildTextPrompt(ad, asset, strategy, brandGuidelines, channel) },
     ],
     temperature: 0.7,
     max_tokens: 500,

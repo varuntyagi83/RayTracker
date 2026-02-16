@@ -149,40 +149,45 @@ export default function AssetsClient() {
     setSaving(true);
     setFormError(null);
 
-    const formData = new FormData();
-    formData.set("name", formName.trim());
-    formData.set("description", formDescription.trim());
+    try {
+      const formData = new FormData();
+      formData.set("name", formName.trim());
+      formData.set("description", formDescription.trim());
 
-    if (editingAsset) {
-      formData.set("assetId", editingAsset.id);
-      if (selectedFile) formData.set("image", selectedFile);
+      if (editingAsset) {
+        formData.set("assetId", editingAsset.id);
+        if (selectedFile) formData.set("image", selectedFile);
 
-      const result = await updateAssetAction(formData);
-      if (!result.success) {
-        setFormError(result.error ?? "Failed to update");
-        toast.error(result.error ?? "Failed to update product");
-        setSaving(false);
-        return;
+        const result = await updateAssetAction(formData);
+        if (!result.success) {
+          setFormError(result.error ?? "Failed to update");
+          toast.error(result.error ?? "Failed to update product");
+          return;
+        }
+        track("asset_updated", { asset_id: editingAsset.id });
+        toast.success("Product updated");
+      } else {
+        formData.set("image", selectedFile!);
+
+        const result = await createAssetAction(formData);
+        if (!result.success) {
+          setFormError(result.error ?? "Failed to create");
+          toast.error(result.error ?? "Failed to add product");
+          return;
+        }
+        track("asset_created", { asset_id: result.id ?? "", name: formName.trim() });
+        toast.success("Product added");
       }
-      track("asset_updated", { asset_id: editingAsset.id });
-      toast.success("Product updated");
-    } else {
-      formData.set("image", selectedFile!);
 
-      const result = await createAssetAction(formData);
-      if (!result.success) {
-        setFormError(result.error ?? "Failed to create");
-        toast.error(result.error ?? "Failed to add product");
-        setSaving(false);
-        return;
-      }
-      track("asset_created", { asset_id: result.id ?? "", name: formName.trim() });
-      toast.success("Product added");
+      setDialogOpen(false);
+      await loadAssets(search || undefined);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
+      setFormError(msg);
+      toast.error(msg);
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
-    setDialogOpen(false);
-    await loadAssets(search || undefined);
   };
 
   const handleDelete = async () => {

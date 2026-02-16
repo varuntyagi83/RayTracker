@@ -186,6 +186,7 @@ const generateVariationsSchema = z.object({
     "hero_product", "curiosity", "pain_point",
     "proof_point", "image_only", "text_only",
   ])).min(1).max(6),
+  channel: z.string().optional(),
 });
 
 export async function generateVariationsAction(
@@ -201,7 +202,7 @@ export async function generateVariationsAction(
   if (!parsed.success)
     return { results: [], error: parsed.error.issues[0].message };
 
-  const { savedAdId, assetId, strategies } = parsed.data;
+  const { savedAdId, assetId, strategies, channel } = parsed.data;
   const totalCost = VARIATION_CREDIT_COST * strategies.length;
 
   // Check credits
@@ -210,12 +211,8 @@ export async function generateVariationsAction(
     return { results: [], error: creditCheck.error };
   }
 
-  // Fetch saved ad from board
-  const board = await getBoardWithAds(workspace.id, savedAdId);
-  // The savedAdId might be in any board — find the ad
+  // Fetch the saved ad directly by ID
   let savedAd: SavedAd | undefined;
-
-  // We need to find the saved ad directly
   const { createAdminClient } = await import("@/lib/supabase/admin");
   const supabase = createAdminClient();
   const { data: adRow } = await supabase
@@ -285,7 +282,8 @@ export async function generateVariationsAction(
         savedAd,
         asset,
         strategy,
-        brandGuidelines
+        brandGuidelines,
+        channel
       );
 
       // Generate image (unless text_only)

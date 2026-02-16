@@ -140,44 +140,49 @@ export default function VariationModal({
 
     const strategies = Array.from(selectedStrategies);
 
-    // Show progress
-    for (const s of strategies) {
-      setGeneratingStrategy(STRATEGY_LABELS[s]);
-    }
+    // Show the first strategy as progress indicator
+    setGeneratingStrategy(STRATEGY_LABELS[strategies[0]]);
 
-    const result = await generateVariationsAction({
-      savedAdId: savedAd.id,
-      assetId: selectedAssetId,
-      strategies,
-    });
+    try {
+      const result = await generateVariationsAction({
+        savedAdId: savedAd.id,
+        assetId: selectedAssetId,
+        strategies,
+      });
 
-    if (result.error) {
-      setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        setStep("select");
+        return;
+      }
+
+      // Reload variations to show results
+      const variationsResult = await fetchVariationsAction({ savedAdId: savedAd.id });
+      if (variationsResult.data) {
+        setVariations(variationsResult.data);
+      }
+
+      const failures = (result.results ?? []).filter((r) => !r.success);
+      if (failures.length > 0 && failures.length < strategies.length) {
+        setError(`${failures.length} variation(s) failed to generate.`);
+      } else if (failures.length === strategies.length) {
+        setError("All variations failed to generate.");
+      }
+
+      track("board_variation_opened", { ad_id: savedAd.id });
+      setStep("results");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Generation failed";
+      setError(msg);
       setStep("select");
-      return;
+    } finally {
+      setGeneratingStrategy("");
     }
-
-    // Reload variations to show results
-    const variationsResult = await fetchVariationsAction({ savedAdId: savedAd.id });
-    if (variationsResult.data) {
-      setVariations(variationsResult.data);
-    }
-
-    const failures = result.results.filter((r) => !r.success);
-    if (failures.length > 0 && failures.length < strategies.length) {
-      setError(`${failures.length} variation(s) failed to generate.`);
-    } else if (failures.length === strategies.length) {
-      setError("All variations failed to generate.");
-    }
-
-    track("board_variation_opened", { ad_id: savedAd.id });
-    setStep("results");
-    setGeneratingStrategy("");
   };
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-5" />
@@ -196,7 +201,7 @@ export default function VariationModal({
           </div>
         )}
 
-        <ScrollArea className="flex-1 pr-4">
+        <ScrollArea className="flex-1 min-h-0 pr-4">
           {step === "select" && (
             <div className="space-y-6 py-2">
               {/* Asset Selection */}

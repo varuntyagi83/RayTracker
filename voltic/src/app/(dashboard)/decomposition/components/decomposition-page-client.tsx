@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Image as ImageIcon,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +26,7 @@ import DecompositionModal from "@/components/shared/decomposition-modal";
 import {
   fetchDecompositionHistory,
   uploadImageAction,
+  deleteDecomposition,
 } from "../actions";
 import type { DecompositionHistoryItem } from "../actions";
 
@@ -151,6 +153,16 @@ export default function DecompositionPageClient() {
     });
     setDecomposeUrl(item.sourceImageUrl);
     setModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    const result = await deleteDecomposition(id);
+    if (result.success) {
+      setHistory((prev) => prev.filter((item) => item.id !== id));
+      toast.success("Decomposition deleted");
+    } else {
+      toast.error(result.error || "Failed to delete");
+    }
   };
 
   const handleModalClose = () => {
@@ -297,6 +309,7 @@ export default function DecompositionPageClient() {
                 key={item.id}
                 item={item}
                 onView={() => handleViewHistory(item)}
+                onDelete={() => handleDelete(item.id)}
               />
             ))}
           </div>
@@ -321,10 +334,13 @@ export default function DecompositionPageClient() {
 function HistoryCard({
   item,
   onView,
+  onDelete,
 }: {
   item: DecompositionHistoryItem;
   onView: () => void;
+  onDelete: () => void;
 }) {
+  const [deleting, setDeleting] = useState(false);
   const dateStr = new Date(item.createdAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -389,16 +405,36 @@ function HistoryCard({
           </Badge>
         </div>
 
-        <div className="border-t px-3 py-2">
+        <div className="border-t px-3 py-2 flex gap-2">
           <Button
             variant="outline"
             size="sm"
-            className="w-full"
+            className="flex-1"
             onClick={onView}
           >
             <Search className="mr-1.5 size-3.5" />
             View Details
           </Button>
+          {isFailed && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive hover:text-destructive-foreground"
+              disabled={deleting}
+              onClick={async (e) => {
+                e.stopPropagation();
+                setDeleting(true);
+                await onDelete();
+                setDeleting(false);
+              }}
+            >
+              {deleting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="size-3.5" />
+              )}
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

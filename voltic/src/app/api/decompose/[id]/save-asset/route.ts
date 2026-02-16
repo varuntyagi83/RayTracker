@@ -63,6 +63,13 @@ export async function POST(
   const imageUrl =
     decomposition.clean_image_url ?? decomposition.source_image_url;
 
+  if (!imageUrl) {
+    return NextResponse.json(
+      { error: "No image URL available for this decomposition" },
+      { status: 400 }
+    );
+  }
+
   // 4. Extract product info for asset name/description
   const product = decomposition.product_analysis as {
     description?: string;

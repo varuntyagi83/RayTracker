@@ -942,3 +942,132 @@ These bugs touch core business logic — billing, credit deduction, automation e
 | 9 | H7 | HIGH | Add checkAndDeductCredits to studio image gen | Adds billing where none exists |
 | 10 | M1 | MEDIUM | Partial refund on enhancement failure | Changes refund behavior |
 | 11 | M4 | MEDIUM | Per-image refund on batch decompose failure | Changes refund behavior |
+
+---
+
+## Session 5 — Standalone Variations Page + Feature Enhancements
+
+**Date:** 2026-02-16
+**Scope:** New Variations page, channel-aware AI generation, UI fixes, decomposition delete
+
+### Overview
+
+Built a complete standalone Variations page accessible from the sidebar, enabling users to generate AI ad variations without navigating into individual boards. Also fixed the variation modal scrolling bug, added decomposition delete capability, and fixed several error handling issues.
+
+### Features Implemented
+
+#### 1. Standalone Variations Page (`/variations`)
+
+**New Files Created:**
+
+| File | Purpose |
+|------|---------|
+| `src/app/(dashboard)/variations/page.tsx` | Server component wrapper |
+| `src/app/(dashboard)/variations/loading.tsx` | Skeleton loading state |
+| `src/app/(dashboard)/variations/error.tsx` | Error boundary (reuses DashboardError) |
+| `src/app/(dashboard)/variations/actions.ts` | 5 server actions for the page |
+| `src/app/(dashboard)/variations/components/variations-page-client.tsx` | Main client component (~500 lines) |
+
+**Page Features:**
+- **4-Step Generation Form:**
+  1. **Select Competitor Ad** — Board dropdown loads boards, selecting a board shows its saved ads in a horizontal scrollable row with click-to-select (ring highlight)
+  2. **Select Your Product** — Tabs for "Choose Existing" (dropdown) or "Upload New" (inline form with file + name + description, calls `createAssetAction`)
+  3. **Choose Channel** — Pill buttons for Facebook, Instagram, TikTok, LinkedIn, Google (single-select, default Facebook)
+  4. **Select Strategies** — 6 strategy cards matching existing pattern (hero_product, curiosity, pain_point, proof_point, image_only, text_only)
+- **Credit cost display** with strategy count
+- **Brand guidelines indicator** when configured
+- **Generation flow** with try/catch, error handling, loading states
+- **Variation History** — Grid of cards showing all workspace variations with image, strategy badge, status badge, brand name, asset name, date, and delete button
+
+**Server Actions (variations/actions.ts):**
+- `fetchAllVariations()` — workspace-wide variation history with joined ad/asset context
+- `fetchBoardsForSelection()` — boards list for competitor picker
+- `fetchBoardAds({ boardId })` — ads from a specific board
+- `fetchAssetsForVariation(search?)` — asset list for selection
+- `deleteVariationFromHistory({ variationId })` — delete single variation
+
+**Reused (not duplicated):**
+- `generateVariationsAction` from `boards/actions.ts`
+- `createAssetAction` from `assets/actions.ts`
+
+#### 2. Channel-Aware AI Text Generation
+
+**Modified Files:**
+
+| File | Change |
+|------|--------|
+| `src/lib/ai/variations.ts` | Added `CHANNEL_INSTRUCTIONS` map, `channel` param to `buildTextPrompt()` and `generateVariationText()` |
+| `src/app/(dashboard)/boards/actions.ts` | Added `channel: z.string().optional()` to `generateVariationsSchema`, pass through to `generateVariationText()` |
+
+**Channel-Specific Copy Instructions:**
+- **Facebook:** Conversational, emoji-friendly, engagement-focused
+- **Instagram:** Visual-first, hashtag-ready, shorter punchy copy
+- **TikTok:** Gen-Z tone, trend-aware, ultra-short and punchy
+- **LinkedIn:** Professional, thought-leadership tone, B2B-friendly
+- **Google:** Keyword-focused, direct response, respect character limits
+
+#### 3. Data Layer Enhancement
+
+**Modified:** `src/lib/data/variations.ts`
+- Added `VariationWithContext` interface (extends Variation with adBrandName, adImageUrl, assetName, assetImageUrl)
+- Added `getAllVariations(workspaceId, limit)` function using Supabase relational query with `!inner` joins on `saved_ads` and `assets`
+
+#### 4. Sidebar Entry
+
+**Modified:** `src/components/layout/app-sidebar.tsx`
+- Added `Sparkles` icon import from lucide-react
+- Added `{ label: "Variations", href: "/variations", icon: Sparkles }` after Creative Studio
+
+#### 5. PostHog Analytics Events
+
+**Modified:** `src/lib/analytics/events.ts`
+- `variations_page_viewed` — page load tracking
+- `variation_generated_from_page` — generation with saved_ad_id, asset_id, strategies count, channel
+- `variation_deleted_from_history` — deletion tracking
+
+#### 6. Variation Modal Scrolling Fix
+
+**Modified:** `src/app/(dashboard)/boards/[id]/components/variation-modal.tsx`
+- Added `overflow-hidden` to `DialogContent` to prevent outer scrolling
+- Added `min-h-0` to `ScrollArea` to enable proper flex-based scroll constraints
+- These two changes ensure the shadcn ScrollArea calculates its viewport height correctly within the `max-h-[85vh] flex flex-col` container
+
+### Bug Fixes Applied (Earlier in Session)
+
+| # | Issue | File | Fix |
+|---|-------|------|-----|
+| 1 | Variation modal stuck on error | `variation-modal.tsx` | Wrapped `handleGenerate` in try/catch/finally, added `?? []` guard on `result.results` |
+| 2 | Dead `getBoardWithAds` call | `boards/actions.ts` | Removed dead code passing savedAdId as boardId |
+| 3 | Save-asset crash on null imageUrl | `api/decompose/[id]/save-asset/route.ts` | Added null guard for imageUrl with 400 response |
+| 4 | Assets page stuck on save error | `assets/components/assets-client.tsx` | Wrapped handleSave in try/catch/finally |
+| 5 | Decomposition delete UI | `decomposition/actions.ts` + `decomposition-page-client.tsx` | Added `deleteDecomposition` server action + trash button on failed cards with optimistic removal |
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| TypeScript (`tsc --noEmit`) | 0 errors |
+| Unit Tests (Vitest) | 95/95 passing (rate-limit.test.ts timeout is pre-existing, unrelated) |
+| `variations.test.ts` | 26/26 passing |
+
+### Files Summary
+
+| # | Action | File |
+|---|--------|------|
+| 1 | MODIFY | `src/lib/data/variations.ts` — added `getAllVariations()` + `VariationWithContext` type |
+| 2 | CREATE | `src/app/(dashboard)/variations/page.tsx` |
+| 3 | CREATE | `src/app/(dashboard)/variations/loading.tsx` |
+| 4 | CREATE | `src/app/(dashboard)/variations/error.tsx` |
+| 5 | CREATE | `src/app/(dashboard)/variations/actions.ts` |
+| 6 | CREATE | `src/app/(dashboard)/variations/components/variations-page-client.tsx` |
+| 7 | MODIFY | `src/lib/ai/variations.ts` — added channel param + channel instructions map |
+| 8 | MODIFY | `src/app/(dashboard)/boards/actions.ts` — added channel to schema + passthrough |
+| 9 | MODIFY | `src/components/layout/app-sidebar.tsx` — added Variations nav entry with Sparkles icon |
+| 10 | MODIFY | `src/lib/analytics/events.ts` — added 3 variation page events |
+| 11 | MODIFY | `src/app/(dashboard)/boards/[id]/components/variation-modal.tsx` — fixed scrolling + error handling |
+| 12 | MODIFY | `src/app/api/decompose/[id]/save-asset/route.ts` — null guard on imageUrl |
+| 13 | MODIFY | `src/app/(dashboard)/assets/components/assets-client.tsx` — try/catch on handleSave |
+| 14 | CREATE | `src/app/(dashboard)/decomposition/actions.ts` (added deleteDecomposition) |
+| 15 | MODIFY | `src/app/(dashboard)/decomposition/components/decomposition-page-client.tsx` — delete UI for failed items |
+
+**Totals:** 5 new files, 10 modified files

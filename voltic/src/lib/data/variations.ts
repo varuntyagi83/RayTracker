@@ -125,6 +125,40 @@ export async function deleteVariation(
   return { success: true };
 }
 
+// ─── Get All Variations for Workspace ──────────────────────────────────────
+
+export interface VariationWithContext extends Variation {
+  adBrandName: string | null;
+  adImageUrl: string | null;
+  assetName: string;
+  assetImageUrl: string;
+}
+
+export async function getAllVariations(
+  workspaceId: string,
+  limit: number = 50
+): Promise<VariationWithContext[]> {
+  const supabase = createAdminClient();
+
+  const { data } = await supabase
+    .from("variations")
+    .select(
+      "*, saved_ads!inner(brand_name, image_url), assets!inner(name, image_url)"
+    )
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => ({
+    ...mapRow(row),
+    adBrandName: row.saved_ads?.brand_name ?? null,
+    adImageUrl: row.saved_ads?.image_url ?? null,
+    assetName: row.assets?.name ?? "Unknown",
+    assetImageUrl: row.assets?.image_url ?? "",
+  }));
+}
+
 // ─── Map DB row ─────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

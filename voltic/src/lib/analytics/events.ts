@@ -128,6 +128,11 @@ export interface EventPropertiesMap {
   };
   automation_cron_error: { error: string };
 
+  // Variations Page
+  variations_page_viewed: Record<string, never>;
+  variation_generated_from_page: { saved_ad_id: string; asset_id: string; strategies: number; channel: string };
+  variation_deleted_from_history: { variation_id: string };
+
   // Ad Decomposition
   ad_decomposition_started: { source_type: string; source_id?: string; generate_clean_image: boolean };
   ad_decomposition_completed: { decomposition_id: string; texts_found: number; product_detected: boolean; duration_ms: number; credits_used: number };

@@ -67,6 +67,37 @@ export async function fetchDecompositionHistory(): Promise<{
   return { data: items };
 }
 
+// ─── Delete Decomposition ────────────────────────────────────────────────
+
+export async function deleteDecomposition(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Unauthorized" };
+
+  const admin = createAdminClient();
+  const { data: member } = await admin
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", user.id)
+    .single();
+
+  if (!member) return { success: false, error: "No workspace" };
+
+  const { error } = await admin
+    .from("ad_decompositions")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", member.workspace_id);
+
+  if (error) return { success: false, error: error.message };
+
+  return { success: true };
+}
+
 // ─── Upload Image for Decomposition ───────────────────────────────────────
 
 export async function uploadImageAction(
