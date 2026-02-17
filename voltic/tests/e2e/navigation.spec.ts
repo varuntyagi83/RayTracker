@@ -30,6 +30,7 @@ test.describe("Navigation & Layout", () => {
       "/competitors",
       "/creative-studio",
       "/brand-guidelines",
+      "/variations",
       "/decomposition",
       "/credits",
       "/campaign-analysis",
