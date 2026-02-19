@@ -308,9 +308,9 @@ export default function VariationsPageClient() {
       const creativeOpts =
         variationSource === "asset"
           ? {
-              angle: angle || undefined,
-              lighting: lighting || undefined,
-              background: background || undefined,
+              angle: angle && angle !== "auto" ? angle : undefined,
+              lighting: lighting && lighting !== "auto" ? lighting : undefined,
+              background: background && background !== "auto" ? background : undefined,
               customInstruction: customInstruction.trim() || undefined,
             }
           : undefined;
@@ -628,7 +628,7 @@ export default function VariationsPageClient() {
                       <SelectValue placeholder="Auto" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Auto</SelectItem>
+                      <SelectItem value="auto">Auto</SelectItem>
                       {(Object.entries(PRODUCT_ANGLE_LABELS) as [ProductAngle, string][]).map(
                         ([k, v]) => (
                           <SelectItem key={k} value={k}>
@@ -650,7 +650,7 @@ export default function VariationsPageClient() {
                       <SelectValue placeholder="Auto" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Auto</SelectItem>
+                      <SelectItem value="auto">Auto</SelectItem>
                       {(Object.entries(LIGHTING_STYLE_LABELS) as [LightingStyle, string][]).map(
                         ([k, v]) => (
                           <SelectItem key={k} value={k}>
@@ -672,7 +672,7 @@ export default function VariationsPageClient() {
                       <SelectValue placeholder="Auto" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Auto</SelectItem>
+                      <SelectItem value="auto">Auto</SelectItem>
                       {(Object.entries(BACKGROUND_STYLE_LABELS) as [BackgroundStyle, string][]).map(
                         ([k, v]) => (
                           <SelectItem key={k} value={k}>
