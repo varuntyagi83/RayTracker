@@ -325,20 +325,14 @@ export async function generateVariationsAction(
       if (strategy !== "text_only") {
         if (source === "asset") {
           // Asset-based: edit the existing asset image with Gemini Nano Banana Pro
-          try {
-            imageUrl = await generateAssetVariationImage(
-              asset,
-              strategy,
-              workspace.id,
-              variationId,
-              creativeOptions,
-              brandGuidelines
-            );
-          } catch (editErr) {
-            // Fallback: if Gemini editing fails, use the original asset image
-            console.error("[variations] Gemini image editing failed, falling back to original asset image:", editErr);
-            imageUrl = asset.imageUrl;
-          }
+          imageUrl = await generateAssetVariationImage(
+            asset,
+            strategy,
+            workspace.id,
+            variationId,
+            creativeOptions,
+            brandGuidelines
+          );
         } else {
           // Competitor-based: generate a new image via DALL-E
           const dalleUrl = await generateVariationImage(

@@ -9,7 +9,7 @@ import {
 import type { Asset } from "@/types/assets";
 
 const STORAGE_BUCKET = "brand-assets";
-const GEMINI_MODEL = "gemini-3-pro-image-preview";
+const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 // ─── Strategy-Specific Visual Notes ─────────────────────────────────────────
