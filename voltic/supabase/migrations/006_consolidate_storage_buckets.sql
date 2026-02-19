@@ -69,15 +69,6 @@ BEGIN
   END IF;
 END $$;
 
--- 6. Remove unused buckets (if they exist and are empty)
--- Note: These buckets were planned but all code now uses "brand-assets".
--- We keep them if they have data (no-op on non-empty), otherwise drop.
--- Supabase does not CASCADE bucket deletion, so this is safe.
-DELETE FROM storage.buckets WHERE id = 'elements'
-  AND NOT EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'elements');
-
-DELETE FROM storage.buckets WHERE id = 'asset'
-  AND NOT EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'asset');
-
-DELETE FROM storage.buckets WHERE id = 'ads'
-  AND NOT EXISTS (SELECT 1 FROM storage.objects WHERE bucket_id = 'ads');
+-- 6. Unused buckets (elements, asset, ads) are left as-is.
+-- Supabase prevents direct DELETE on storage.buckets via SQL (protect_delete trigger).
+-- If cleanup is needed, use the Supabase Dashboard or Storage API.
