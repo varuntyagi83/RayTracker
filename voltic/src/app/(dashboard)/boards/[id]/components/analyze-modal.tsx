@@ -98,8 +98,8 @@ export default function AnalyzeModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Brain className="size-5 text-violet-500" />
             Ad Analysis
@@ -112,7 +112,7 @@ export default function AnalyzeModal({
         </DialogHeader>
 
         {/* Ad Summary */}
-        <div className="flex items-start gap-3 rounded-md border p-3">
+        <div className="flex items-start gap-3 rounded-md border p-3 shrink-0">
           {savedAd.imageUrl && (            <Image src={savedAd.imageUrl || "/placeholder.svg"} alt={savedAd.brandName ?? "Ad"} width={64} height={64} className="rounded object-cover shrink-0" unoptimized />
           )}
           <div className="min-w-0">
@@ -163,7 +163,7 @@ export default function AnalyzeModal({
 
         {/* Results */}
         {insights && !loading && (
-          <ScrollArea className="flex-1 -mx-6 px-6">
+          <ScrollArea className="flex-1 min-h-0 -mx-6 px-6">
             <div className="space-y-4 pb-2">
               {/* Performance Score */}
               <div>
