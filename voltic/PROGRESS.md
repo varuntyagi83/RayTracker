@@ -1,6 +1,6 @@
 # Voltic — Development Progress
 
-> Last updated: 2026-02-19 (Session 2)
+> Last updated: 2026-02-19 (Session 3)
 
 ---
 
@@ -8,7 +8,7 @@
 
 The Variations feature has been significantly extended to support **two flows**:
 1. **Competitor-based** (original) — generate ad variations inspired by saved competitor ads (DALL-E 3 for images)
-2. **Asset-based** (new) — edit/transform existing asset images using **Gemini Nano Banana Pro** + generate text via GPT-4o
+2. **Asset-based** (new) — edit/transform existing asset images using **Gemini 2.5 Flash Image** (`gemini-2.5-flash-image`) + generate text via GPT-4o
 
 The Ad Decomposition and Creative Builder features received bug fixes. The codebase is deployed on Vercel at `ray-tracker.vercel.app`.
 
@@ -33,7 +33,7 @@ The Ad Decomposition and Creative Builder features received bug fixes. The codeb
 | Tests | `src/lib/ai/variations.test.ts` | 52 tests covering all prompt builders |
 
 **Architecture decision (IMPORTANT):**
-- For **asset-based** variations: **Gemini Nano Banana Pro** (`gemini-3-pro-image-preview`) edits/transforms the existing asset image based on creative direction (angle, lighting, background). GPT-4o generates the text (headline + body). If Gemini fails, gracefully falls back to the original asset image.
+- For **asset-based** variations: **Gemini 2.5 Flash Image** (`gemini-2.5-flash-image`) edits/transforms the existing asset image based on creative direction (angle, lighting, background). GPT-4o generates the text (headline + body). If Gemini fails, the variation fails with an error (credits refunded).
 - For **competitor-based** variations: AI generates both text (GPT-4o) AND a new image via DALL-E 3 (since no user image exists).
 - The `image_only` strategy for assets edits the asset image with no text generation.
 - The `text_only` strategy generates text with no image (both flows).
@@ -87,32 +87,46 @@ The Ad Decomposition and Creative Builder features received bug fixes. The codeb
 
 ## Recent Changes (Session 2: Feb 19, 2026)
 
-### 7. Nano Banana Pro Integration for Asset-Based Variation Images
+### 7. Gemini Image Editing for Asset-Based Variation Images
 
 **Problem:** Asset-based variations were just reusing the raw uploaded asset image with no AI transformation. Creative direction options (angle, lighting, background) only influenced text prompts, not the image itself.
 
-**Solution:** Integrated **Google's Nano Banana Pro** (Gemini 3 Pro Image model) to edit/transform existing asset images based on the user's creative direction.
+**Solution:** Integrated **Gemini 2.5 Flash Image** (`gemini-2.5-flash-image`) to edit/transform existing asset images based on the user's creative direction.
 
 | Layer | File | Change |
 |-------|------|--------|
 | Gemini Module | `src/lib/ai/gemini-image-edit.ts` | **NEW** — `buildGeminiEditPrompt()` + `editAssetImageWithGemini()` |
 | AI Variations | `src/lib/ai/variations.ts` | Added `generateAssetVariationImage()` export wrapping Gemini module |
-| Server Action | `src/app/(dashboard)/boards/actions.ts` | Asset branch now calls Gemini with graceful fallback to original image |
+| Server Action | `src/app/(dashboard)/boards/actions.ts` | Asset branch now calls Gemini; failures surface as errors (no silent fallback) |
 | Tests | `src/lib/ai/gemini-image-edit.test.ts` | **NEW** — 17 tests for prompt builder |
 
 **How it works:**
 1. Downloads existing asset image → base64
 2. Builds an editing prompt from creative options (angle, lighting, background, custom instruction) + strategy visual notes + brand palette
-3. Sends to Gemini REST API (`gemini-3-pro-image-preview`)
+3. Sends to Gemini REST API (`gemini-2.5-flash-image`) — same model used by decompose.ts
 4. Extracts edited image (base64) from response
 5. Uploads to Supabase Storage at `{workspaceId}/variations/{variationId}-edited.png`
 6. Returns public URL
 
-**Fallback:** If Gemini fails (API key missing, rate limit, geo-restriction, etc.), the variation still completes using the original asset image. The text (GPT-4o) is unaffected.
+**Error handling:** If Gemini fails, the variation is marked as failed with error message, credits are refunded. No silent fallback to original image.
 
 **No new npm packages** — reuses the existing direct REST API pattern from `decompose.ts` `_inpaintWithGemini()`.
 
 **Env var:** `GOOGLE_GENERATIVE_AI_API_KEY` (already existed in `.env.example`).
+
+### 8. Bug Fixes (Session 3: Feb 19, 2026)
+
+**Generate Variations button disabled:**
+- **Problem:** Clicking a brand guideline in Step 1 reset `selectedAssetId` to `""`, clearing the product selection from Step 2 and disabling the Generate button.
+- **Fix:** Removed `setSelectedAssetId("")` from `handleGuidelineSelect()` in `variations-page-client.tsx`. Guideline and product selections are independent.
+
+**Asset upload "unexpected response from server":**
+- **Problem:** Next.js server actions have a default 1MB body size limit. Image uploads over ~1MB failed with a generic error. The existing `proxyClientMaxBodySize: "50mb"` only applies to the proxy, not server actions.
+- **Fix:** Added `serverActions.bodySizeLimit: "5mb"` to `next.config.ts` experimental config.
+
+**Gemini model name was wrong:**
+- **Problem:** `gemini-image-edit.ts` used `gemini-3-pro-image-preview` which doesn't exist → 404 → silent fallback to original unedited image. Variations appeared "Completed" but with the original asset photo.
+- **Fix:** Changed to `gemini-2.5-flash-image` (the model that already works in `decompose.ts`). Also removed the silent fallback — Gemini failures now properly fail the variation with error message and credit refund.
 
 ---
 
@@ -193,11 +207,11 @@ export async function myAction(input: z.input<typeof schema>): Promise<{ data?: 
 ```
 Asset-based variations:
   1. GPT-4o → headline + body text
-  2. Gemini Nano Banana Pro (gemini-3-pro-image-preview) → edit existing asset image
+  2. Gemini 2.5 Flash Image (gemini-2.5-flash-image) → edit existing asset image
      - Downloads asset image → base64
      - Applies creative direction (angle, lighting, background)
      - Uploads result to Supabase Storage
-     - Fallback: original asset.imageUrl if Gemini fails
+     - On failure: variation marked failed, credits refunded
 
 Competitor-based variations:
   1. GPT-4o → headline + body text
@@ -207,6 +221,9 @@ Key files:
   - src/lib/ai/gemini-image-edit.ts — Gemini REST API client + prompt builder
   - src/lib/ai/variations.ts — generateAssetVariationImage() (Gemini) + generateVariationImage() (DALL-E)
   - src/app/(dashboard)/boards/actions.ts — orchestrates the flow
+
+IMPORTANT: The Gemini model must be gemini-2.5-flash-image (same as decompose.ts).
+Do NOT use gemini-3-pro-image-preview — it doesn't exist and causes 404s.
 ```
 
 ### Image Preview Overlay Pattern
@@ -234,6 +251,10 @@ const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | 
 
 | Commit | Description |
 |--------|-------------|
+| `d86bb4f` | fix: use correct Gemini model (gemini-2.5-flash-image) for asset variations |
+| `10803a0` | fix: variations generate button disabled + asset upload body size limit |
+| `14f8971` | feat: integrate Nano Banana Pro (Gemini) for asset-based variation images |
+| `05326bc` | docs: add PROGRESS.md with full development state and architecture notes |
 | `2d7c01b` | fix: asset-based variations use existing uploaded image instead of DALL-E |
 | `749d90a` | fix: typo, stronger no-text image prompt, variation preview overlay |
 | `ce67af7` | feat: add brand guideline selector to Variations asset flow |
@@ -253,10 +274,11 @@ const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | 
 
 1. **DALL-E text in images** — Despite strong no-text prompts, DALL-E 3 occasionally generates text/logos. This is a known DALL-E limitation. Only affects competitor-based flow now.
 2. **Text overlay on asset images** — Asset-based variations show the Gemini-edited image + AI-generated text as separate fields. A future enhancement could composite the text directly onto the image (like Ad Generator's canvas rendering).
-3. ~~**Creative Direction options**~~ — **RESOLVED:** Nano Banana Pro now applies angle/lighting/background transformations to the actual image for asset-based variations.
+3. ~~**Creative Direction options**~~ — **RESOLVED:** Gemini 2.5 Flash Image now applies angle/lighting/background transformations to the actual image for asset-based variations.
 4. **Multi-asset variations** — Currently one asset per variation. Could support mixing multiple assets (e.g., product on background A, then on background B).
 5. **Variation preview** — Could show a richer preview combining image + text overlay before generation.
 6. **Gemini image size limits** — Large asset images (>10MB) could cause issues with the Gemini API. Consider adding image resizing before sending to API if needed.
+7. **Gemini generation speed** — Image editing takes ~15-30 seconds per variation. With multiple strategies (sequential), total time can be 30-90+ seconds. Consider parallelizing strategies or adding progress indicators.
 
 ---
 
