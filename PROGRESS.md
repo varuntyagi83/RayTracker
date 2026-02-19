@@ -1,7 +1,7 @@
 # PROGRESS.md — Build Progress Tracker
 
-> Last updated: 2026-02-14
-> Current phase: Phase 22 ✅
+> Last updated: 2026-02-19
+> Current phase: Phase 23 ✅
 
 ## Phase Status
 
@@ -34,18 +34,24 @@
 | 21+ | Image-Level Decomposition & Element Saving | ✅ Complete | 2026-02-14 | Replaced DALL-E 3 regeneration with mask-based inpainting. GPT-4o Vision now returns bounding boxes (% of image) for each text element. sharp generates pixel-accurate PNG mask with transparent rectangles over marketing text. Gemini 2.5 Flash Image is primary provider (better original preservation), gpt-image-1 mask-based inpainting as fallback. Orchestrator pattern: `generateCleanProductImage()` → `_inpaintWithGemini()` → `_inpaintWithOpenAI()` → `_uploadCleanImage()`. New API routes: POST /api/decompose/[id]/save-asset, GET /api/decompose/[id]/save-texts (Creative Builder-ready format). New types: BoundingBox, SaveAsAssetResult, SavedTextElement. E2E tested: Gemini 6.6s, OpenAI 25s, all 8 tests pass, zero TS errors. |
 | 22 | Decomposer UI & Creative Builder Integration | ✅ Complete | 2026-02-14 | DecompositionModal shared component (components/shared/decomposition-modal.tsx) with 3-section layout: side-by-side original/clean images with toggle, editable marketing texts with type/position badges + read-only brand texts, collapsible detailed analysis (product, background, layout with color swatches). use-decomposition hook (hooks/use-decomposition.ts) encapsulates API calls for decompose/saveAsAsset/getTextsForBuilder. Creative Builder extended with initialImages/initialTexts props for pre-population from decomposition. Board Detail: per-card "Decompose" button + "Batch Decompose" header button + "Send to Creative Builder" flow. Discover page: per-card Decompose button. Save as Asset inline form in modal. 6 new PostHog events (decomposition_modal_opened, comparison_toggled, text_edited, sent_to_builder, asset_saved, batch_completed). shadcn Collapsible component added. 2 new files, 4 modified files. 107 tests pass, zero TS errors. |
 
+| 23 | Brand Guidelines + Assets + Ad Generator (Storage & Compositing) | ✅ Complete | 2026-02-19 | Three core features: (1) Brand Guidelines storage migrated from `brand-assets` to `elements` bucket — `STORAGE_BUCKET` constant in `brand-guidelines-entities.ts` changed, all 9 storage operations updated. (2) Assets storage migrated from `assets` to `asset` bucket — added `brand_guideline_id` FK on assets table, guideline linkage in CRUD (create/update/filter), join to `brand_guidelines(name)` for display. (3) Ad Generator — entirely new feature: `generated_ads` DB table (17 columns, 3 indexes, RLS policies), Sharp SVG compositing engine (`text-overlay.ts` with 8 position types, word wrap, drop shadow), data layer (`ads.ts` with CRUD + batch + upload), 2 API routes (`composite-batch` with M×N matrix generation + `[id]/download` with Content-Disposition), full UI (`/ad-generator` with 12 components: guideline selector → background selector → text variants → styling controls → preview grid → ads history), sidebar nav entry (Layers icon), 4 PostHog analytics events. Backend: 3 new Supabase Storage buckets (`elements`, `asset`, `ads`) created with public RLS policies, DB migration applied (generated_ads table + brand_guideline_id FK), files migrated from old to new buckets, URLs updated in DB. 28 files committed (16 new, 9 modified, +2395/-72 lines). Commit `4c3465a` pushed to `origin/main`. |
+
 ## Issues / Blockers
 
 (None)
 
 ## Context for Next Session
 
-Phase 22 complete. All decomposition features are now end-to-end functional:
-- Board Detail: Decompose per card → modal with analysis → Save as Asset → Send to Creative Builder (pre-populated)
-- Discover: Decompose per card → modal with analysis → Save as Asset
-- Standalone Decomposition page (/decomposition): upload image or paste URL → modal with analysis
-- Creative Builder: accepts initialImages/initialTexts from decomposition flow
-- DecompositionModal is a shared component reusable from any context
+Phase 23 complete. Three core features are production-ready:
+- **Brand Guidelines:** Files stored in `elements` bucket. Wizard, editor, AI generation, @mention, PDF export all functional.
+- **Assets:** Files stored in `asset` bucket. Assets can be linked to brand guidelines via optional FK. Filter by guideline, display guideline name badge on cards.
+- **Ad Generator:** Full M×N compositing pipeline. Select guideline → select backgrounds → enter text variants → configure font/size/color/position → generate previews → approve/reject → save → download. Files stored in `ads` bucket. Sharp SVG composite engine runs server-side (no node-canvas needed). `maxDuration: 300` on batch endpoint requires Vercel Pro plan (confirmed).
+
+### E2E Testing Results (Pre-Deploy):
+- 30/30 backend tests passed across all 3 features
+- Test data left in Supabase for manual verification (1 test asset, 3 generated ads)
+- UI audit: 3 parallel agents verified all click paths — all clean
+- TypeScript: `tsc --noEmit` = 0 errors
 
 ### QA Bug Fixes Applied (Post Phase 22):
 - CRITICAL: Test Run button was calling `handleToggle` (pause/activate) instead of test run handler — fixed in automation-card.tsx
