@@ -320,17 +320,23 @@ export async function generateVariationsAction(
         creativeOptions
       );
 
-      // Generate image (unless text_only)
+      // Determine the variation image
       let imageUrl: string | null = null;
       if (strategy !== "text_only") {
-        const dalleUrl = await generateVariationImage(
-          savedAd,
-          asset,
-          strategy,
-          brandGuidelines,
-          creativeOptions
-        );
-        imageUrl = dalleUrl;
+        if (source === "asset") {
+          // Asset-based: use the existing uploaded asset image — don't regenerate
+          imageUrl = asset.imageUrl;
+        } else {
+          // Competitor-based: generate a new image via DALL-E
+          const dalleUrl = await generateVariationImage(
+            savedAd,
+            asset,
+            strategy,
+            brandGuidelines,
+            creativeOptions
+          );
+          imageUrl = dalleUrl;
+        }
       }
 
       // Complete variation
