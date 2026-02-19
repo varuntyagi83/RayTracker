@@ -131,7 +131,8 @@ export interface EventPropertiesMap {
 
   // Variations Page
   variations_page_viewed: Record<string, never>;
-  variation_generated_from_page: { saved_ad_id: string; asset_id: string; strategies: number; channel: string };
+  variation_source_toggled: { source: string };
+  variation_generated_from_page: { saved_ad_id?: string; asset_id: string; strategies: number; channel: string; source: string; has_creative_options: boolean };
   variation_deleted_from_history: { variation_id: string };
 
   // Ad Decomposition

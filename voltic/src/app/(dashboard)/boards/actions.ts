@@ -32,7 +32,7 @@ import { generateVariationText, generateVariationImage } from "@/lib/ai/variatio
 import { enhanceCreativeText } from "@/lib/ai/creative-enhance";
 import { VARIATION_CREDIT_COST, CREATIVE_ENHANCE_CREDIT_COST } from "@/types/variations";
 import type { Board, BoardWithAds, SavedAd } from "@/types/boards";
-import type { Variation } from "@/types/variations";
+import type { Variation, CreativeOptions } from "@/types/variations";
 import type { AdInsightData } from "@/types/discover";
 
 // ─── Fetch All Boards ───────────────────────────────────────────────────────
@@ -180,14 +180,24 @@ export async function fetchVariationsAction(
 // ─── Generate Variations ─────────────────────────────────────────────────────
 
 const generateVariationsSchema = z.object({
-  savedAdId: z.string().uuid(),
+  source: z.enum(["competitor", "asset"]).default("competitor"),
+  savedAdId: z.string().uuid().optional(),
   assetId: z.string().uuid(),
   strategies: z.array(z.enum([
     "hero_product", "curiosity", "pain_point",
     "proof_point", "image_only", "text_only",
   ])).min(1).max(6),
   channel: z.string().optional(),
-});
+  creativeOptions: z.object({
+    angle: z.string().optional(),
+    lighting: z.string().optional(),
+    background: z.string().optional(),
+    customInstruction: z.string().max(500).optional(),
+  }).optional(),
+}).refine(
+  (data) => data.source === "asset" || data.savedAdId,
+  { message: "savedAdId is required for competitor-based variations", path: ["savedAdId"] }
+);
 
 export async function generateVariationsAction(
   input: z.input<typeof generateVariationsSchema>
@@ -202,7 +212,8 @@ export async function generateVariationsAction(
   if (!parsed.success)
     return { results: [], error: parsed.error.issues[0].message };
 
-  const { savedAdId, assetId, strategies, channel } = parsed.data;
+  const { source, savedAdId, assetId, strategies, channel, creativeOptions: rawCreativeOptions } = parsed.data;
+  const creativeOptions = rawCreativeOptions as CreativeOptions | undefined;
   const totalCost = VARIATION_CREDIT_COST * strategies.length;
 
   // Check credits
@@ -211,39 +222,41 @@ export async function generateVariationsAction(
     return { results: [], error: creditCheck.error };
   }
 
-  // Fetch the saved ad directly by ID
-  let savedAd: SavedAd | undefined;
-  const { createAdminClient } = await import("@/lib/supabase/admin");
-  const supabase = createAdminClient();
-  const { data: adRow } = await supabase
-    .from("saved_ads")
-    .select("*")
-    .eq("id", savedAdId)
-    .eq("workspace_id", workspace.id)
-    .single();
+  // Fetch the saved ad only for competitor-based variations
+  let savedAd: SavedAd | null = null;
+  if (source === "competitor" && savedAdId) {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const supabase = createAdminClient();
+    const { data: adRow } = await supabase
+      .from("saved_ads")
+      .select("*")
+      .eq("id", savedAdId)
+      .eq("workspace_id", workspace.id)
+      .single();
 
-  if (!adRow) {
-    await refundCredits(workspace.id, totalCost);
-    return { results: [], error: "Saved ad not found" };
+    if (!adRow) {
+      await refundCredits(workspace.id, totalCost);
+      return { results: [], error: "Saved ad not found" };
+    }
+
+    savedAd = {
+      id: adRow.id,
+      boardId: adRow.board_id,
+      source: adRow.source,
+      metaLibraryId: adRow.meta_library_id,
+      brandName: adRow.brand_name,
+      headline: adRow.headline,
+      body: adRow.body,
+      format: adRow.format,
+      imageUrl: adRow.image_url,
+      videoUrl: adRow.video_url,
+      landingPageUrl: adRow.landing_page_url,
+      platforms: adRow.platforms,
+      startDate: adRow.start_date,
+      runtimeDays: adRow.runtime_days,
+      createdAt: adRow.created_at,
+    };
   }
-
-  savedAd = {
-    id: adRow.id,
-    boardId: adRow.board_id,
-    source: adRow.source,
-    metaLibraryId: adRow.meta_library_id,
-    brandName: adRow.brand_name,
-    headline: adRow.headline,
-    body: adRow.body,
-    format: adRow.format,
-    imageUrl: adRow.image_url,
-    videoUrl: adRow.video_url,
-    landingPageUrl: adRow.landing_page_url,
-    platforms: adRow.platforms,
-    startDate: adRow.start_date,
-    runtimeDays: adRow.runtime_days,
-    createdAt: adRow.created_at,
-  };
 
   // Fetch asset
   const asset = await getAsset(workspace.id, assetId);
@@ -262,10 +275,12 @@ export async function generateVariationsAction(
     // Create pending variation record
     const variationResult = await createVariation(
       workspace.id,
-      savedAdId,
       assetId,
       strategy,
-      VARIATION_CREDIT_COST
+      VARIATION_CREDIT_COST,
+      source,
+      savedAdId,
+      creativeOptions
     );
 
     if (!variationResult.success || !variationResult.id) {
@@ -283,7 +298,8 @@ export async function generateVariationsAction(
         asset,
         strategy,
         brandGuidelines,
-        channel
+        channel,
+        creativeOptions
       );
 
       // Generate image (unless text_only)
@@ -293,7 +309,8 @@ export async function generateVariationsAction(
           savedAd,
           asset,
           strategy,
-          brandGuidelines
+          brandGuidelines,
+          creativeOptions
         );
         imageUrl = dalleUrl;
       }

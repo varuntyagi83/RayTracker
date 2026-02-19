@@ -345,12 +345,13 @@ export const variations = pgTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
     savedAdId: uuid("saved_ad_id")
-      .notNull()
       .references(() => savedAds.id, { onDelete: "cascade" }),
     assetId: uuid("asset_id")
       .notNull()
       .references(() => assets.id, { onDelete: "cascade" }),
+    source: text("source").notNull().default("competitor"),
     strategy: text("strategy").notNull(),
+    creativeOptions: jsonb("creative_options"),
     generatedImageUrl: text("generated_image_url"),
     generatedHeadline: text("generated_headline"),
     generatedBody: text("generated_body"),
@@ -363,6 +364,7 @@ export const variations = pgTable(
   (table) => [
     index("idx_variations_workspace_id").on(table.workspaceId),
     index("idx_variations_saved_ad_id").on(table.savedAdId),
+    index("idx_variations_source").on(table.source),
   ]
 );
 

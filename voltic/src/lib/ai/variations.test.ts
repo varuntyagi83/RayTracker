@@ -3,8 +3,11 @@ import {
   buildBrandGuidelinesSection,
   buildTextPrompt,
   buildImagePrompt,
+  buildAssetTextPrompt,
+  buildAssetImagePrompt,
+  buildCreativeOptionsSection,
 } from "./variations";
-import type { BrandGuidelines } from "@/types/variations";
+import type { BrandGuidelines, CreativeOptions } from "@/types/variations";
 
 const mockAd = {
   brandName: "Nike" as string | null,
@@ -24,6 +27,13 @@ const fullGuidelines: BrandGuidelines = {
   colorPalette: "#FF5733, #3498DB",
   targetAudience: "Active millennials",
   dosAndDonts: "Always use lowercase. Never use exclamation marks.",
+};
+
+const fullCreativeOptions: CreativeOptions = {
+  angle: "three_quarter",
+  lighting: "golden_hour",
+  background: "outdoor",
+  customInstruction: "Show near a mountain trail",
 };
 
 // ─── buildBrandGuidelinesSection ──────────────────────────────────────────────
@@ -55,7 +65,43 @@ describe("buildBrandGuidelinesSection", () => {
   });
 });
 
-// ─── buildTextPrompt ─────────────────────────────────────────────────────────
+// ─── buildCreativeOptionsSection ─────────────────────────────────────────────
+
+describe("buildCreativeOptionsSection", () => {
+  it("returns empty string when undefined", () => {
+    expect(buildCreativeOptionsSection()).toBe("");
+  });
+
+  it("returns empty string when no options populated", () => {
+    expect(buildCreativeOptionsSection({})).toBe("");
+  });
+
+  it("includes only populated options", () => {
+    const result = buildCreativeOptionsSection({ angle: "front" });
+    expect(result).toContain("Product angle: Front View");
+    expect(result).not.toContain("Lighting:");
+    expect(result).not.toContain("Background:");
+  });
+
+  it("includes all options when fully populated", () => {
+    const result = buildCreativeOptionsSection(fullCreativeOptions);
+    expect(result).toContain("CREATIVE DIRECTION");
+    expect(result).toContain("Product angle: 3/4 View");
+    expect(result).toContain("Lighting: Golden Hour");
+    expect(result).toContain("Background: Outdoor");
+    expect(result).toContain("Custom direction: Show near a mountain trail");
+  });
+
+  it("includes custom instruction alone", () => {
+    const result = buildCreativeOptionsSection({
+      customInstruction: "Make it vibrant",
+    });
+    expect(result).toContain("CREATIVE DIRECTION");
+    expect(result).toContain("Custom direction: Make it vibrant");
+  });
+});
+
+// ─── buildTextPrompt (competitor-based) ─────────────────────────────────────
 
 describe("buildTextPrompt", () => {
   it("includes hero_product strategy instruction", () => {
@@ -99,6 +145,7 @@ describe("buildTextPrompt", () => {
     expect(prompt).toContain("Brand: Nike");
     expect(prompt).toContain("Headline: Just Do It");
     expect(prompt).toContain("Body: The best running shoes");
+    expect(prompt).toContain("COMPETITOR AD (inspiration)");
   });
 
   it("includes product details", () => {
@@ -136,9 +183,102 @@ describe("buildTextPrompt", () => {
     const prompt = buildTextPrompt(mockAd, noDescAsset, "hero_product");
     expect(prompt).toContain("Description: (no description)");
   });
+
+  it("includes channel instruction when provided", () => {
+    const prompt = buildTextPrompt(
+      mockAd,
+      mockAsset,
+      "hero_product",
+      undefined,
+      "instagram"
+    );
+    expect(prompt).toContain("INSTAGRAM");
+    expect(prompt).toContain("visual-first");
+  });
 });
 
-// ─── buildImagePrompt ────────────────────────────────────────────────────────
+// ─── buildAssetTextPrompt (asset-based) ─────────────────────────────────────
+
+describe("buildAssetTextPrompt", () => {
+  it("includes product details without competitor section", () => {
+    const prompt = buildAssetTextPrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("Product: SuperRun Pro");
+    expect(prompt).toContain("Description: High-performance running shoes");
+    expect(prompt).not.toContain("COMPETITOR AD");
+    expect(prompt).not.toContain("Brand: Nike");
+  });
+
+  it("includes strategy instruction", () => {
+    const prompt = buildAssetTextPrompt(mockAsset, "curiosity");
+    expect(prompt).toContain("CURIOSITY");
+    expect(prompt).toContain("open loop");
+  });
+
+  it("includes creative options when provided", () => {
+    const prompt = buildAssetTextPrompt(
+      mockAsset,
+      "hero_product",
+      fullCreativeOptions
+    );
+    expect(prompt).toContain("CREATIVE DIRECTION");
+    expect(prompt).toContain("3/4 View");
+    expect(prompt).toContain("Golden Hour");
+    expect(prompt).toContain("Outdoor");
+    expect(prompt).toContain("Show near a mountain trail");
+  });
+
+  it("handles empty creative options", () => {
+    const prompt = buildAssetTextPrompt(mockAsset, "hero_product", {});
+    expect(prompt).not.toContain("CREATIVE DIRECTION");
+  });
+
+  it("includes brand guidelines when provided", () => {
+    const prompt = buildAssetTextPrompt(
+      mockAsset,
+      "hero_product",
+      undefined,
+      fullGuidelines
+    );
+    expect(prompt).toContain("BRAND GUIDELINES (must follow)");
+    expect(prompt).toContain("MyBrand");
+  });
+
+  it("includes channel instruction", () => {
+    const prompt = buildAssetTextPrompt(
+      mockAsset,
+      "hero_product",
+      undefined,
+      undefined,
+      "instagram"
+    );
+    expect(prompt).toContain("INSTAGRAM");
+    expect(prompt).toContain("visual-first");
+  });
+
+  it("handles null asset description", () => {
+    const noDescAsset = { name: "Test Product", description: null };
+    const prompt = buildAssetTextPrompt(noDescAsset, "hero_product");
+    expect(prompt).toContain("Description: (no description)");
+  });
+
+  it("includes all strategies correctly", () => {
+    const strategies = [
+      "hero_product",
+      "curiosity",
+      "pain_point",
+      "proof_point",
+      "image_only",
+      "text_only",
+    ] as const;
+
+    for (const strategy of strategies) {
+      const prompt = buildAssetTextPrompt(mockAsset, strategy);
+      expect(prompt).toContain(strategy.replace(/_/g, " ").toUpperCase());
+    }
+  });
+});
+
+// ─── buildImagePrompt (competitor-based) ────────────────────────────────────
 
 describe("buildImagePrompt", () => {
   it("includes product name", () => {
@@ -149,6 +289,7 @@ describe("buildImagePrompt", () => {
   it("references competitor brand", () => {
     const prompt = buildImagePrompt(mockAd, mockAsset, "hero_product");
     expect(prompt).toContain("Nike");
+    expect(prompt).toContain("Inspired by");
   });
 
   it("includes hero_product style notes", () => {
@@ -200,5 +341,95 @@ describe("buildImagePrompt", () => {
     const nullBrandAd = { brandName: null, format: "image" };
     const prompt = buildImagePrompt(nullBrandAd, mockAsset, "hero_product");
     expect(prompt).toContain("a competitor");
+  });
+});
+
+// ─── buildAssetImagePrompt (asset-based) ────────────────────────────────────
+
+describe("buildAssetImagePrompt", () => {
+  it("includes product name without competitor reference", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("SuperRun Pro");
+    expect(prompt).not.toContain("Inspired by");
+    expect(prompt).not.toContain("competitor");
+  });
+
+  it("includes product description", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("High-performance running shoes");
+  });
+
+  it("includes strategy style notes", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("prominently featured in the center");
+  });
+
+  it("includes angle direction when provided", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {
+      angle: "top",
+    });
+    expect(prompt).toContain("top down");
+  });
+
+  it("includes lighting direction when provided", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {
+      lighting: "dramatic",
+    });
+    expect(prompt).toContain("dramatic");
+  });
+
+  it("includes background direction when provided", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {
+      background: "outdoor",
+    });
+    expect(prompt).toContain("outdoor");
+  });
+
+  it("includes custom instruction when provided", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {
+      customInstruction: "Place on a wooden table",
+    });
+    expect(prompt).toContain("Place on a wooden table");
+  });
+
+  it("includes all creative options together", () => {
+    const prompt = buildAssetImagePrompt(
+      mockAsset,
+      "hero_product",
+      fullCreativeOptions
+    );
+    expect(prompt).toContain("3/4 view");
+    expect(prompt).toContain("golden hour");
+    expect(prompt).toContain("outdoor");
+    expect(prompt).toContain("Show near a mountain trail");
+  });
+
+  it("includes brand color palette when provided", () => {
+    const prompt = buildAssetImagePrompt(
+      mockAsset,
+      "hero_product",
+      undefined,
+      fullGuidelines
+    );
+    expect(prompt).toContain("#FF5733, #3498DB");
+  });
+
+  it("includes no-text instruction", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("Do NOT include any text, logos, or watermarks");
+  });
+
+  it("handles null asset description", () => {
+    const noDescAsset = { name: "Test Product", description: null };
+    const prompt = buildAssetImagePrompt(noDescAsset, "hero_product");
+    expect(prompt).toContain("Test Product");
+    expect(prompt).not.toContain("Product description:");
+  });
+
+  it("excludes empty creative options lines", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {});
+    expect(prompt).not.toContain("Shoot from");
+    expect(prompt).not.toContain("background should be");
+    expect(prompt).not.toContain("Additional direction:");
   });
 });

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   Sparkles,
   Loader2,
@@ -13,7 +14,9 @@ import {
   Upload,
   X,
   Image as ImageIcon,
-  ChevronRight,
+  Palette,
+  ChevronDown,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,8 +39,18 @@ import {
   STRATEGY_LABELS,
   STRATEGY_DESCRIPTIONS,
   VARIATION_CREDIT_COST,
+  PRODUCT_ANGLE_LABELS,
+  LIGHTING_STYLE_LABELS,
+  BACKGROUND_STYLE_LABELS,
 } from "@/types/variations";
-import type { VariationStrategy } from "@/types/variations";
+import type {
+  VariationStrategy,
+  VariationSource,
+  ProductAngle,
+  LightingStyle,
+  BackgroundStyle,
+  BrandGuidelines,
+} from "@/types/variations";
 import type { SavedAd, Board } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 import type { VariationWithContext } from "@/lib/data/variations";
@@ -73,6 +86,9 @@ const ALL_STRATEGIES: VariationStrategy[] = [
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function VariationsPageClient() {
+  // ── Source toggle ──
+  const [variationSource, setVariationSource] = useState<VariationSource>("competitor");
+
   // ── Board / Competitor selection ──
   const [boards, setBoards] = useState<Board[]>([]);
   const [boardsLoading, setBoardsLoading] = useState(true);
@@ -95,6 +111,12 @@ export default function VariationsPageClient() {
   const [uploadSaving, setUploadSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Creative options (asset-based) ──
+  const [angle, setAngle] = useState<string>("");
+  const [lighting, setLighting] = useState<string>("");
+  const [background, setBackground] = useState<string>("");
+  const [customInstruction, setCustomInstruction] = useState<string>("");
+
   // ── Channel ──
   const [channel, setChannel] = useState<string>("facebook");
 
@@ -112,7 +134,15 @@ export default function VariationsPageClient() {
   const [historyLoading, setHistoryLoading] = useState(true);
 
   // ── Brand guidelines ──
-  const [hasBrandGuidelines, setHasBrandGuidelines] = useState(false);
+  const [brandGuidelines, setBrandGuidelines] = useState<BrandGuidelines | null>(null);
+  const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
+  const hasBrandGuidelines = !!(
+    brandGuidelines?.brandName ||
+    brandGuidelines?.brandVoice ||
+    brandGuidelines?.targetAudience ||
+    brandGuidelines?.dosAndDonts ||
+    brandGuidelines?.colorPalette
+  );
 
   // ── Data loaders ──
 
@@ -140,10 +170,7 @@ export default function VariationsPageClient() {
     );
     const result = await fetchBrandGuidelines();
     if (result.data) {
-      const g = result.data;
-      setHasBrandGuidelines(
-        !!(g.brandName || g.brandVoice || g.targetAudience || g.dosAndDonts)
-      );
+      setBrandGuidelines(result.data);
     }
   }, []);
 
@@ -250,26 +277,51 @@ export default function VariationsPageClient() {
     }
   };
 
+  // ── Source toggle handler ──
+
+  const handleSourceChange = (newSource: VariationSource) => {
+    setVariationSource(newSource);
+    setSelectedStrategies(new Set());
+    setError("");
+    track("variation_source_toggled", { source: newSource });
+  };
+
   // ── Generate ──
 
   const totalCost = selectedStrategies.size * VARIATION_CREDIT_COST;
 
   const canGenerate =
-    selectedAd && selectedAssetId && selectedStrategies.size > 0 && !generating;
+    variationSource === "competitor"
+      ? selectedAd && selectedAssetId && selectedStrategies.size > 0 && !generating
+      : selectedAssetId && selectedStrategies.size > 0 && !generating;
 
   const handleGenerate = async () => {
-    if (!selectedAd || !selectedAssetId || selectedStrategies.size === 0) return;
+    if (variationSource === "competitor" && !selectedAd) return;
+    if (!selectedAssetId || selectedStrategies.size === 0) return;
 
     setGenerating(true);
     setError("");
 
     try {
       const strategies = Array.from(selectedStrategies);
+
+      const creativeOpts =
+        variationSource === "asset"
+          ? {
+              angle: angle || undefined,
+              lighting: lighting || undefined,
+              background: background || undefined,
+              customInstruction: customInstruction.trim() || undefined,
+            }
+          : undefined;
+
       const result = await generateVariationsAction({
-        savedAdId: selectedAd.id,
+        source: variationSource,
+        savedAdId: variationSource === "competitor" ? selectedAd!.id : undefined,
         assetId: selectedAssetId,
         strategies,
         channel,
+        creativeOptions: creativeOpts,
       });
 
       if (result.error) {
@@ -288,10 +340,12 @@ export default function VariationsPageClient() {
         }
 
         track("variation_generated_from_page", {
-          saved_ad_id: selectedAd.id,
+          source: variationSource,
+          saved_ad_id: variationSource === "competitor" ? selectedAd?.id : undefined,
           asset_id: selectedAssetId,
           strategies: strategies.length,
           channel,
+          has_creative_options: !!creativeOpts,
         });
       }
 
@@ -319,6 +373,9 @@ export default function VariationsPageClient() {
     }
   };
 
+  // ── Step numbering helper ──
+  const isAssetFlow = variationSource === "asset";
+
   // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
@@ -327,7 +384,7 @@ export default function VariationsPageClient() {
       <div>
         <h1 className="text-2xl font-bold">Variations</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Generate ad variations from competitor ads using your products and AI
+          Generate ad variations from competitor ads or your own assets using AI
           strategies.
         </p>
       </div>
@@ -335,85 +392,113 @@ export default function VariationsPageClient() {
       {/* ── Generation Form ─────────────────────────────────────────── */}
       <Card>
         <CardContent className="p-6 space-y-6">
-          {/* Step 1: Competitor Ad */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Badge
-                variant="secondary"
-                className="size-6 p-0 flex items-center justify-center text-xs font-bold"
-              >
-                1
-              </Badge>
-              <label className="text-sm font-medium">
-                Select Competitor Ad
-              </label>
-            </div>
-
-            {boardsLoading ? (
-              <Skeleton className="h-10 w-full max-w-sm" />
-            ) : boards.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No boards found. Save ads to a board from the Discover page
-                first.
-              </p>
-            ) : (
-              <>
-                <Select
-                  value={selectedBoardId}
-                  onValueChange={handleBoardSelect}
-                >
-                  <SelectTrigger className="max-w-sm">
-                    <SelectValue placeholder="Choose a board..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {boards.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                {adsLoading && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="size-4 animate-spin" />
-                    Loading ads...
-                  </div>
-                )}
-
-                {!adsLoading && selectedBoardId && boardAds.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No ads in this board.
-                  </p>
-                )}
-
-                {boardAds.length > 0 && (
-                  <ScrollArea className="w-full">
-                    <div className="flex gap-3 pb-3">
-                      {boardAds.map((ad) => (
-                        <CompetitorAdCard
-                          key={ad.id}
-                          ad={ad}
-                          selected={selectedAd?.id === ad.id}
-                          onSelect={() => setSelectedAd(ad)}
-                        />
-                      ))}
-                    </div>
-                    <ScrollBar orientation="horizontal" />
-                  </ScrollArea>
-                )}
-              </>
-            )}
+          {/* Source Toggle */}
+          <div className="flex items-center gap-1 p-1 rounded-lg bg-muted/50 w-fit">
+            <button
+              type="button"
+              onClick={() => handleSourceChange("competitor")}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                variationSource === "competitor"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              From Competitor Ad
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSourceChange("asset")}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                variationSource === "asset"
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              From Your Asset
+            </button>
           </div>
 
-          {/* Step 2: Asset */}
+          {/* ── COMPETITOR FLOW: Step 1 — Select Competitor Ad ── */}
+          {!isAssetFlow && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className="size-6 p-0 flex items-center justify-center text-xs font-bold"
+                >
+                  1
+                </Badge>
+                <label className="text-sm font-medium">
+                  Select Competitor Ad
+                </label>
+              </div>
+
+              {boardsLoading ? (
+                <Skeleton className="h-10 w-full max-w-sm" />
+              ) : boards.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No boards found. Save ads to a board from the Discover page
+                  first.
+                </p>
+              ) : (
+                <>
+                  <Select
+                    value={selectedBoardId}
+                    onValueChange={handleBoardSelect}
+                  >
+                    <SelectTrigger className="max-w-sm">
+                      <SelectValue placeholder="Choose a board..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {boards.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {adsLoading && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      Loading ads...
+                    </div>
+                  )}
+
+                  {!adsLoading && selectedBoardId && boardAds.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      No ads in this board.
+                    </p>
+                  )}
+
+                  {boardAds.length > 0 && (
+                    <ScrollArea className="w-full">
+                      <div className="flex gap-3 pb-3">
+                        {boardAds.map((ad) => (
+                          <CompetitorAdCard
+                            key={ad.id}
+                            ad={ad}
+                            selected={selectedAd?.id === ad.id}
+                            onSelect={() => setSelectedAd(ad)}
+                          />
+                        ))}
+                      </div>
+                      <ScrollBar orientation="horizontal" />
+                    </ScrollArea>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── Step: Select Your Product ── */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Badge
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                2
+                {isAssetFlow ? "1" : "2"}
               </Badge>
               <label className="text-sm font-medium">
                 Select Your Product
@@ -517,14 +602,113 @@ export default function VariationsPageClient() {
             </Tabs>
           </div>
 
-          {/* Step 3: Channel */}
+          {/* ── ASSET FLOW: Step 2 — Creative Direction ── */}
+          {isAssetFlow && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className="size-6 p-0 flex items-center justify-center text-xs font-bold"
+                >
+                  2
+                </Badge>
+                <label className="text-sm font-medium">Creative Direction</label>
+                <span className="text-xs text-muted-foreground">(optional)</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Product Angle */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    <Palette className="inline size-3 mr-1" />
+                    Product Angle
+                  </label>
+                  <Select value={angle} onValueChange={setAngle}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Auto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Auto</SelectItem>
+                      {(Object.entries(PRODUCT_ANGLE_LABELS) as [ProductAngle, string][]).map(
+                        ([k, v]) => (
+                          <SelectItem key={k} value={k}>
+                            {v}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Lighting */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Lighting
+                  </label>
+                  <Select value={lighting} onValueChange={setLighting}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Auto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Auto</SelectItem>
+                      {(Object.entries(LIGHTING_STYLE_LABELS) as [LightingStyle, string][]).map(
+                        ([k, v]) => (
+                          <SelectItem key={k} value={k}>
+                            {v}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Background */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Background
+                  </label>
+                  <Select value={background} onValueChange={setBackground}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Auto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Auto</SelectItem>
+                      {(Object.entries(BACKGROUND_STYLE_LABELS) as [BackgroundStyle, string][]).map(
+                        ([k, v]) => (
+                          <SelectItem key={k} value={k}>
+                            {v}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Custom Instruction */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Custom Instruction
+                  </label>
+                  <Textarea
+                    value={customInstruction}
+                    onChange={(e) => setCustomInstruction(e.target.value)}
+                    placeholder="e.g. 'Show product on a kitchen counter', 'Use pastel tones'"
+                    rows={2}
+                    maxLength={500}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step: Channel ── */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Badge
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                3
+                {isAssetFlow ? "3" : "3"}
               </Badge>
               <label className="text-sm font-medium">Choose Channel</label>
             </div>
@@ -546,14 +730,14 @@ export default function VariationsPageClient() {
             </div>
           </div>
 
-          {/* Step 4: Strategies */}
+          {/* ── Step: Strategies ── */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Badge
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                4
+                {isAssetFlow ? "4" : "4"}
               </Badge>
               <label className="text-sm font-medium">Select Strategies</label>
             </div>
@@ -586,11 +770,75 @@ export default function VariationsPageClient() {
             </div>
           </div>
 
-          {/* Summary + Generate */}
-          {hasBrandGuidelines && (
-            <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-              <ShieldCheck className="size-4" />
-              Brand guidelines will be applied
+          {/* Brand Guidelines Preview */}
+          {hasBrandGuidelines && brandGuidelines ? (
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+              <button
+                type="button"
+                onClick={() => setGuidelinesExpanded(!guidelinesExpanded)}
+                className="w-full flex items-center justify-between px-4 py-3 text-sm"
+              >
+                <span className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-medium">
+                  <ShieldCheck className="size-4" />
+                  Brand guidelines will be applied
+                  {brandGuidelines.brandName && (
+                    <Badge variant="outline" className="text-[10px] border-emerald-300 dark:border-emerald-700">
+                      {brandGuidelines.brandName}
+                    </Badge>
+                  )}
+                </span>
+                <ChevronDown
+                  className={`size-4 text-emerald-600 dark:text-emerald-400 transition-transform ${
+                    guidelinesExpanded ? "rotate-180" : ""
+                  }`}
+                />
+              </button>
+              {guidelinesExpanded && (
+                <div className="px-4 pb-3 space-y-2 text-xs text-muted-foreground border-t border-emerald-200 dark:border-emerald-800 pt-3">
+                  {brandGuidelines.brandVoice && (
+                    <div>
+                      <span className="font-medium text-foreground">Voice:</span>{" "}
+                      {brandGuidelines.brandVoice}
+                    </div>
+                  )}
+                  {brandGuidelines.colorPalette && (
+                    <div>
+                      <span className="font-medium text-foreground">Colors:</span>{" "}
+                      {brandGuidelines.colorPalette}
+                    </div>
+                  )}
+                  {brandGuidelines.targetAudience && (
+                    <div>
+                      <span className="font-medium text-foreground">Audience:</span>{" "}
+                      {brandGuidelines.targetAudience}
+                    </div>
+                  )}
+                  {brandGuidelines.dosAndDonts && (
+                    <div>
+                      <span className="font-medium text-foreground">Guidelines:</span>{" "}
+                      <span className="line-clamp-2">{brandGuidelines.dosAndDonts}</span>
+                    </div>
+                  )}
+                  <Link
+                    href="/brand-guidelines"
+                    className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline mt-1"
+                  >
+                    Edit guidelines <ExternalLink className="size-3" />
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-lg border border-dashed border-muted-foreground/25 px-4 py-3">
+              <span className="text-sm text-muted-foreground">
+                No brand guidelines set — variations will use generic style
+              </span>
+              <Link
+                href="/brand-guidelines"
+                className="text-xs text-primary hover:underline flex items-center gap-1"
+              >
+                Set up guidelines <ExternalLink className="size-3" />
+              </Link>
             </div>
           )}
 
@@ -606,6 +854,13 @@ export default function VariationsPageClient() {
                     {CHANNELS.find((c) => c.id === channel)?.label ?? channel}
                   </span>
                 )}
+                <span className="text-muted-foreground">
+                  {" "}
+                  &middot;{" "}
+                  {variationSource === "competitor"
+                    ? "Competitor-inspired"
+                    : "Asset-based"}
+                </span>
               </span>
               <Badge variant="secondary">{totalCost} credits</Badge>
             </div>
@@ -651,7 +906,7 @@ export default function VariationsPageClient() {
             <Sparkles className="size-12 text-muted-foreground/40 mb-4" />
             <h3 className="text-lg font-semibold">No variations yet</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Select a competitor ad, your product, and strategies above to
+              Select a source, your product, and strategies above to
               generate your first variations.
             </p>
           </div>
@@ -811,12 +1066,20 @@ function VariationHistoryCard({
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
             <Clock className="size-3" />
             {dateStr}
-            {variation.adBrandName && (
+            {variation.source === "competitor" && variation.adBrandName && (
               <>
                 <span>&middot;</span>
                 <span className="truncate max-w-[80px]">
                   vs {variation.adBrandName}
                 </span>
+              </>
+            )}
+            {variation.source === "asset" && (
+              <>
+                <span>&middot;</span>
+                <Badge variant="outline" className="text-[9px] px-1 py-0">
+                  Asset
+                </Badge>
               </>
             )}
           </div>

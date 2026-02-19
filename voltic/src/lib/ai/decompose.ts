@@ -50,8 +50,10 @@ Return ONLY valid JSON matching this exact schema:
 }
 
 Type classification rules:
-- "headline" / "subheadline" / "body" / "cta" / "legal" → ONLY for marketing overlay text (digitally added to the ad)
-- "brand" → ONLY for text physically printed on the product packaging
+- "headline" / "subheadline" / "body" / "cta" / "legal" → for marketing overlay text (digitally added to the ad). This includes ANY large text at the top or center of the image that serves a promotional purpose — even if it mentions the product name.
+- "brand" → ONLY for text physically printed/embossed on the product packaging itself (visible on the actual physical product). If the text is overlaid on top of the image with a different font/style than the packaging, it is marketing text, NOT brand text.
+
+IMPORTANT HEURISTIC: Large or medium text at the top or center of the image is almost always marketing overlay, NOT product packaging text. Only classify text as "brand" if you are confident it is physically part of the product packaging (e.g., product label, ingredients list, brand logo on the box).
 
 Bounding box rules:
 - bounding_box values are PERCENTAGES of the image dimensions (0 to 100)

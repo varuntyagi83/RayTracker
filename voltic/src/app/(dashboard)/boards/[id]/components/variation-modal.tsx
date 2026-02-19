@@ -145,6 +145,7 @@ export default function VariationModal({
 
     try {
       const result = await generateVariationsAction({
+        source: "competitor",
         savedAdId: savedAd.id,
         assetId: selectedAssetId,
         strategies,

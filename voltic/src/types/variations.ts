@@ -18,20 +18,99 @@ export const STRATEGY_LABELS: Record<VariationStrategy, string> = {
 };
 
 export const STRATEGY_DESCRIPTIONS: Record<VariationStrategy, string> = {
-  hero_product: "Feature your product as the star, overlaid on the competitor ad style",
+  hero_product: "Feature your product as the star with a clean, professional look",
   curiosity: "Create intrigue with an open loop that makes viewers want to learn more",
   pain_point: "Address a specific customer pain point your product solves",
   proof_point: "Lead with social proof, results, or credibility signals",
-  image_only: "Generate a new product image inspired by the ad creative style",
+  image_only: "Generate a new product image with high production value",
   text_only: "Generate only headline and body copy — no image generation",
 };
 
 export const VARIATION_CREDIT_COST = 10;
 
+// ─── Variation Source ───────────────────────────────────────────────────────
+
+export type VariationSource = "competitor" | "asset";
+
+// ─── Creative Options (for asset-based variations) ──────────────────────────
+
+export type ProductAngle =
+  | "front"
+  | "side"
+  | "top"
+  | "back"
+  | "three_quarter"
+  | "close_up"
+  | "flat_lay";
+
+export type LightingStyle =
+  | "natural"
+  | "studio"
+  | "dramatic"
+  | "backlit"
+  | "golden_hour"
+  | "neon"
+  | "soft_diffused";
+
+export type BackgroundStyle =
+  | "solid_white"
+  | "solid_black"
+  | "solid_color"
+  | "gradient"
+  | "lifestyle_scene"
+  | "studio"
+  | "outdoor"
+  | "minimal"
+  | "abstract";
+
+export interface CreativeOptions {
+  angle?: ProductAngle;
+  lighting?: LightingStyle;
+  background?: BackgroundStyle;
+  customInstruction?: string;
+}
+
+export const PRODUCT_ANGLE_LABELS: Record<ProductAngle, string> = {
+  front: "Front View",
+  side: "Side View",
+  top: "Top Down",
+  back: "Back View",
+  three_quarter: "3/4 View",
+  close_up: "Close Up",
+  flat_lay: "Flat Lay",
+};
+
+export const LIGHTING_STYLE_LABELS: Record<LightingStyle, string> = {
+  natural: "Natural Light",
+  studio: "Studio Lighting",
+  dramatic: "Dramatic",
+  backlit: "Backlit",
+  golden_hour: "Golden Hour",
+  neon: "Neon Glow",
+  soft_diffused: "Soft & Diffused",
+};
+
+export const BACKGROUND_STYLE_LABELS: Record<BackgroundStyle, string> = {
+  solid_white: "Solid White",
+  solid_black: "Solid Black",
+  solid_color: "Solid Color",
+  gradient: "Gradient",
+  lifestyle_scene: "Lifestyle Scene",
+  studio: "Studio",
+  outdoor: "Outdoor",
+  minimal: "Minimal",
+  abstract: "Abstract",
+};
+
+// ─── Variation Input / Output ───────────────────────────────────────────────
+
 export interface VariationGenerationInput {
-  savedAdId: string;
+  source: VariationSource;
+  savedAdId?: string;
   assetId: string;
   strategies: VariationStrategy[];
+  channel?: string;
+  creativeOptions?: CreativeOptions;
 }
 
 export interface VariationTextResult {
@@ -41,9 +120,11 @@ export interface VariationTextResult {
 
 export interface Variation {
   id: string;
-  savedAdId: string;
+  savedAdId: string | null;
   assetId: string;
+  source: VariationSource;
   strategy: VariationStrategy;
+  creativeOptions: CreativeOptions | null;
   generatedImageUrl: string | null;
   generatedHeadline: string | null;
   generatedBody: string | null;

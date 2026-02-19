@@ -1,5 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { Variation, VariationStrategy } from "@/types/variations";
+import type {
+  Variation,
+  VariationStrategy,
+  VariationSource,
+  CreativeOptions,
+} from "@/types/variations";
 
 // ─── Get Variations for a Saved Ad ──────────────────────────────────────────
 
@@ -41,10 +46,12 @@ export async function getVariation(
 
 export async function createVariation(
   workspaceId: string,
-  savedAdId: string,
   assetId: string,
   strategy: VariationStrategy,
-  creditsUsed: number
+  creditsUsed: number,
+  source: VariationSource,
+  savedAdId?: string,
+  creativeOptions?: CreativeOptions
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = createAdminClient();
 
@@ -52,9 +59,11 @@ export async function createVariation(
     .from("variations")
     .insert({
       workspace_id: workspaceId,
-      saved_ad_id: savedAdId,
+      saved_ad_id: savedAdId ?? null,
       asset_id: assetId,
+      source,
       strategy,
+      creative_options: creativeOptions ?? null,
       credits_used: creditsUsed,
       status: "pending",
     })
@@ -143,7 +152,7 @@ export async function getAllVariations(
   const { data } = await supabase
     .from("variations")
     .select(
-      "*, saved_ads!inner(brand_name, image_url), assets!inner(name, image_url)"
+      "*, saved_ads(brand_name, image_url), assets!inner(name, image_url)"
     )
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
@@ -165,9 +174,11 @@ export async function getAllVariations(
 function mapRow(row: any): Variation {
   return {
     id: row.id,
-    savedAdId: row.saved_ad_id,
+    savedAdId: row.saved_ad_id ?? null,
     assetId: row.asset_id,
+    source: row.source ?? "competitor",
     strategy: row.strategy as VariationStrategy,
+    creativeOptions: row.creative_options ?? null,
     generatedImageUrl: row.generated_image_url,
     generatedHeadline: row.generated_headline,
     generatedBody: row.generated_body,

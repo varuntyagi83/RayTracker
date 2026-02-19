@@ -54,6 +54,7 @@ export default function CreativeBuilderModal({
   const [enhanced, setEnhanced] = useState<Record<string, { headline: string; body: string }>>({});
   const [error, setError] = useState("");
   const [hasBrandGuidelines, setHasBrandGuidelines] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ url: string; name: string } | null>(null);
 
   // New text form
   const [newHeadline, setNewHeadline] = useState("");
@@ -262,11 +263,11 @@ export default function CreativeBuilderModal({
               {images.length > 0 && (
                 <div className="grid grid-cols-3 gap-2">
                   {images.map((img) => (
-                    <div key={img.id} className="relative group aspect-square">
-                      <Image src={img.url || "/placeholder.svg"} alt={img.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
+                    <div key={img.id} className="relative group aspect-square cursor-pointer" onClick={() => setPreviewImage({ url: img.url, name: img.name })}>
+                      <Image src={img.url || "/placeholder.svg"} alt={img.name} fill className="object-cover rounded-md hover:opacity-90 transition-opacity" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                       <button
                         type="button"
-                        onClick={() => removeImage(img.id)}
+                        onClick={(e) => { e.stopPropagation(); removeImage(img.id); }}
                         className="absolute -top-1 -right-1 size-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         <X className="size-3" />
@@ -387,7 +388,7 @@ export default function CreativeBuilderModal({
                     const showEnhanced =
                       mode === "ai_enhanced" && combo.enhancedHeadline;
                     return (
-                      <Card key={combo.id} className="overflow-hidden">
+                      <Card key={combo.id} className="overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all" onClick={() => setPreviewImage({ url: combo.image.url, name: combo.image.name })}>
                         <CardContent className="p-0 relative aspect-video">
                           <Image src={combo.image.url || "/placeholder.svg"} alt={combo.image.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
                           <div className="p-3 space-y-1">
@@ -420,6 +421,29 @@ export default function CreativeBuilderModal({
           </div>
         </div>
       </DialogContent>
+
+      {/* Image Preview Overlay */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center cursor-zoom-out"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 size-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          >
+            <X className="size-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewImage.url}
+            alt={previewImage.name}
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </Dialog>
   );
 }

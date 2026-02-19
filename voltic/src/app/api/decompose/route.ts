@@ -153,7 +153,15 @@ export async function POST(request: Request) {
     let cleanImageUrl: string | null = null;
     if (body.generate_clean_image && result.product.detected) {
       try {
-        const overlayTexts = result.texts.filter((t) => t.type !== "brand");
+        // Include all non-brand text, PLUS any "brand" text that is large/prominent
+        // at the top of the image (likely a misclassified marketing headline)
+        const overlayTexts = result.texts.filter(
+          (t) =>
+            t.type !== "brand" ||
+            (t.estimated_font_size === "large" &&
+              (t.position === "top" || t.position === "overlay")) ||
+            (t.estimated_font_size === "medium" && t.position === "top")
+        );
         const marketingTexts = overlayTexts.map((t) => t.content);
         const boundingBoxes = overlayTexts
           .filter((t) => t.bounding_box)
