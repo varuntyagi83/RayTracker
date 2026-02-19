@@ -219,12 +219,13 @@ export function buildImagePrompt(
     : "";
 
   return [
-    `Create a professional Meta (Facebook/Instagram) ad image for a product called "${asset.name}".`,
-    asset.description ? `Product description: ${asset.description}` : "",
+    "CRITICAL: This image must contain ZERO text, ZERO letters, ZERO words, ZERO logos, ZERO watermarks, ZERO labels, ZERO brand names — purely visual, no typography of any kind.",
+    `Create a professional Meta (Facebook/Instagram) ad image featuring a product: ${asset.name}.`,
+    asset.description ? `Product context: ${asset.description}` : "",
     `Inspired by the visual style of ${ad.brandName ?? "a competitor"}'s ${ad.format} ad.`,
     IMAGE_STYLE_NOTES[strategy],
     `The image should be suitable for a social media ad — clean, modern, high-contrast, attention-grabbing.${brandStyle}`,
-    "Do NOT include any text, logos, or watermarks in the image.",
+    "Remember: absolutely no text, letters, words, numbers, logos, labels, or watermarks anywhere in the image.",
   ]
     .filter(Boolean)
     .join(" ");
@@ -256,15 +257,16 @@ export function buildAssetImagePrompt(
     : "";
 
   return [
-    `Create a professional Meta (Facebook/Instagram) ad image for a product called "${asset.name}".`,
-    asset.description ? `Product description: ${asset.description}` : "",
+    "CRITICAL: This image must contain ZERO text, ZERO letters, ZERO words, ZERO logos, ZERO watermarks, ZERO labels, ZERO brand names — purely visual, no typography of any kind.",
+    `Create a professional Meta (Facebook/Instagram) ad image featuring a product: ${asset.name}.`,
+    asset.description ? `Product context: ${asset.description}` : "",
     IMAGE_STYLE_NOTES[strategy],
     angleLine,
     lightingLine,
     backgroundLine,
     customLine,
     `The image should be suitable for a social media ad — clean, modern, high-contrast, attention-grabbing.${brandStyle}`,
-    "Do NOT include any text, logos, or watermarks in the image.",
+    "Remember: absolutely no text, letters, words, numbers, logos, labels, or watermarks anywhere in the image.",
   ]
     .filter(Boolean)
     .join(" ");

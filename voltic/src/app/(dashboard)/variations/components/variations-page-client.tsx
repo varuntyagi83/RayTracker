@@ -86,6 +86,9 @@ const ALL_STRATEGIES: VariationStrategy[] = [
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function VariationsPageClient() {
+  // ── Image preview ──
+  const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | null>(null);
+
   // ── Source toggle ──
   const [variationSource, setVariationSource] = useState<VariationSource>("competitor");
 
@@ -913,8 +916,8 @@ export default function VariationsPageClient() {
           {selectedStrategies.size > 0 && (
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
               <span className="text-sm">
-                {selectedStrategies.size} strategy
-                {selectedStrategies.size !== 1 ? "ies" : "y"}
+                {selectedStrategies.size}{" "}
+                {selectedStrategies.size !== 1 ? "strategies" : "strategy"}
                 {channel && (
                   <span className="text-muted-foreground">
                     {" "}
@@ -985,11 +988,35 @@ export default function VariationsPageClient() {
                 key={v.id}
                 variation={v}
                 onDelete={() => handleDeleteVariation(v.id)}
+                onPreview={(url, alt) => setPreviewImage({ url, alt })}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Image Preview Overlay */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center cursor-zoom-out"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 size-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+          >
+            <X className="size-5" />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewImage.url}
+            alt={previewImage.alt}
+            className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -1055,9 +1082,11 @@ function CompetitorAdCard({
 function VariationHistoryCard({
   variation,
   onDelete,
+  onPreview,
 }: {
   variation: VariationWithContext;
   onDelete: () => void;
+  onPreview: (url: string, alt: string) => void;
 }) {
   const [deleting, setDeleting] = useState(false);
   const isCompleted = variation.status === "completed";
@@ -1073,13 +1102,20 @@ function VariationHistoryCard({
     <Card className="overflow-hidden hover:shadow-md transition-shadow group">
       <CardContent className="p-0">
         {/* Image */}
-        <div className="aspect-video bg-muted relative">
+        <div
+          className={`aspect-video bg-muted relative ${variation.generatedImageUrl ? "cursor-pointer" : ""}`}
+          onClick={() => {
+            if (variation.generatedImageUrl) {
+              onPreview(variation.generatedImageUrl, variation.generatedHeadline ?? "Generated variation");
+            }
+          }}
+        >
           {variation.generatedImageUrl ? (
             <Image
               src={variation.generatedImageUrl}
               alt="Generated variation"
               fill
-              className="object-cover"
+              className="object-cover hover:opacity-90 transition-opacity"
               sizes="(max-width: 768px) 100vw, 25vw"
               unoptimized
             />

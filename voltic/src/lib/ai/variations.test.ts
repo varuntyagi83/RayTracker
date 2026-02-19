@@ -334,7 +334,8 @@ describe("buildImagePrompt", () => {
 
   it("includes no-text instruction", () => {
     const prompt = buildImagePrompt(mockAd, mockAsset, "hero_product");
-    expect(prompt).toContain("Do NOT include any text, logos, or watermarks");
+    expect(prompt).toContain("ZERO text");
+    expect(prompt).toContain("no text, letters, words");
   });
 
   it("handles null brand name", () => {
@@ -416,14 +417,15 @@ describe("buildAssetImagePrompt", () => {
 
   it("includes no-text instruction", () => {
     const prompt = buildAssetImagePrompt(mockAsset, "hero_product");
-    expect(prompt).toContain("Do NOT include any text, logos, or watermarks");
+    expect(prompt).toContain("ZERO text");
+    expect(prompt).toContain("no text, letters, words");
   });
 
   it("handles null asset description", () => {
     const noDescAsset = { name: "Test Product", description: null };
     const prompt = buildAssetImagePrompt(noDescAsset, "hero_product");
     expect(prompt).toContain("Test Product");
-    expect(prompt).not.toContain("Product description:");
+    expect(prompt).not.toContain("Product context:");
   });
 
   it("excludes empty creative options lines", () => {
