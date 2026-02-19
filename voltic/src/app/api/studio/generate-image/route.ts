@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiLimiter } from "@/lib/utils/rate-limit";
+import { createAsset } from "@/lib/data/assets";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -14,6 +15,7 @@ const schema = z.object({
   conversationId: z.string().min(1),
   size: z.enum(["1024x1024", "1024x1536", "1536x1024"]).default("1024x1024"),
   quality: z.enum(["low", "medium", "high"]).default("high"),
+  brandGuidelineId: z.string().uuid().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -36,7 +38,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { prompt, messageId, conversationId, size, quality } = parsed.data;
+  const { prompt, messageId, conversationId, size, quality, brandGuidelineId } = parsed.data;
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
@@ -112,6 +114,49 @@ export async function POST(req: NextRequest) {
       .update({ attachments: [...currentAttachments, newAttachment] })
       .eq("id", messageId)
       .eq("workspace_id", workspace.id);
+
+    // Also save as an asset record, linked to brand guideline if available
+    let resolvedGuidelineId = brandGuidelineId;
+
+    // If no explicit guideline ID, check conversation messages for brand guideline @mentions
+    if (!resolvedGuidelineId) {
+      const { data: messages } = await supabase
+        .from("studio_messages")
+        .select("mentions")
+        .eq("conversation_id", conversationId)
+        .eq("workspace_id", workspace.id)
+        .order("created_at", { ascending: false })
+        .limit(10);
+
+      if (messages) {
+        for (const msg of messages) {
+          const mentions = (msg.mentions ?? []) as Array<{
+            type: string;
+            id: string;
+            name: string;
+          }>;
+          const guidelineMention = mentions.find(
+            (m) => m.type === "brand_guidelines"
+          );
+          if (guidelineMention) {
+            resolvedGuidelineId = guidelineMention.id;
+            break;
+          }
+        }
+      }
+    }
+
+    // Derive a short name from the prompt
+    const assetName =
+      prompt.length > 60 ? prompt.slice(0, 57) + "..." : prompt;
+
+    await createAsset(
+      workspace.id,
+      assetName,
+      publicUrl,
+      `AI-generated via Creative Studio`,
+      resolvedGuidelineId
+    );
 
     return NextResponse.json({
       url: publicUrl,

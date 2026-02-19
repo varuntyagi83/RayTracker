@@ -1,7 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
 import type { GeneratedAd, TextPosition } from "@/types/ads";
 
-const STORAGE_BUCKET = "ads";
+const STORAGE_BUCKET = "brand-assets";
 
 // ─── List Generated Ads ────────────────────────────────────────────────────
 
@@ -226,8 +226,9 @@ export async function uploadAdImage(
   buffer: Buffer,
   fileName: string
 ): Promise<{ url: string; path: string } | { error: string }> {
+  await ensureStorageBucket();
   const supabase = createAdminClient();
-  const storagePath = `${workspaceId}/${Date.now()}-${fileName}`;
+  const storagePath = `${workspaceId}/ads/${Date.now()}-${fileName}`;
 
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)

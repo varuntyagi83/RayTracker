@@ -1,7 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
 import type { Asset } from "@/types/assets";
 
-const STORAGE_BUCKET = "asset";
+const STORAGE_BUCKET = "brand-assets";
 
 // ─── List Assets ────────────────────────────────────────────────────────────
 
@@ -78,9 +78,10 @@ export async function uploadAssetImage(
   fileBuffer: Buffer,
   contentType: string
 ): Promise<{ url?: string; error?: string }> {
+  await ensureStorageBucket();
   const supabase = createAdminClient();
 
-  const path = `${workspaceId}/${Date.now()}-${fileName}`;
+  const path = `${workspaceId}/assets/${Date.now()}-${fileName}`;
 
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)

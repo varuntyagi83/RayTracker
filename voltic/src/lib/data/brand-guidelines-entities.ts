@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
 import type {
   BrandGuidelineEntity,
   BrandGuidelineInput,
@@ -7,7 +7,7 @@ import type {
   Typography,
 } from "@/types/brand-guidelines";
 
-const STORAGE_BUCKET = "elements";
+const STORAGE_BUCKET = "brand-assets";
 
 // ─── Slug Generation ────────────────────────────────────────────────────────
 
@@ -216,7 +216,7 @@ export async function deleteBrandGuideline(
 
   // Clean up logo
   if (guideline.logoUrl) {
-    const logoPath = `${workspaceId}/${id}/logo`;
+    const logoPath = `${workspaceId}/guidelines/${id}/logo`;
     await supabase.storage.from(STORAGE_BUCKET).remove([logoPath]);
   }
 
@@ -271,8 +271,9 @@ export async function uploadBrandGuidelineLogo(
   fileBuffer: Buffer,
   contentType: string
 ): Promise<{ url?: string; error?: string }> {
+  await ensureStorageBucket();
   const supabase = createAdminClient();
-  const storagePath = `${workspaceId}/${guidelineId}/${Date.now()}-${fileName}`;
+  const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${fileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from(STORAGE_BUCKET)
@@ -304,8 +305,9 @@ export async function uploadBrandGuidelineFile(
   contentType: string,
   fileSize: number
 ): Promise<{ file?: BrandGuidelineFile; error?: string }> {
+  await ensureStorageBucket();
   const supabase = createAdminClient();
-  const storagePath = `${workspaceId}/${guidelineId}/${Date.now()}-${fileName}`;
+  const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${fileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from(STORAGE_BUCKET)
@@ -352,13 +354,14 @@ export async function uploadBrandGuidelineFiles(
     fileSize: number;
   }>
 ): Promise<{ files: BrandGuidelineFile[]; errors: string[] }> {
+  await ensureStorageBucket();
   const supabase = createAdminClient();
   const errors: string[] = [];
 
   // Upload all files to storage in parallel
   const uploadResults = await Promise.all(
     files.map(async ({ fileName, fileBuffer, contentType, fileSize }) => {
-      const storagePath = `${workspaceId}/${guidelineId}/${Date.now()}-${fileName}`;
+      const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${fileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)

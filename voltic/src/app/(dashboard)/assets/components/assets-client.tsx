@@ -12,6 +12,8 @@ import {
   Upload,
   X,
   Image as ImageIcon,
+  Wand2,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -81,6 +83,9 @@ export default function AssetsClient() {
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Generate background
+  const [generatingBg, setGeneratingBg] = useState(false);
 
   // Delete
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
@@ -231,6 +236,28 @@ export default function AssetsClient() {
     setDeleteTarget(null);
   };
 
+  const handleGenerateBackground = async () => {
+    if (!filterGuidelineId) return;
+    setGeneratingBg(true);
+    try {
+      const res = await fetch("/api/assets/generate-background", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandGuidelineId: filterGuidelineId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to generate background");
+      }
+      toast.success("Background generated and linked to guideline");
+      await loadAssets(search || undefined, filterGuidelineId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setGeneratingBg(false);
+    }
+  };
+
   return (
     <div className="space-y-6 p-8">
       {/* Header */}
@@ -241,10 +268,31 @@ export default function AssetsClient() {
             Your product catalog for AI creative variations.
           </p>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="mr-1.5 size-4" />
-          Add Product
-        </Button>
+        <div className="flex gap-2">
+          {filterGuidelineId && (
+            <Button
+              variant="outline"
+              onClick={handleGenerateBackground}
+              disabled={generatingBg}
+            >
+              {generatingBg ? (
+                <>
+                  <Loader2 className="mr-1.5 size-4 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Wand2 className="mr-1.5 size-4" />
+                  Generate Background
+                </>
+              )}
+            </Button>
+          )}
+          <Button onClick={openCreateDialog}>
+            <Plus className="mr-1.5 size-4" />
+            Add Product
+          </Button>
+        </div>
       </div>
 
       {/* Search + Filter */}

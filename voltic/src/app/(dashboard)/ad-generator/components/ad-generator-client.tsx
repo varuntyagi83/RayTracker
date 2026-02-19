@@ -304,6 +304,15 @@ export default function AdGeneratorClient() {
                   selected={selectedBackgrounds}
                   onChange={setSelectedBackgrounds}
                   disabled={generating}
+                  guidelineId={selectedGuidelineId}
+                  onAssetsChanged={() => {
+                    setLoadingAssets(true);
+                    fetchAssetsForGuidelineAdGenAction({ guidelineId: selectedGuidelineId })
+                      .then((result) => {
+                        if (result.data) setBackgroundAssets(result.data);
+                      })
+                      .finally(() => setLoadingAssets(false));
+                  }}
                 />
               )}
             </>
