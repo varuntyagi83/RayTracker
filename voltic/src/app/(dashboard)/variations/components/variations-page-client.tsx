@@ -198,7 +198,6 @@ export default function VariationsPageClient() {
   const handleGuidelineSelect = async (guidelineId: string) => {
     setSelectedGuidelineId(guidelineId);
     setGuidelineAssets([]);
-    setSelectedAssetId("");
 
     if (!guidelineId || guidelineId === "none") return;
 
