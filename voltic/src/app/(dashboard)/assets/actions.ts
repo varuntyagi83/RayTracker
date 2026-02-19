@@ -11,18 +11,47 @@ import {
   uploadAssetImage,
   deleteAssetImage,
 } from "@/lib/data/assets";
+import { listBrandGuidelines } from "@/lib/data/brand-guidelines-entities";
 import type { Asset } from "@/types/assets";
 
 // ─── Fetch All Assets ───────────────────────────────────────────────────────
 
 export async function fetchAssets(
-  search?: string
+  search?: string,
+  brandGuidelineId?: string
 ): Promise<{ data?: Asset[]; error?: string }> {
   const workspace = await getWorkspace();
   if (!workspace) return { error: "No workspace" };
 
-  const assets = await getAssets(workspace.id, search);
+  const assets = await getAssets(workspace.id, search, brandGuidelineId);
   return { data: assets };
+}
+
+// ─── Fetch Assets for a Guideline ──────────────────────────────────────────
+
+export async function fetchAssetsForGuidelineAction(input: {
+  guidelineId: string;
+}): Promise<{ data?: Asset[]; error?: string }> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
+  const assets = await getAssets(workspace.id, undefined, input.guidelineId);
+  return { data: assets };
+}
+
+// ─── Fetch Brand Guidelines (for select dropdown) ──────────────────────────
+
+export async function fetchGuidelinesForAssetsAction(): Promise<{
+  data?: { id: string; name: string }[];
+  error?: string;
+}> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
+  const guidelines = await listBrandGuidelines(workspace.id);
+  return {
+    data: guidelines.map((g) => ({ id: g.id, name: g.name })),
+  };
 }
 
 // ─── Upload Image + Create Asset ────────────────────────────────────────────
@@ -38,6 +67,7 @@ export async function createAssetAction(
 
   const name = formData.get("name") as string;
   const description = (formData.get("description") as string) || undefined;
+  const brandGuidelineId = (formData.get("brandGuidelineId") as string) || undefined;
   const file = formData.get("image") as File | null;
 
   if (!name?.trim()) return { success: false, error: "Name is required" };
@@ -55,7 +85,7 @@ export async function createAssetAction(
   }
 
   // Create asset record
-  const result = await createAsset(workspace.id, name.trim(), upload.url, description?.trim());
+  const result = await createAsset(workspace.id, name.trim(), upload.url, description?.trim(), brandGuidelineId);
   if (!result.success) {
     // Clean up uploaded image
     await deleteAssetImage(upload.url).catch(() => {});
@@ -74,6 +104,7 @@ export async function updateAssetAction(
   const assetId = formData.get("assetId") as string;
   const name = formData.get("name") as string;
   const description = (formData.get("description") as string) || undefined;
+  const brandGuidelineId = formData.get("brandGuidelineId") as string | null;
   const file = formData.get("image") as File | null;
 
   if (!assetId) return { success: false, error: "Asset ID is required" };
@@ -107,7 +138,8 @@ export async function updateAssetAction(
     assetId,
     name.trim(),
     description?.trim(),
-    newImageUrl
+    newImageUrl,
+    brandGuidelineId === "" ? null : brandGuidelineId ?? undefined
   );
 }
 

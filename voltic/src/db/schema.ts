@@ -316,6 +316,10 @@ export const assets = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandGuidelineId: uuid("brand_guideline_id").references(
+      () => brandGuidelinesTable.id,
+      { onDelete: "set null" }
+    ),
     name: text("name").notNull(),
     description: text("description"),
     imageUrl: text("image_url").notNull(),
@@ -327,7 +331,10 @@ export const assets = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("idx_assets_workspace_id").on(table.workspaceId)]
+  (table) => [
+    index("idx_assets_workspace_id").on(table.workspaceId),
+    index("idx_assets_brand_guideline_id").on(table.brandGuidelineId),
+  ]
 );
 
 export const variations = pgTable(
@@ -356,6 +363,44 @@ export const variations = pgTable(
   (table) => [
     index("idx_variations_workspace_id").on(table.workspaceId),
     index("idx_variations_saved_ad_id").on(table.savedAdId),
+  ]
+);
+
+export const generatedAds = pgTable(
+  "generated_ads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandGuidelineId: uuid("brand_guideline_id")
+      .notNull()
+      .references(() => brandGuidelinesTable.id, { onDelete: "cascade" }),
+    backgroundAssetId: uuid("background_asset_id")
+      .notNull()
+      .references(() => assets.id, { onDelete: "cascade" }),
+    textVariant: text("text_variant").notNull(),
+    fontFamily: text("font_family").notNull().default("Inter"),
+    fontSize: integer("font_size").notNull().default(48),
+    textColor: text("text_color").notNull().default("#FFFFFF"),
+    textPosition: jsonb("text_position").notNull().default({ type: "center" }),
+    imageUrl: text("image_url").notNull(),
+    storagePath: text("storage_path").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    status: text("status").notNull().default("approved"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_generated_ads_workspace_id").on(table.workspaceId),
+    index("idx_generated_ads_brand_guideline_id").on(table.brandGuidelineId),
+    index("idx_generated_ads_background_asset_id").on(table.backgroundAssetId),
   ]
 );
 
@@ -706,6 +751,7 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   studioConversations: many(studioConversations),
   studioMessages: many(studioMessages),
   adDecompositions: many(adDecompositions),
+  generatedAds: many(generatedAds),
 }));
 
 export const workspaceMembersRelations = relations(
@@ -817,7 +863,12 @@ export const assetsRelations = relations(assets, ({ one, many }) => ({
     fields: [assets.workspaceId],
     references: [workspaces.id],
   }),
+  brandGuideline: one(brandGuidelinesTable, {
+    fields: [assets.brandGuidelineId],
+    references: [brandGuidelinesTable.id],
+  }),
   variations: many(variations),
+  generatedAds: many(generatedAds),
 }));
 
 export const variationsRelations = relations(variations, ({ one }) => ({
@@ -918,10 +969,30 @@ export const commentsRelations = relations(comments, ({ one }) => ({
 
 export const brandGuidelinesRelations = relations(
   brandGuidelinesTable,
-  ({ one }) => ({
+  ({ one, many }) => ({
     workspace: one(workspaces, {
       fields: [brandGuidelinesTable.workspaceId],
       references: [workspaces.id],
+    }),
+    assets: many(assets),
+    generatedAds: many(generatedAds),
+  })
+);
+
+export const generatedAdsRelations = relations(
+  generatedAds,
+  ({ one }) => ({
+    workspace: one(workspaces, {
+      fields: [generatedAds.workspaceId],
+      references: [workspaces.id],
+    }),
+    brandGuideline: one(brandGuidelinesTable, {
+      fields: [generatedAds.brandGuidelineId],
+      references: [brandGuidelinesTable.id],
+    }),
+    backgroundAsset: one(assets, {
+      fields: [generatedAds.backgroundAssetId],
+      references: [assets.id],
     }),
   })
 );

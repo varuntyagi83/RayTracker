@@ -7,6 +7,8 @@ import type {
   Typography,
 } from "@/types/brand-guidelines";
 
+const STORAGE_BUCKET = "elements";
+
 // ─── Slug Generation ────────────────────────────────────────────────────────
 
 function generateSlug(name: string): string {
@@ -215,13 +217,13 @@ export async function deleteBrandGuideline(
   // Clean up logo
   if (guideline.logoUrl) {
     const logoPath = `${workspaceId}/${id}/logo`;
-    await supabase.storage.from("brand-assets").remove([logoPath]);
+    await supabase.storage.from(STORAGE_BUCKET).remove([logoPath]);
   }
 
   // Clean up files
   if (guideline.files.length > 0) {
     const filePaths = guideline.files.map((f) => f.path);
-    await supabase.storage.from("brand-assets").remove(filePaths);
+    await supabase.storage.from(STORAGE_BUCKET).remove(filePaths);
   }
 
   const { error } = await supabase
@@ -273,14 +275,14 @@ export async function uploadBrandGuidelineLogo(
   const storagePath = `${workspaceId}/${guidelineId}/${Date.now()}-${fileName}`;
 
   const { error: uploadError } = await supabase.storage
-    .from("brand-assets")
+    .from(STORAGE_BUCKET)
     .upload(storagePath, fileBuffer, { contentType, upsert: true });
 
   if (uploadError) return { error: uploadError.message };
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from("brand-assets").getPublicUrl(storagePath);
+  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
 
   // Update the guideline's logo_url
   await supabase
@@ -306,14 +308,14 @@ export async function uploadBrandGuidelineFile(
   const storagePath = `${workspaceId}/${guidelineId}/${Date.now()}-${fileName}`;
 
   const { error: uploadError } = await supabase.storage
-    .from("brand-assets")
+    .from(STORAGE_BUCKET)
     .upload(storagePath, fileBuffer, { contentType });
 
   if (uploadError) return { error: uploadError.message };
 
   const {
     data: { publicUrl },
-  } = supabase.storage.from("brand-assets").getPublicUrl(storagePath);
+  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
 
   const newFile: BrandGuidelineFile = {
     name: fileName,
@@ -359,7 +361,7 @@ export async function uploadBrandGuidelineFiles(
       const storagePath = `${workspaceId}/${guidelineId}/${Date.now()}-${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("brand-assets")
+        .from(STORAGE_BUCKET)
         .upload(storagePath, fileBuffer, { contentType });
 
       if (uploadError) {
@@ -369,7 +371,7 @@ export async function uploadBrandGuidelineFiles(
 
       const {
         data: { publicUrl },
-      } = supabase.storage.from("brand-assets").getPublicUrl(storagePath);
+      } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
 
       return {
         name: fileName,
@@ -410,7 +412,7 @@ export async function deleteBrandGuidelineFile(
   const supabase = createAdminClient();
 
   // Remove from storage
-  await supabase.storage.from("brand-assets").remove([filePath]);
+  await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
 
   // Remove from files array
   const guideline = await getBrandGuidelineById(workspaceId, guidelineId);

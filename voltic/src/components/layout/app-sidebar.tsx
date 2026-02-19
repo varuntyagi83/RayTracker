@@ -14,6 +14,7 @@ import {
   MessageSquareText,
   Scissors,
   Sparkles,
+  Layers,
   Coins,
   TrendingUp,
   LineChart,
@@ -64,6 +65,7 @@ const mainNavItems = [
   { label: "Brand Guidelines", href: "/brand-guidelines", icon: BookOpen },
   { label: "Creative Studio", href: "/creative-studio", icon: MessageSquareText },
   { label: "Variations", href: "/variations", icon: Sparkles },
+  { label: "Ad Generator", href: "/ad-generator", icon: Layers },
   { label: "Decomposition", href: "/decomposition", icon: Scissors },
   { label: "Credits", href: "/credits", icon: Coins },
 ];

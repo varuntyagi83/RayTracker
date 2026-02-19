@@ -1,19 +1,20 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Asset } from "@/types/assets";
 
-const STORAGE_BUCKET = "assets";
+const STORAGE_BUCKET = "asset";
 
 // ─── List Assets ────────────────────────────────────────────────────────────
 
 export async function getAssets(
   workspaceId: string,
-  search?: string
+  search?: string,
+  brandGuidelineId?: string
 ): Promise<Asset[]> {
   const supabase = createAdminClient();
 
   let query = supabase
     .from("assets")
-    .select("id, name, description, image_url, created_at, updated_at")
+    .select("id, name, description, image_url, brand_guideline_id, created_at, updated_at, brand_guidelines(name)")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false });
 
@@ -21,15 +22,21 @@ export async function getAssets(
     query = query.ilike("name", `%${search.trim()}%`);
   }
 
+  if (brandGuidelineId) {
+    query = query.eq("brand_guideline_id", brandGuidelineId);
+  }
+
   const { data } = await query;
 
-  return (data ?? []).map((a) => ({
-    id: a.id,
-    name: a.name,
-    description: a.description,
-    imageUrl: a.image_url,
-    createdAt: a.created_at,
-    updatedAt: a.updated_at,
+  return (data ?? []).map((a: Record<string, unknown>) => ({
+    id: a.id as string,
+    name: a.name as string,
+    description: a.description as string | null,
+    imageUrl: a.image_url as string,
+    brandGuidelineId: a.brand_guideline_id as string | null,
+    brandGuidelineName: (a.brand_guidelines as Record<string, unknown> | null)?.name as string | null ?? null,
+    createdAt: a.created_at as string,
+    updatedAt: a.updated_at as string,
   }));
 }
 
@@ -43,20 +50,23 @@ export async function getAsset(
 
   const { data } = await supabase
     .from("assets")
-    .select("id, name, description, image_url, created_at, updated_at")
+    .select("id, name, description, image_url, brand_guideline_id, created_at, updated_at, brand_guidelines(name)")
     .eq("id", assetId)
     .eq("workspace_id", workspaceId)
     .single();
 
   if (!data) return null;
 
+  const row = data as Record<string, unknown>;
   return {
-    id: data.id,
-    name: data.name,
-    description: data.description,
-    imageUrl: data.image_url,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    id: row.id as string,
+    name: row.name as string,
+    description: row.description as string | null,
+    imageUrl: row.image_url as string,
+    brandGuidelineId: row.brand_guideline_id as string | null,
+    brandGuidelineName: (row.brand_guidelines as Record<string, unknown> | null)?.name as string | null ?? null,
+    createdAt: row.created_at as string,
+    updatedAt: row.updated_at as string,
   };
 }
 
@@ -108,7 +118,8 @@ export async function createAsset(
   workspaceId: string,
   name: string,
   imageUrl: string,
-  description?: string
+  description?: string,
+  brandGuidelineId?: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = createAdminClient();
 
@@ -119,6 +130,7 @@ export async function createAsset(
       name,
       image_url: imageUrl,
       description: description || null,
+      brand_guideline_id: brandGuidelineId || null,
     })
     .select("id")
     .single();
@@ -134,7 +146,8 @@ export async function updateAsset(
   assetId: string,
   name: string,
   description?: string,
-  imageUrl?: string
+  imageUrl?: string,
+  brandGuidelineId?: string | null
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createAdminClient();
 
@@ -146,6 +159,10 @@ export async function updateAsset(
 
   if (imageUrl) {
     updateData.image_url = imageUrl;
+  }
+
+  if (brandGuidelineId !== undefined) {
+    updateData.brand_guideline_id = brandGuidelineId || null;
   }
 
   const { error } = await supabase

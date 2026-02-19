@@ -211,25 +211,34 @@ export async function getMentionableItems(
   const items: MentionableItem[] = [];
   const searchQuery = `%${query}%`;
 
-  // Search brand guidelines
-  const { data: guidelines } = await supabase
-    .from("brand_guidelines")
-    .select("id, name, slug, brand_name, logo_url")
-    .eq("workspace_id", workspaceId)
-    .or(`name.ilike.${searchQuery},slug.ilike.${searchQuery}`)
-    .limit(5);
+  // Search brand guidelines by name and slug in parallel
+  const [{ data: byName }, { data: bySlug }] = await Promise.all([
+    supabase
+      .from("brand_guidelines")
+      .select("id, name, slug, brand_name, logo_url")
+      .eq("workspace_id", workspaceId)
+      .ilike("name", searchQuery)
+      .limit(5),
+    supabase
+      .from("brand_guidelines")
+      .select("id, name, slug, brand_name, logo_url")
+      .eq("workspace_id", workspaceId)
+      .ilike("slug", searchQuery)
+      .limit(5),
+  ]);
 
-  if (guidelines) {
-    for (const g of guidelines) {
-      items.push({
-        id: g.id,
-        type: "brand_guidelines",
-        name: g.name,
-        slug: g.slug,
-        description: g.brand_name ?? undefined,
-        imageUrl: g.logo_url ?? undefined,
-      });
-    }
+  const seenIds = new Set<string>();
+  for (const g of [...(byName ?? []), ...(bySlug ?? [])]) {
+    if (seenIds.has(g.id)) continue;
+    seenIds.add(g.id);
+    items.push({
+      id: g.id,
+      type: "brand_guidelines",
+      name: g.name,
+      slug: g.slug,
+      description: g.brand_name ?? undefined,
+      imageUrl: g.logo_url ?? undefined,
+    });
   }
 
   // Search assets

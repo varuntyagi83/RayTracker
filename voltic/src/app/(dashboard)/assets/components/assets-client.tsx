@@ -18,6 +18,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -49,6 +57,7 @@ import {
   createAssetAction,
   updateAssetAction,
   deleteAssetAction,
+  fetchGuidelinesForAssetsAction,
 } from "../actions";
 import type { Asset } from "@/types/assets";
 
@@ -56,12 +65,17 @@ export default function AssetsClient() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [filterGuidelineId, setFilterGuidelineId] = useState<string>("");
+
+  // Guidelines for dropdown
+  const [guidelines, setGuidelines] = useState<{ id: string; name: string }[]>([]);
 
   // Create/Edit dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [formName, setFormName] = useState("");
   const [formDescription, setFormDescription] = useState("");
+  const [formGuidelineId, setFormGuidelineId] = useState<string>("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -72,8 +86,15 @@ export default function AssetsClient() {
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const loadAssets = useCallback(async (query?: string) => {
-    const result = await fetchAssets(query);
+  // Load guidelines on mount
+  useEffect(() => {
+    fetchGuidelinesForAssetsAction().then((result) => {
+      if (result.data) setGuidelines(result.data);
+    });
+  }, []);
+
+  const loadAssets = useCallback(async (query?: string, guidelineId?: string) => {
+    const result = await fetchAssets(query, guidelineId || undefined);
     if (result.data) setAssets(result.data);
     setLoading(false);
   }, []);
@@ -82,18 +103,19 @@ export default function AssetsClient() {
     loadAssets();
   }, [loadAssets]);
 
-  // Debounced search
+  // Debounced search + filter
   useEffect(() => {
     const timer = setTimeout(() => {
-      loadAssets(search || undefined);
+      loadAssets(search || undefined, filterGuidelineId || undefined);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search, loadAssets]);
+  }, [search, filterGuidelineId, loadAssets]);
 
   const openCreateDialog = () => {
     setEditingAsset(null);
     setFormName("");
     setFormDescription("");
+    setFormGuidelineId("");
     setSelectedFile(null);
     setPreviewUrl(null);
     setFormError(null);
@@ -104,6 +126,7 @@ export default function AssetsClient() {
     setEditingAsset(asset);
     setFormName(asset.name);
     setFormDescription(asset.description ?? "");
+    setFormGuidelineId(asset.brandGuidelineId ?? "");
     setSelectedFile(null);
     setPreviewUrl(asset.imageUrl);
     setFormError(null);
@@ -153,6 +176,7 @@ export default function AssetsClient() {
       const formData = new FormData();
       formData.set("name", formName.trim());
       formData.set("description", formDescription.trim());
+      formData.set("brandGuidelineId", formGuidelineId === "none" ? "" : formGuidelineId);
 
       if (editingAsset) {
         formData.set("assetId", editingAsset.id);
@@ -180,7 +204,7 @@ export default function AssetsClient() {
       }
 
       setDialogOpen(false);
-      await loadAssets(search || undefined);
+      await loadAssets(search || undefined, filterGuidelineId || undefined);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "An unexpected error occurred";
       setFormError(msg);
@@ -223,15 +247,35 @@ export default function AssetsClient() {
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search products..."
-          className="pl-9"
-        />
+      {/* Search + Filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search products..."
+            className="pl-9"
+          />
+        </div>
+        {guidelines.length > 0 && (
+          <Select
+            value={filterGuidelineId || "all"}
+            onValueChange={(v) => setFilterGuidelineId(v === "all" ? "" : v)}
+          >
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="All brand guidelines" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All brand guidelines</SelectItem>
+              {guidelines.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Grid */}
@@ -245,14 +289,14 @@ export default function AssetsClient() {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Package className="size-12 text-muted-foreground/40 mb-4" />
           <h3 className="text-lg font-semibold">
-            {search ? "No products found" : "No products yet"}
+            {search || filterGuidelineId ? "No products found" : "No products yet"}
           </h3>
           <p className="text-sm text-muted-foreground mt-1 mb-4">
-            {search
-              ? "Try a different search term."
+            {search || filterGuidelineId
+              ? "Try a different search term or filter."
               : "Add your first product to start generating creative variations."}
           </p>
-          {!search && (
+          {!search && !filterGuidelineId && (
             <Button onClick={openCreateDialog}>
               <Plus className="mr-1.5 size-4" />
               Add Product
@@ -358,6 +402,32 @@ export default function AssetsClient() {
               />
             </div>
 
+            {/* Brand Guideline */}
+            {guidelines.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Brand Guideline{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </label>
+                <Select
+                  value={formGuidelineId || "none"}
+                  onValueChange={(v) => setFormGuidelineId(v === "none" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {guidelines.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Error */}
             {formError && (
               <p className="text-sm text-destructive">{formError}</p>
@@ -446,6 +516,11 @@ function AssetCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <h3 className="font-semibold text-sm truncate">{asset.name}</h3>
+              {asset.brandGuidelineName && (
+                <Badge variant="secondary" className="mt-1 text-[10px] px-1.5 py-0">
+                  {asset.brandGuidelineName}
+                </Badge>
+              )}
               {asset.description && (
                 <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
                   {asset.description}

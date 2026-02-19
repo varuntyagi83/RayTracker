@@ -149,6 +149,12 @@ export interface EventPropertiesMap {
   decomposition_page_viewed: Record<string, never>;
   decomposition_image_uploaded: { file_name: string };
 
+  // Ad Generator
+  ad_previews_generated: { guideline_id: string; text_count: number; background_count: number; total: number };
+  ads_saved_batch: { count: number; guideline_id: string };
+  ad_downloaded: { ad_id: string };
+  ad_deleted: { ad_id: string };
+
   // AI / Credits (server-side)
   credits_deducted: {
     workspace_id: string;
