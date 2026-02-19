@@ -1,14 +1,14 @@
 # Voltic — Development Progress
 
-> Last updated: 2026-02-19
+> Last updated: 2026-02-19 (Session 2)
 
 ---
 
 ## Current State Summary
 
 The Variations feature has been significantly extended to support **two flows**:
-1. **Competitor-based** (original) — generate ad variations inspired by saved competitor ads
-2. **Asset-based** (new) — generate text variations using your own uploaded brand assets/backgrounds
+1. **Competitor-based** (original) — generate ad variations inspired by saved competitor ads (DALL-E 3 for images)
+2. **Asset-based** (new) — edit/transform existing asset images using **Gemini Nano Banana Pro** + generate text via GPT-4o
 
 The Ad Decomposition and Creative Builder features received bug fixes. The codebase is deployed on Vercel at `ray-tracker.vercel.app`.
 
@@ -33,9 +33,9 @@ The Ad Decomposition and Creative Builder features received bug fixes. The codeb
 | Tests | `src/lib/ai/variations.test.ts` | 52 tests covering all prompt builders |
 
 **Architecture decision (IMPORTANT):**
-- For **asset-based** variations: AI generates **text only** (headline + body). The image is the **existing uploaded asset** — NO DALL-E generation. The whole point of uploading assets is to reuse them.
-- For **competitor-based** variations: AI generates both text AND a new image via DALL-E (since no user image exists).
-- The `image_only` strategy for assets shows the asset image with no text.
+- For **asset-based** variations: **Gemini Nano Banana Pro** (`gemini-3-pro-image-preview`) edits/transforms the existing asset image based on creative direction (angle, lighting, background). GPT-4o generates the text (headline + body). If Gemini fails, gracefully falls back to the original asset image.
+- For **competitor-based** variations: AI generates both text (GPT-4o) AND a new image via DALL-E 3 (since no user image exists).
+- The `image_only` strategy for assets edits the asset image with no text generation.
 - The `text_only` strategy generates text with no image (both flows).
 
 ### 2. Brand Guideline Selector in Variations
@@ -82,6 +82,37 @@ The Ad Decomposition and Creative Builder features received bug fixes. The codeb
 - **"strategyies" typo** — Fixed string concatenation: `"strategy" + "ies"` → proper ternary `"strategies" : "strategy"`
 - **SelectItem empty value error** — Radix UI doesn't allow `value=""`. Changed to `value="auto"` sentinel for all 3 creative direction dropdowns; filter logic strips "auto" values before passing to action.
 - **DALL-E no-text prompt** — Strengthened image prompts with emphatic no-text instruction at both start and end. Changed `"Product called"` → `"Product featuring"` to reduce DALL-E text rendering. (Note: DALL-E 3 still occasionally adds text — this is a known limitation.)
+
+---
+
+## Recent Changes (Session 2: Feb 19, 2026)
+
+### 7. Nano Banana Pro Integration for Asset-Based Variation Images
+
+**Problem:** Asset-based variations were just reusing the raw uploaded asset image with no AI transformation. Creative direction options (angle, lighting, background) only influenced text prompts, not the image itself.
+
+**Solution:** Integrated **Google's Nano Banana Pro** (Gemini 3 Pro Image model) to edit/transform existing asset images based on the user's creative direction.
+
+| Layer | File | Change |
+|-------|------|--------|
+| Gemini Module | `src/lib/ai/gemini-image-edit.ts` | **NEW** — `buildGeminiEditPrompt()` + `editAssetImageWithGemini()` |
+| AI Variations | `src/lib/ai/variations.ts` | Added `generateAssetVariationImage()` export wrapping Gemini module |
+| Server Action | `src/app/(dashboard)/boards/actions.ts` | Asset branch now calls Gemini with graceful fallback to original image |
+| Tests | `src/lib/ai/gemini-image-edit.test.ts` | **NEW** — 17 tests for prompt builder |
+
+**How it works:**
+1. Downloads existing asset image → base64
+2. Builds an editing prompt from creative options (angle, lighting, background, custom instruction) + strategy visual notes + brand palette
+3. Sends to Gemini REST API (`gemini-3-pro-image-preview`)
+4. Extracts edited image (base64) from response
+5. Uploads to Supabase Storage at `{workspaceId}/variations/{variationId}-edited.png`
+6. Returns public URL
+
+**Fallback:** If Gemini fails (API key missing, rate limit, geo-restriction, etc.), the variation still completes using the original asset image. The text (GPT-4o) is unaffected.
+
+**No new npm packages** — reuses the existing direct REST API pattern from `decompose.ts` `_inpaintWithGemini()`.
+
+**Env var:** `GOOGLE_GENERATIVE_AI_API_KEY` (already existed in `.env.example`).
 
 ---
 
@@ -158,6 +189,26 @@ export async function myAction(input: z.input<typeof schema>): Promise<{ data?: 
 }
 ```
 
+### AI Image Generation Architecture
+```
+Asset-based variations:
+  1. GPT-4o → headline + body text
+  2. Gemini Nano Banana Pro (gemini-3-pro-image-preview) → edit existing asset image
+     - Downloads asset image → base64
+     - Applies creative direction (angle, lighting, background)
+     - Uploads result to Supabase Storage
+     - Fallback: original asset.imageUrl if Gemini fails
+
+Competitor-based variations:
+  1. GPT-4o → headline + body text
+  2. DALL-E 3 → generate new image from scratch
+
+Key files:
+  - src/lib/ai/gemini-image-edit.ts — Gemini REST API client + prompt builder
+  - src/lib/ai/variations.ts — generateAssetVariationImage() (Gemini) + generateVariationImage() (DALL-E)
+  - src/app/(dashboard)/boards/actions.ts — orchestrates the flow
+```
+
 ### Image Preview Overlay Pattern
 Used in Creative Builder and Variations:
 ```typescript
@@ -200,16 +251,18 @@ const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | 
 
 ## Known Issues / Future Work
 
-1. **DALL-E text in images** — Despite strong no-text prompts, DALL-E 3 occasionally generates text/logos. This is a known DALL-E limitation. Consider switching to gpt-image-1 or Stable Diffusion for better prompt adherence.
-2. **Text overlay on asset images** — Currently, asset-based variations show the raw asset image + AI-generated text as separate fields. A future enhancement could composite the text directly onto the image (like Ad Generator's canvas rendering).
-3. **Creative Direction options** — The angle/lighting/background dropdowns currently only influence text generation prompts for asset-based flow (since we don't generate new images). Could add AI image editing (perspective/lighting transforms) in the future.
+1. **DALL-E text in images** — Despite strong no-text prompts, DALL-E 3 occasionally generates text/logos. This is a known DALL-E limitation. Only affects competitor-based flow now.
+2. **Text overlay on asset images** — Asset-based variations show the Gemini-edited image + AI-generated text as separate fields. A future enhancement could composite the text directly onto the image (like Ad Generator's canvas rendering).
+3. ~~**Creative Direction options**~~ — **RESOLVED:** Nano Banana Pro now applies angle/lighting/background transformations to the actual image for asset-based variations.
 4. **Multi-asset variations** — Currently one asset per variation. Could support mixing multiple assets (e.g., product on background A, then on background B).
 5. **Variation preview** — Could show a richer preview combining image + text overlay before generation.
+6. **Gemini image size limits** — Large asset images (>10MB) could cause issues with the Gemini API. Consider adding image resizing before sending to API if needed.
 
 ---
 
 ## Test Status
 
 - `src/lib/ai/variations.test.ts` — **52 tests passing** (all prompt builders including asset-based)
+- `src/lib/ai/gemini-image-edit.test.ts` — **17 tests passing** (Gemini edit prompt builder)
 - TypeScript: **No errors** (`npx tsc --noEmit` clean)
 - Playwright E2E: 21 tests for Variations page (from earlier session)

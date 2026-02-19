@@ -29,7 +29,7 @@ import {
   INSIGHT_CREDIT_COST,
 } from "@/lib/data/insights";
 import { generateAdInsights } from "@/lib/ai/insights";
-import { generateVariationText, generateVariationImage } from "@/lib/ai/variations";
+import { generateVariationText, generateVariationImage, generateAssetVariationImage } from "@/lib/ai/variations";
 import { enhanceCreativeText } from "@/lib/ai/creative-enhance";
 import { VARIATION_CREDIT_COST, CREATIVE_ENHANCE_CREDIT_COST } from "@/types/variations";
 import type { Board, BoardWithAds, SavedAd } from "@/types/boards";
@@ -324,8 +324,21 @@ export async function generateVariationsAction(
       let imageUrl: string | null = null;
       if (strategy !== "text_only") {
         if (source === "asset") {
-          // Asset-based: use the existing uploaded asset image — don't regenerate
-          imageUrl = asset.imageUrl;
+          // Asset-based: edit the existing asset image with Gemini Nano Banana Pro
+          try {
+            imageUrl = await generateAssetVariationImage(
+              asset,
+              strategy,
+              workspace.id,
+              variationId,
+              creativeOptions,
+              brandGuidelines
+            );
+          } catch (editErr) {
+            // Fallback: if Gemini editing fails, use the original asset image
+            console.error("[variations] Gemini image editing failed, falling back to original asset image:", editErr);
+            imageUrl = asset.imageUrl;
+          }
         } else {
           // Competitor-based: generate a new image via DALL-E
           const dalleUrl = await generateVariationImage(

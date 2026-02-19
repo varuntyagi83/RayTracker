@@ -304,3 +304,30 @@ export async function generateVariationImage(
 
   return url;
 }
+
+// ─── Asset-Based Image Editing (Gemini Nano Banana Pro) ──────────────────
+
+export async function generateAssetVariationImage(
+  asset: Pick<Asset, "name" | "description" | "imageUrl">,
+  strategy: VariationStrategy,
+  workspaceId: string,
+  variationId: string,
+  creativeOptions?: CreativeOptions,
+  brandGuidelines?: BrandGuidelines
+): Promise<string> {
+  if (strategy === "text_only") {
+    throw new Error("text_only strategy does not generate images");
+  }
+
+  const { editAssetImageWithGemini } = await import("./gemini-image-edit");
+
+  return editAssetImageWithGemini(
+    asset.imageUrl,
+    asset,
+    strategy,
+    workspaceId,
+    variationId,
+    creativeOptions,
+    brandGuidelines
+  );
+}
