@@ -82,21 +82,109 @@ export function buildGeminiEditPrompt(
     `Edit this product image of "${asset.name}" for a social media ad.`,
     asset.description ? `Product context: ${asset.description}.` : "",
     "",
-    "Apply these changes to the image:",
+    "A product mask is provided as the second image — WHITE areas are the product, BLACK areas are the background.",
+    "",
+    "Apply these changes ONLY to the BLACK (background) areas of the mask:",
     ...directives.map((d) => `- ${d}`),
     "",
     "CRITICAL RULES:",
-    "- Preserve the product EXACTLY as it appears — same shape, colors, label, and packaging.",
-    "- Do NOT modify, re-render, or regenerate any text that already exists on the product label or packaging. Leave all existing product text pixel-perfect and untouched.",
-    "- Do NOT add any NEW text, words, letters, logos, watermarks, or typography anywhere in the image.",
-    "- Only transform the SURROUNDINGS: angle, lighting, background, and composition as directed above.",
-    "- The product label, brand name, and any printed text on the packaging must remain exactly as in the original image with correct spelling.",
+    "- The WHITE areas in the mask are the product — do NOT modify those pixels at all.",
+    "- Preserve the product EXACTLY as it appears — same shape, colors, label, packaging, and all text.",
+    "- Do NOT re-render, regenerate, or alter any text on the product label or packaging.",
+    "- Do NOT add any NEW text, words, letters, logos, or watermarks anywhere in the image.",
+    "- Only transform the background/surroundings (BLACK mask areas) as directed above.",
   ]
     .filter(Boolean)
     .join("\n");
 }
 
-// ─── Call Gemini for image editing ─────────────────────────────────────────
+// ─── Generate product segmentation mask ─────────────────────────────────────
+
+async function _generateProductMask(
+  imageBuffer: Buffer,
+  apiKey: string
+): Promise<Buffer> {
+  const response = await fetch(
+    `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: [
+                  "Create a precise binary segmentation mask of the product in this image.",
+                  "Rules:",
+                  "- The product (including its label, cap, and any attached elements) must be PURE WHITE (#FFFFFF).",
+                  "- Everything else (background, shadows, reflections, surface) must be PURE BLACK (#000000).",
+                  "- The mask must have clean, precise edges around the product silhouette.",
+                  "- Output ONLY the mask image with no text response.",
+                ].join("\n"),
+              },
+              {
+                inlineData: {
+                  mimeType: "image/png",
+                  data: imageBuffer.toString("base64"),
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          responseModalities: ["IMAGE"],
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini mask generation failed: ${response.status} — ${errText}`);
+  }
+
+  const data = await response.json();
+  const parts = data.candidates?.[0]?.content?.parts;
+  if (!parts) {
+    throw new Error("Empty response from Gemini mask generation");
+  }
+
+  const imagePart = parts.find(
+    (p: { inlineData?: { mimeType?: string; data?: string } }) =>
+      p.inlineData?.mimeType?.startsWith("image/")
+  );
+
+  if (!imagePart?.inlineData?.data) {
+    throw new Error("No mask image in Gemini response");
+  }
+
+  return Buffer.from(imagePart.inlineData.data, "base64");
+}
+
+// ─── Extract image from Gemini response ─────────────────────────────────────
+
+function _extractImageFromResponse(
+  data: { candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { mimeType?: string; data?: string } }> } }> }
+): Buffer {
+  const parts = data.candidates?.[0]?.content?.parts;
+  if (!parts) {
+    throw new Error("Empty response from Gemini image editing");
+  }
+
+  const imagePart = parts.find(
+    (p: { inlineData?: { mimeType?: string; data?: string } }) =>
+      p.inlineData?.mimeType?.startsWith("image/")
+  );
+
+  if (!imagePart?.inlineData?.data) {
+    throw new Error("No image in Gemini response");
+  }
+
+  return Buffer.from(imagePart.inlineData.data, "base64");
+}
+
+// ─── Call Gemini for mask-protected image editing ────────────────────────────
 
 export async function editAssetImageWithGemini(
   imageUrl: string,
@@ -115,10 +203,13 @@ export async function editAssetImageWithGemini(
   // 1. Download the source asset image
   const imageBuffer = await downloadImage(imageUrl);
 
-  // 2. Build the editing prompt
+  // 2. Generate product segmentation mask (white = product, black = background)
+  const maskBuffer = await _generateProductMask(imageBuffer, apiKey);
+
+  // 3. Build the editing prompt (references the mask)
   const prompt = buildGeminiEditPrompt(asset, strategy, creativeOptions, brandGuidelines);
 
-  // 3. Call Gemini REST API (same pattern as decompose.ts _inpaintWithGemini)
+  // 4. Call Gemini with original image + mask (same two-image pattern as decompose.ts)
   const response = await fetch(
     `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
     {
@@ -133,6 +224,15 @@ export async function editAssetImageWithGemini(
                 inlineData: {
                   mimeType: "image/png",
                   data: imageBuffer.toString("base64"),
+                },
+              },
+              {
+                text: "Product mask (WHITE = product to preserve exactly, BLACK = background to modify):",
+              },
+              {
+                inlineData: {
+                  mimeType: "image/png",
+                  data: maskBuffer.toString("base64"),
                 },
               },
             ],
@@ -153,25 +253,11 @@ export async function editAssetImageWithGemini(
     throw new Error(`Gemini API error: ${response.status} — ${errText}`);
   }
 
-  // 4. Extract image from response
+  // 5. Extract edited image from response
   const data = await response.json();
-  const parts = data.candidates?.[0]?.content?.parts;
-  if (!parts) {
-    throw new Error("Empty response from Gemini image editing");
-  }
+  const resultBuffer = _extractImageFromResponse(data);
 
-  const imagePart = parts.find(
-    (p: { inlineData?: { mimeType?: string; data?: string } }) =>
-      p.inlineData?.mimeType?.startsWith("image/")
-  );
-
-  if (!imagePart?.inlineData?.data) {
-    throw new Error("No image in Gemini response");
-  }
-
-  const resultBuffer = Buffer.from(imagePart.inlineData.data, "base64");
-
-  // 5. Upload to Supabase Storage
+  // 6. Upload to Supabase Storage
   await ensureStorageBucket();
   const storagePath = `${workspaceId}/variations/${variationId}-edited.png`;
   const supabase = createAdminClient();

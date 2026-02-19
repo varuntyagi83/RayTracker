@@ -13,11 +13,24 @@ describe("buildGeminiEditPrompt", () => {
     expect(prompt).toContain("High-potency vitamin D3 supplement");
   });
 
+  it("references the product mask", () => {
+    const prompt = buildGeminiEditPrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("product mask");
+    expect(prompt).toContain("WHITE areas are the product");
+    expect(prompt).toContain("BLACK areas are the background");
+  });
+
+  it("tells Gemini to only modify background (mask BLACK areas)", () => {
+    const prompt = buildGeminiEditPrompt(mockAsset, "hero_product");
+    expect(prompt).toContain("ONLY to the BLACK (background) areas");
+    expect(prompt).toContain("WHITE areas in the mask are the product");
+    expect(prompt).toContain("do NOT modify those pixels");
+  });
+
   it("includes no-text guardrail", () => {
     const prompt = buildGeminiEditPrompt(mockAsset, "hero_product");
     expect(prompt).toContain("Do NOT add any NEW text");
-    expect(prompt).toContain("Do NOT modify, re-render, or regenerate any text");
-    expect(prompt).toContain("correct spelling");
+    expect(prompt).toContain("Do NOT re-render, regenerate, or alter any text");
   });
 
   it("includes angle directive when specified", () => {
