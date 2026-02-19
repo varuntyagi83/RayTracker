@@ -86,10 +86,11 @@ export function buildGeminiEditPrompt(
     ...directives.map((d) => `- ${d}`),
     "",
     "CRITICAL RULES:",
-    "- Preserve the product identity — it must remain clearly the same product.",
-    "- Do NOT add any text, words, letters, logos, watermarks, or typography to the image.",
-    "- The result should be a clean product photograph suitable for a professional ad creative.",
-    "- Only transform the visual aspects (angle, lighting, background, composition) as directed above.",
+    "- Preserve the product EXACTLY as it appears — same shape, colors, label, and packaging.",
+    "- Do NOT modify, re-render, or regenerate any text that already exists on the product label or packaging. Leave all existing product text pixel-perfect and untouched.",
+    "- Do NOT add any NEW text, words, letters, logos, watermarks, or typography anywhere in the image.",
+    "- Only transform the SURROUNDINGS: angle, lighting, background, and composition as directed above.",
+    "- The product label, brand name, and any printed text on the packaging must remain exactly as in the original image with correct spelling.",
   ]
     .filter(Boolean)
     .join("\n");

@@ -15,8 +15,9 @@ describe("buildGeminiEditPrompt", () => {
 
   it("includes no-text guardrail", () => {
     const prompt = buildGeminiEditPrompt(mockAsset, "hero_product");
-    expect(prompt).toContain("Do NOT add any text");
-    expect(prompt).toContain("Preserve the product identity");
+    expect(prompt).toContain("Do NOT add any NEW text");
+    expect(prompt).toContain("Do NOT modify, re-render, or regenerate any text");
+    expect(prompt).toContain("correct spelling");
   });
 
   it("includes angle directive when specified", () => {
