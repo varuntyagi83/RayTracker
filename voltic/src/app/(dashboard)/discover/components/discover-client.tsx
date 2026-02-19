@@ -36,6 +36,7 @@ import {
   Save,
   Loader2,
   Scissors,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -48,6 +49,8 @@ import {
   stopScrape,
   compareAds,
   saveDiscoverRunAction,
+  createBoardFromDiscoverAction,
+  saveAdAsCompetitorAction,
 } from "../actions";
 import { track } from "@/lib/analytics/events";
 import { InsightsPanel } from "@/components/shared/insights-panel";
@@ -140,6 +143,10 @@ export default function DiscoverClient() {
   // Save run state
   const [savingRun, setSavingRun] = useState(false);
   const [runSaved, setRunSaved] = useState(false);
+
+  // Save as competitor state
+  const [savingCompetitorAdId, setSavingCompetitorAdId] = useState<string | null>(null);
+  const [savedCompetitorAdIds, setSavedCompetitorAdIds] = useState<Set<string>>(new Set());
 
   // Decompose state
   const [decomposeAd, setDecomposeAd] = useState<DiscoverAd | null>(null);
@@ -327,7 +334,12 @@ export default function DiscoverClient() {
       if (result.success) {
         setRunSaved(true);
         track("discover_run_saved", { run_id: query.trim(), ad_count: rawAds.length });
+        toast.success(`Saved ${rawAds.length} ads as competitor "${query.trim()}"`);
+      } else {
+        toast.error(result.error || "Failed to save run");
       }
+    } catch {
+      toast.error("Failed to save run");
     } finally {
       setSavingRun(false);
     }
@@ -359,6 +371,25 @@ export default function DiscoverClient() {
       toast.error(result.error);
     }
     setIsComparing(false);
+  };
+
+  // Save individual ad as competitor
+  const handleSaveAsCompetitor = async (ad: DiscoverAd) => {
+    setSavingCompetitorAdId(ad.id);
+    try {
+      const result = await saveAdAsCompetitorAction({ ad });
+      if (result.success) {
+        setSavedCompetitorAdIds((prev) => new Set(prev).add(ad.id));
+        track("discover_ad_saved_as_competitor", { ad_id: ad.id, brand: ad.pageName });
+        toast.success(`Saved as competitor "${ad.pageName}"`);
+      } else {
+        toast.error(result.error || "Failed to save as competitor");
+      }
+    } catch {
+      toast.error("Failed to save as competitor");
+    } finally {
+      setSavingCompetitorAdId(null);
+    }
   };
 
   return (
@@ -614,6 +645,10 @@ export default function DiscoverClient() {
               isSelectedForComparison={isSelected(ad.id)}
               canAddToComparison={canAdd()}
               onSaveToBoard={(boardId) => handleSaveToBoard(ad, boardId)}
+              onBoardCreated={(board) => setBoards((prev) => [...prev, board])}
+              isSavingCompetitor={savingCompetitorAdId === ad.id}
+              isSavedCompetitor={savedCompetitorAdIds.has(ad.id)}
+              onSaveAsCompetitor={() => handleSaveAsCompetitor(ad)}
               onAnalyze={() => handleAnalyzeAd(ad)}
               onToggleInsight={() =>
                 setExpandedInsightId((prev) => (prev === ad.id ? null : ad.id))
@@ -660,12 +695,16 @@ interface AdCardProps {
   boards: BoardOption[];
   isSaving: boolean;
   isSaved: boolean;
+  isSavingCompetitor: boolean;
+  isSavedCompetitor: boolean;
   isAnalyzing: boolean;
   insight: AdInsightRecord | null;
   isExpanded: boolean;
   isSelectedForComparison: boolean;
   canAddToComparison: boolean;
   onSaveToBoard: (boardId: string) => void;
+  onBoardCreated: (board: BoardOption) => void;
+  onSaveAsCompetitor: () => void;
   onAnalyze: () => void;
   onToggleInsight: () => void;
   onToggleComparison: () => void;
@@ -677,17 +716,45 @@ function AdCard({
   boards,
   isSaving,
   isSaved,
+  isSavingCompetitor,
+  isSavedCompetitor,
   isAnalyzing,
   insight,
   isExpanded,
   isSelectedForComparison,
   canAddToComparison,
   onSaveToBoard,
+  onBoardCreated,
+  onSaveAsCompetitor,
   onAnalyze,
   onToggleInsight,
   onToggleComparison,
   onDecompose,
 }: AdCardProps) {
+  const [showCreateBoard, setShowCreateBoard] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [creatingBoard, setCreatingBoard] = useState(false);
+
+  const handleCreateBoard = async () => {
+    if (!newBoardName.trim()) return;
+    setCreatingBoard(true);
+    try {
+      const result = await createBoardFromDiscoverAction({ name: newBoardName.trim() });
+      if (result.success && result.id && result.name) {
+        onBoardCreated({ id: result.id, name: result.name });
+        toast.success(`Board "${result.name}" created`);
+        setNewBoardName("");
+        setShowCreateBoard(false);
+      } else {
+        toast.error(result.error || "Failed to create board");
+      }
+    } catch {
+      toast.error("Failed to create board");
+    } finally {
+      setCreatingBoard(false);
+    }
+  };
+
   const startDate = new Date(ad.startDate + "T00:00:00");
   const dateStr = startDate.toLocaleDateString("en-US", {
     month: "short",
@@ -774,7 +841,7 @@ function AdCard({
               <Check className="mr-1.5 h-3.5 w-3.5 text-green-600" />
               Saved
             </Button>
-          ) : boards.length > 0 ? (
+          ) : (
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -787,7 +854,7 @@ function AdCard({
                   {isSaving ? "Saving..." : "Add to Board"}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-48" align="start">
+              <PopoverContent className="w-52" align="start">
                 <div className="space-y-1">
                   <p className="text-sm font-medium mb-2">Select board</p>
                   {boards.map((board) => (
@@ -799,13 +866,75 @@ function AdCard({
                       {board.name}
                     </button>
                   ))}
+                  {boards.length > 0 && <div className="border-t my-1.5" />}
+                  {showCreateBoard ? (
+                    <div className="space-y-1.5 pt-1">
+                      <Input
+                        placeholder="Board name"
+                        value={newBoardName}
+                        onChange={(e) => setNewBoardName(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleCreateBoard()}
+                        className="h-7 text-sm"
+                        autoFocus
+                      />
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          className="h-7 flex-1 text-xs"
+                          onClick={handleCreateBoard}
+                          disabled={!newBoardName.trim() || creatingBoard}
+                        >
+                          {creatingBoard ? "Creating..." : "Create"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-xs"
+                          onClick={() => { setShowCreateBoard(false); setNewBoardName(""); }}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="w-full text-left text-sm px-2 py-1.5 rounded hover:bg-muted transition-colors text-primary font-medium"
+                      onClick={() => setShowCreateBoard(true)}
+                    >
+                      <Plus className="inline h-3.5 w-3.5 mr-1" />
+                      New Board
+                    </button>
+                  )}
                 </div>
               </PopoverContent>
             </Popover>
+          )}
+
+          {/* Save as Competitor */}
+          {isSavedCompetitor ? (
+            <Button variant="outline" size="sm" className="flex-shrink-0" disabled>
+              <Check className="mr-1.5 h-3.5 w-3.5 text-green-600" />
+              Competitor
+            </Button>
           ) : (
-            <Button variant="outline" size="sm" className="flex-1" disabled>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              No Boards
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-shrink-0"
+              onClick={onSaveAsCompetitor}
+              disabled={isSavingCompetitor}
+            >
+              {isSavingCompetitor ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                  Competitor
+                </>
+              )}
             </Button>
           )}
 

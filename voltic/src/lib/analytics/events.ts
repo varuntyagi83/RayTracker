@@ -52,6 +52,7 @@ export interface EventPropertiesMap {
   discover_ads_compared: { ad_count: number };
   discover_format_filtered: { format: string };
   discover_run_saved: { run_id: string; ad_count: number };
+  discover_ad_saved_as_competitor: { ad_id: string; brand: string };
 
   // Boards
   board_created: { board_id: string; name: string };

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { searchAdsLibrary, getWorkspaceBoards, saveAdToBoard } from "@/lib/data/discover";
+import { createBoard } from "@/lib/data/boards";
 import { clearAdsLibraryCache, abortActiveScrape } from "@/lib/meta/ads-library";
 import { saveCompetitorScrapeRun } from "@/lib/data/competitors";
 import { generateAdInsights } from "@/lib/ai/insights";
@@ -54,6 +55,26 @@ export async function saveDiscoverRunAction(input: {
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
   return await saveCompetitorScrapeRun(workspace.id, input.brandName, input.ads);
+}
+
+export async function createBoardFromDiscoverAction(input: {
+  name: string;
+}): Promise<{ success: boolean; id?: string; name?: string; error?: string }> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { success: false, error: "No workspace" };
+  const trimmed = input.name.trim();
+  if (!trimmed) return { success: false, error: "Board name is required" };
+  const result = await createBoard(workspace.id, trimmed);
+  if (!result.success) return { success: false, error: result.error };
+  return { success: true, id: result.id, name: trimmed };
+}
+
+export async function saveAdAsCompetitorAction(input: {
+  ad: DiscoverAd;
+}): Promise<{ success: boolean; error?: string }> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { success: false, error: "No workspace" };
+  return await saveCompetitorScrapeRun(workspace.id, input.ad.pageName, [input.ad]);
 }
 
 export async function clearDiscoverCache() {
