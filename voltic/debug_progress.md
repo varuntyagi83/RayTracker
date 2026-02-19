@@ -84,6 +84,51 @@ imageUrl = await generateAssetVariationImage(...);
 
 ---
 
+### Bug 4: Gemini Re-rendering Product Label Text With Spelling Errors
+
+**Symptom:** Generated variation images had the product label/packaging text altered with incorrect spelling. The product was being visually modified even though the prompt said "preserve the product."
+
+**Root cause:** Gemini's image editing model doesn't respect text-only prompt guardrails reliably. When asked to "edit this image" with instructions like "don't modify the product text," the model still re-renders the entire image including the product area, introducing spelling errors in label text.
+
+**Fix (two-phase):**
+
+**Phase 1 — Stronger prompt (commit `f334c05`):**
+```
+- Preserve the product EXACTLY as it appears
+- Do NOT modify, re-render, or regenerate any text on the product label
+- The product label, brand name, and any printed text must remain with correct spelling
+```
+This helped but wasn't sufficient — AI models don't reliably preserve text pixels from prompts alone.
+
+**Phase 2 — Product mask protection (commit `da292b3`):**
+
+Implemented a two-step Gemini pipeline (same pattern as `decompose.ts` `_inpaintWithGemini`):
+
+1. **Mask generation:** Send image to Gemini → get binary segmentation mask (white = product, black = background)
+2. **Protected editing:** Send original + mask to Gemini → "only modify BLACK areas, preserve WHITE areas exactly"
+
+```typescript
+// Step 1: Generate mask
+const maskBuffer = await _generateProductMask(imageBuffer, apiKey);
+
+// Step 2: Edit with mask (4-part payload, same as decompose.ts)
+parts: [
+  { text: prompt },
+  { inlineData: { mimeType: "image/png", data: imageBuffer } },  // original
+  { text: "Product mask (WHITE = preserve, BLACK = modify):" },
+  { inlineData: { mimeType: "image/png", data: maskBuffer } },   // mask
+]
+```
+
+**Key lesson:** For AI image editing, prompt-only guardrails are unreliable for pixel-level preservation. Mask-based approaches (providing explicit regions to protect/modify) are much more dependable. This is the same lesson learned in the decompose feature.
+
+**Trade-off:** Adds ~15 seconds per variation (extra Gemini call for mask). Total per strategy: ~35s (was ~20s).
+
+**Files:** `src/lib/ai/gemini-image-edit.ts`, `src/lib/ai/gemini-image-edit.test.ts`
+**Commits:** `f334c05` (prompt), `da292b3` (mask protection)
+
+---
+
 ## Debugging Patterns & Notes
 
 ### How to check if Gemini is actually working
@@ -112,3 +157,17 @@ Current `maxDuration` exports in the codebase:
 - **Invalid model:** `gemini-3-pro-image-preview` (does not exist, returns 404)
 - **API pattern:** Direct REST API via `fetch()`, no SDK. API key passed as URL query param.
 - **Env var:** `GOOGLE_GENERATIVE_AI_API_KEY`
+
+### Gemini two-image mask pattern
+Used in both `decompose.ts` and `gemini-image-edit.ts`:
+```typescript
+parts: [
+  { text: prompt },
+  { inlineData: { mimeType: "image/png", data: originalBase64 } },
+  { text: "Description of second image (mask):" },
+  { inlineData: { mimeType: "image/png", data: maskBase64 } },
+]
+```
+- Mask generation uses `responseModalities: ["IMAGE"]` (image-only response)
+- Editing uses `responseModalities: ["TEXT", "IMAGE"]` (allows text + image)
+- This pattern is the most reliable way to control which regions Gemini modifies

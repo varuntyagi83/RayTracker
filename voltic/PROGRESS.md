@@ -128,6 +128,25 @@ The Ad Decomposition and Creative Builder features received bug fixes. The codeb
 - **Problem:** `gemini-image-edit.ts` used `gemini-3-pro-image-preview` which doesn't exist → 404 → silent fallback to original unedited image. Variations appeared "Completed" but with the original asset photo.
 - **Fix:** Changed to `gemini-2.5-flash-image` (the model that already works in `decompose.ts`). Also removed the silent fallback — Gemini failures now properly fail the variation with error message and credit refund.
 
+### 9. Product Mask Protection for Gemini Image Editing
+
+**Problem:** Gemini was re-rendering product label text during image editing, introducing spelling errors on packaging. Prompt-only guardrails ("don't modify text") were insufficient — the model still altered product pixels.
+
+**Solution:** Two-step mask-protected editing pipeline (same proven pattern as `decompose.ts` `_inpaintWithGemini()`):
+
+1. **Step 1 — Mask generation:** Send product image to Gemini, ask for binary segmentation mask (white = product, black = background)
+2. **Step 2 — Protected editing:** Send original image + mask to Gemini. Prompt explicitly references mask areas: only modify BLACK (background) areas, leave WHITE (product) pixels untouched
+
+| Change | Detail |
+|--------|--------|
+| `_generateProductMask()` | New internal function — calls Gemini with `responseModalities: ["IMAGE"]` to get segmentation mask |
+| `_extractImageFromResponse()` | New helper — DRY extraction of base64 image from Gemini response |
+| `buildGeminiEditPrompt()` | Updated — references mask areas, directs changes to BLACK areas only |
+| `editAssetImageWithGemini()` | Updated — calls mask generation first, then sends two-image payload (original + mask) |
+| Tests | Updated — 19 tests (was 17), new tests for mask references in prompt |
+
+**Trade-off:** Adds one extra Gemini API call per variation (~15s), so total time per strategy goes from ~20s to ~35s. But product text/labels are now preserved pixel-perfect.
+
 ---
 
 ## Key Data Model Notes
@@ -207,11 +226,12 @@ export async function myAction(input: z.input<typeof schema>): Promise<{ data?: 
 ```
 Asset-based variations:
   1. GPT-4o → headline + body text
-  2. Gemini 2.5 Flash Image (gemini-2.5-flash-image) → edit existing asset image
-     - Downloads asset image → base64
-     - Applies creative direction (angle, lighting, background)
-     - Uploads result to Supabase Storage
-     - On failure: variation marked failed, credits refunded
+  2. Gemini 2.5 Flash Image (gemini-2.5-flash-image) → mask-protected image editing
+     a. Downloads asset image → base64
+     b. Gemini call #1: generate product segmentation mask (white=product, black=bg)
+     c. Gemini call #2: edit image with mask — only modify BLACK areas (background)
+     d. Uploads result to Supabase Storage
+     e. On failure: variation marked failed, credits refunded
 
 Competitor-based variations:
   1. GPT-4o → headline + body text
@@ -251,6 +271,9 @@ const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | 
 
 | Commit | Description |
 |--------|-------------|
+| `da292b3` | feat: add product mask protection to Gemini image editing |
+| `f334c05` | fix: strengthen Gemini prompt to preserve product label text exactly |
+| `958ee88` | docs: update PROGRESS.md and add debug_progress.md for session 3 |
 | `d86bb4f` | fix: use correct Gemini model (gemini-2.5-flash-image) for asset variations |
 | `10803a0` | fix: variations generate button disabled + asset upload body size limit |
 | `14f8971` | feat: integrate Nano Banana Pro (Gemini) for asset-based variation images |
@@ -278,13 +301,14 @@ const [previewImage, setPreviewImage] = useState<{ url: string; alt: string } | 
 4. **Multi-asset variations** — Currently one asset per variation. Could support mixing multiple assets (e.g., product on background A, then on background B).
 5. **Variation preview** — Could show a richer preview combining image + text overlay before generation.
 6. **Gemini image size limits** — Large asset images (>10MB) could cause issues with the Gemini API. Consider adding image resizing before sending to API if needed.
-7. **Gemini generation speed** — Image editing takes ~15-30 seconds per variation. With multiple strategies (sequential), total time can be 30-90+ seconds. Consider parallelizing strategies or adding progress indicators.
+7. **Gemini generation speed** — Image editing now takes ~30-40 seconds per variation (mask generation + editing). With multiple strategies (sequential), total time can be 60-120+ seconds. Consider parallelizing strategies or adding progress indicators.
+8. ~~**Gemini spelling errors on product labels**~~ — **RESOLVED:** Two-step mask-protected editing now preserves product pixels exactly. Gemini only modifies background areas.
 
 ---
 
 ## Test Status
 
 - `src/lib/ai/variations.test.ts` — **52 tests passing** (all prompt builders including asset-based)
-- `src/lib/ai/gemini-image-edit.test.ts` — **17 tests passing** (Gemini edit prompt builder)
+- `src/lib/ai/gemini-image-edit.test.ts` — **19 tests passing** (Gemini edit prompt builder with mask references)
 - TypeScript: **No errors** (`npx tsc --noEmit` clean)
 - Playwright E2E: 21 tests for Variations page (from earlier session)
