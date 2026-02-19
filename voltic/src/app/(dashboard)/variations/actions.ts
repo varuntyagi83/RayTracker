@@ -5,6 +5,7 @@ import { getWorkspace } from "@/lib/supabase/queries";
 import { getBoards, getBoardWithAds } from "@/lib/data/boards";
 import { getAllVariations, deleteVariation } from "@/lib/data/variations";
 import { getAssets } from "@/lib/data/assets";
+import { listBrandGuidelines } from "@/lib/data/brand-guidelines-entities";
 import type { Board, BoardWithAds } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 import type { VariationWithContext } from "@/lib/data/variations";
@@ -66,6 +67,45 @@ export async function fetchAssetsForVariation(
 
   const assets = await getAssets(workspace.id, search);
   return { data: assets };
+}
+
+// ─── Fetch Brand Guidelines for selector ──────────────────────────────────
+
+export async function fetchGuidelinesForVariations(): Promise<{
+  data?: { id: string; name: string }[];
+  error?: string;
+}> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
+  const guidelines = await listBrandGuidelines(workspace.id);
+  return {
+    data: guidelines.map((g) => ({ id: g.id, name: g.name })),
+  };
+}
+
+// ─── Fetch Assets (background images) linked to a guideline ───────────────
+
+const fetchGuidelineAssetsSchema = z.object({
+  guidelineId: z.string().uuid(),
+});
+
+export async function fetchGuidelineAssetsForVariation(
+  input: z.input<typeof fetchGuidelineAssetsSchema>
+): Promise<{
+  data?: { id: string; name: string; imageUrl: string }[];
+  error?: string;
+}> {
+  const workspace = await getWorkspace();
+  if (!workspace) return { error: "No workspace" };
+
+  const parsed = fetchGuidelineAssetsSchema.safeParse(input);
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+
+  const assets = await getAssets(workspace.id, undefined, parsed.data.guidelineId);
+  return {
+    data: assets.map((a) => ({ id: a.id, name: a.name, imageUrl: a.imageUrl })),
+  };
 }
 
 // ─── Delete Variation ──────────────────────────────────────────────────────

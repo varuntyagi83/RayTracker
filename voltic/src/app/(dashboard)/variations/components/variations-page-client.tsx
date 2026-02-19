@@ -15,7 +15,6 @@ import {
   X,
   Image as ImageIcon,
   Palette,
-  ChevronDown,
   ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -49,7 +48,6 @@ import type {
   ProductAngle,
   LightingStyle,
   BackgroundStyle,
-  BrandGuidelines,
 } from "@/types/variations";
 import type { SavedAd, Board } from "@/types/boards";
 import type { Asset } from "@/types/assets";
@@ -59,6 +57,8 @@ import {
   fetchBoardsForSelection,
   fetchBoardAds,
   fetchAssetsForVariation,
+  fetchGuidelinesForVariations,
+  fetchGuidelineAssetsForVariation,
   deleteVariationFromHistory,
 } from "../actions";
 import { generateVariationsAction } from "@/app/(dashboard)/boards/actions";
@@ -133,16 +133,12 @@ export default function VariationsPageClient() {
   const [history, setHistory] = useState<VariationWithContext[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  // ── Brand guidelines ──
-  const [brandGuidelines, setBrandGuidelines] = useState<BrandGuidelines | null>(null);
-  const [guidelinesExpanded, setGuidelinesExpanded] = useState(false);
-  const hasBrandGuidelines = !!(
-    brandGuidelines?.brandName ||
-    brandGuidelines?.brandVoice ||
-    brandGuidelines?.targetAudience ||
-    brandGuidelines?.dosAndDonts ||
-    brandGuidelines?.colorPalette
-  );
+  // ── Brand guideline selector (asset flow) ──
+  const [guidelines, setGuidelines] = useState<{ id: string; name: string }[]>([]);
+  const [guidelinesLoading, setGuidelinesLoading] = useState(true);
+  const [selectedGuidelineId, setSelectedGuidelineId] = useState<string>("");
+  const [guidelineAssets, setGuidelineAssets] = useState<{ id: string; name: string; imageUrl: string }[]>([]);
+  const [guidelineAssetsLoading, setGuidelineAssetsLoading] = useState(false);
 
   // ── Data loaders ──
 
@@ -164,23 +160,19 @@ export default function VariationsPageClient() {
     setHistoryLoading(false);
   }, []);
 
-  const checkBrandGuidelines = useCallback(async () => {
-    const { fetchBrandGuidelines } = await import(
-      "@/app/(dashboard)/settings/actions"
-    );
-    const result = await fetchBrandGuidelines();
-    if (result.data) {
-      setBrandGuidelines(result.data);
-    }
+  const loadGuidelines = useCallback(async () => {
+    const result = await fetchGuidelinesForVariations();
+    if (result.data) setGuidelines(result.data);
+    setGuidelinesLoading(false);
   }, []);
 
   useEffect(() => {
     loadBoards();
     loadAssets();
     loadHistory();
-    checkBrandGuidelines();
+    loadGuidelines();
     track("variations_page_viewed");
-  }, [loadBoards, loadAssets, loadHistory, checkBrandGuidelines]);
+  }, [loadBoards, loadAssets, loadHistory, loadGuidelines]);
 
   // ── Board selection → load ads ──
 
@@ -196,6 +188,23 @@ export default function VariationsPageClient() {
       setBoardAds(result.data.ads);
     }
     setAdsLoading(false);
+  };
+
+  // ── Guideline selection → load linked assets ──
+
+  const handleGuidelineSelect = async (guidelineId: string) => {
+    setSelectedGuidelineId(guidelineId);
+    setGuidelineAssets([]);
+    setSelectedAssetId("");
+
+    if (!guidelineId || guidelineId === "none") return;
+
+    setGuidelineAssetsLoading(true);
+    const result = await fetchGuidelineAssetsForVariation({ guidelineId });
+    if (result.data) {
+      setGuidelineAssets(result.data);
+    }
+    setGuidelineAssetsLoading(false);
   };
 
   // ── Strategy toggle ──
@@ -282,6 +291,9 @@ export default function VariationsPageClient() {
   const handleSourceChange = (newSource: VariationSource) => {
     setVariationSource(newSource);
     setSelectedStrategies(new Set());
+    setSelectedGuidelineId("");
+    setGuidelineAssets([]);
+    setSelectedAssetId("");
     setError("");
     track("variation_source_toggled", { source: newSource });
   };
@@ -322,6 +334,10 @@ export default function VariationsPageClient() {
         strategies,
         channel,
         creativeOptions: creativeOpts,
+        brandGuidelineId:
+          variationSource === "asset" && selectedGuidelineId && selectedGuidelineId !== "none"
+            ? selectedGuidelineId
+            : undefined,
       });
 
       if (result.error) {
@@ -491,6 +507,118 @@ export default function VariationsPageClient() {
             </div>
           )}
 
+          {/* ── ASSET FLOW: Step 1 — Select Brand Guideline ── */}
+          {isAssetFlow && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="secondary"
+                  className="size-6 p-0 flex items-center justify-center text-xs font-bold"
+                >
+                  1
+                </Badge>
+                <label className="text-sm font-medium">
+                  Select Brand Guideline
+                </label>
+                <span className="text-xs text-muted-foreground">(optional)</span>
+              </div>
+
+              {guidelinesLoading ? (
+                <Skeleton className="h-10 w-full max-w-sm" />
+              ) : guidelines.length === 0 ? (
+                <div className="flex items-center justify-between rounded-lg border border-dashed border-muted-foreground/25 px-4 py-3">
+                  <span className="text-sm text-muted-foreground">
+                    No brand guidelines found
+                  </span>
+                  <Link
+                    href="/brand-guidelines"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    Create one <ExternalLink className="size-3" />
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <Select
+                    value={selectedGuidelineId || "none"}
+                    onValueChange={(v) => handleGuidelineSelect(v === "none" ? "" : v)}
+                  >
+                    <SelectTrigger className="max-w-sm">
+                      <SelectValue placeholder="Choose a brand guideline..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No guideline (generic)</SelectItem>
+                      {guidelines.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>
+                          {g.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Linked background images */}
+                  {selectedGuidelineId && selectedGuidelineId !== "none" && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">
+                        <ImageIcon className="inline size-3 mr-1" />
+                        Background Images for this guideline
+                      </label>
+                      {guidelineAssetsLoading ? (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="size-4 animate-spin" />
+                          Loading images...
+                        </div>
+                      ) : guidelineAssets.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">
+                          No background images linked to this guideline.
+                        </p>
+                      ) : (
+                        <ScrollArea className="w-full">
+                          <div className="flex gap-3 pb-3">
+                            {guidelineAssets.map((asset) => (
+                              <button
+                                key={asset.id}
+                                type="button"
+                                onClick={() => setSelectedAssetId(asset.id)}
+                                className={`shrink-0 w-32 rounded-lg border overflow-hidden transition-all text-left ${
+                                  selectedAssetId === asset.id
+                                    ? "ring-2 ring-primary border-primary"
+                                    : "border-border hover:border-muted-foreground/50"
+                                }`}
+                              >
+                                <div className="aspect-video bg-muted relative">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
+                                    src={asset.imageUrl}
+                                    alt={asset.name}
+                                    className="absolute inset-0 w-full h-full object-cover"
+                                  />
+                                  {selectedAssetId === asset.id && (
+                                    <div className="absolute top-1.5 right-1.5">
+                                      <div className="size-5 rounded-full bg-primary flex items-center justify-center">
+                                        <Check className="size-3 text-primary-foreground" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="p-1.5">
+                                  <p className="text-[10px] font-medium truncate">
+                                    {asset.name}
+                                  </p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                          <ScrollBar orientation="horizontal" />
+                        </ScrollArea>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* ── Step: Select Your Product ── */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
@@ -498,7 +626,7 @@ export default function VariationsPageClient() {
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                {isAssetFlow ? "1" : "2"}
+                {isAssetFlow ? "2" : "2"}
               </Badge>
               <label className="text-sm font-medium">
                 Select Your Product
@@ -602,7 +730,7 @@ export default function VariationsPageClient() {
             </Tabs>
           </div>
 
-          {/* ── ASSET FLOW: Step 2 — Creative Direction ── */}
+          {/* ── ASSET FLOW: Step 3 — Creative Direction ── */}
           {isAssetFlow && (
             <div className="space-y-4">
               <div className="flex items-center gap-2">
@@ -610,7 +738,7 @@ export default function VariationsPageClient() {
                   variant="secondary"
                   className="size-6 p-0 flex items-center justify-center text-xs font-bold"
                 >
-                  2
+                  3
                 </Badge>
                 <label className="text-sm font-medium">Creative Direction</label>
                 <span className="text-xs text-muted-foreground">(optional)</span>
@@ -708,7 +836,7 @@ export default function VariationsPageClient() {
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                {isAssetFlow ? "3" : "3"}
+                {isAssetFlow ? "4" : "3"}
               </Badge>
               <label className="text-sm font-medium">Choose Channel</label>
             </div>
@@ -737,7 +865,7 @@ export default function VariationsPageClient() {
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                {isAssetFlow ? "4" : "4"}
+                {isAssetFlow ? "5" : "4"}
               </Badge>
               <label className="text-sm font-medium">Select Strategies</label>
             </div>
@@ -770,75 +898,15 @@ export default function VariationsPageClient() {
             </div>
           </div>
 
-          {/* Brand Guidelines Preview */}
-          {hasBrandGuidelines && brandGuidelines ? (
-            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
-              <button
-                type="button"
-                onClick={() => setGuidelinesExpanded(!guidelinesExpanded)}
-                className="w-full flex items-center justify-between px-4 py-3 text-sm"
-              >
-                <span className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-medium">
-                  <ShieldCheck className="size-4" />
-                  Brand guidelines will be applied
-                  {brandGuidelines.brandName && (
-                    <Badge variant="outline" className="text-[10px] border-emerald-300 dark:border-emerald-700">
-                      {brandGuidelines.brandName}
-                    </Badge>
-                  )}
-                </span>
-                <ChevronDown
-                  className={`size-4 text-emerald-600 dark:text-emerald-400 transition-transform ${
-                    guidelinesExpanded ? "rotate-180" : ""
-                  }`}
-                />
-              </button>
-              {guidelinesExpanded && (
-                <div className="px-4 pb-3 space-y-2 text-xs text-muted-foreground border-t border-emerald-200 dark:border-emerald-800 pt-3">
-                  {brandGuidelines.brandVoice && (
-                    <div>
-                      <span className="font-medium text-foreground">Voice:</span>{" "}
-                      {brandGuidelines.brandVoice}
-                    </div>
-                  )}
-                  {brandGuidelines.colorPalette && (
-                    <div>
-                      <span className="font-medium text-foreground">Colors:</span>{" "}
-                      {brandGuidelines.colorPalette}
-                    </div>
-                  )}
-                  {brandGuidelines.targetAudience && (
-                    <div>
-                      <span className="font-medium text-foreground">Audience:</span>{" "}
-                      {brandGuidelines.targetAudience}
-                    </div>
-                  )}
-                  {brandGuidelines.dosAndDonts && (
-                    <div>
-                      <span className="font-medium text-foreground">Guidelines:</span>{" "}
-                      <span className="line-clamp-2">{brandGuidelines.dosAndDonts}</span>
-                    </div>
-                  )}
-                  <Link
-                    href="/brand-guidelines"
-                    className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 hover:underline mt-1"
-                  >
-                    Edit guidelines <ExternalLink className="size-3" />
-                  </Link>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="flex items-center justify-between rounded-lg border border-dashed border-muted-foreground/25 px-4 py-3">
-              <span className="text-sm text-muted-foreground">
-                No brand guidelines set — variations will use generic style
+          {/* Brand Guideline Indicator */}
+          {isAssetFlow && selectedGuidelineId && selectedGuidelineId !== "none" && (
+            <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3">
+              <ShieldCheck className="size-4" />
+              <span>
+                Brand guideline{" "}
+                <strong>{guidelines.find((g) => g.id === selectedGuidelineId)?.name}</strong>{" "}
+                will be applied to AI generation
               </span>
-              <Link
-                href="/brand-guidelines"
-                className="text-xs text-primary hover:underline flex items-center gap-1"
-              >
-                Set up guidelines <ExternalLink className="size-3" />
-              </Link>
             </div>
           )}
 

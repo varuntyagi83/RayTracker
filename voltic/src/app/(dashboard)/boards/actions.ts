@@ -19,6 +19,7 @@ import {
   deleteVariation,
 } from "@/lib/data/variations";
 import { getBrandGuidelines } from "@/lib/data/brand-guidelines";
+import { getBrandGuidelineById } from "@/lib/data/brand-guidelines-entities";
 import { getAsset } from "@/lib/data/assets";
 import {
   checkAndDeductCredits,
@@ -194,6 +195,7 @@ const generateVariationsSchema = z.object({
     background: z.string().optional(),
     customInstruction: z.string().max(500).optional(),
   }).optional(),
+  brandGuidelineId: z.string().uuid().optional(),
 }).refine(
   (data) => data.source === "asset" || data.savedAdId,
   { message: "savedAdId is required for competitor-based variations", path: ["savedAdId"] }
@@ -212,7 +214,7 @@ export async function generateVariationsAction(
   if (!parsed.success)
     return { results: [], error: parsed.error.issues[0].message };
 
-  const { source, savedAdId, assetId, strategies, channel, creativeOptions: rawCreativeOptions } = parsed.data;
+  const { source, savedAdId, assetId, strategies, channel, creativeOptions: rawCreativeOptions, brandGuidelineId } = parsed.data;
   const creativeOptions = rawCreativeOptions as CreativeOptions | undefined;
   const totalCost = VARIATION_CREDIT_COST * strategies.length;
 
@@ -265,8 +267,24 @@ export async function generateVariationsAction(
     return { results: [], error: "Asset not found" };
   }
 
-  // Fetch brand guidelines
-  const brandGuidelines = await getBrandGuidelines(workspace.id);
+  // Fetch brand guidelines — use specific guideline if selected, otherwise workspace-level
+  let brandGuidelines;
+  if (brandGuidelineId) {
+    const entity = await getBrandGuidelineById(workspace.id, brandGuidelineId);
+    if (entity) {
+      brandGuidelines = {
+        brandName: entity.brandName ?? undefined,
+        brandVoice: entity.brandVoice ?? undefined,
+        colorPalette: entity.colorPalette.map((c) => c.hex).join(", ") || undefined,
+        targetAudience: entity.targetAudience ?? undefined,
+        dosAndDonts: entity.dosAndDonts ?? undefined,
+      };
+    } else {
+      brandGuidelines = await getBrandGuidelines(workspace.id);
+    }
+  } else {
+    brandGuidelines = await getBrandGuidelines(workspace.id);
+  }
 
   // Generate variations sequentially
   const results: Array<{ strategy: string; success: boolean; variationId?: string; error?: string }> = [];
