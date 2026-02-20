@@ -32,6 +32,20 @@ export const VARIATION_CREDIT_COST = 10;
 
 export type VariationSource = "competitor" | "asset";
 
+// ─── Aspect Ratio ─────────────────────────────────────────────────────────
+
+export type AspectRatio = "1:1" | "9:16" | "16:9" | "4:5" | "3:4" | "4:3" | "5:4";
+
+export const ASPECT_RATIO_LABELS: Record<AspectRatio, string> = {
+  "1:1": "Square (1:1)",
+  "9:16": "Portrait (9:16)",
+  "16:9": "Landscape (16:9)",
+  "4:5": "Portrait (4:5)",
+  "3:4": "Portrait (3:4)",
+  "4:3": "Landscape (4:3)",
+  "5:4": "Landscape (5:4)",
+};
+
 // ─── Creative Options (for asset-based variations) ──────────────────────────
 
 export type ProductAngle =
@@ -68,6 +82,7 @@ export interface CreativeOptions {
   lighting?: LightingStyle;
   background?: BackgroundStyle;
   customInstruction?: string;
+  aspectRatio?: AspectRatio;
 }
 
 export const PRODUCT_ANGLE_LABELS: Record<ProductAngle, string> = {

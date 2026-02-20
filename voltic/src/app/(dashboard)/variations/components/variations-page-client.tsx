@@ -41,6 +41,7 @@ import {
   PRODUCT_ANGLE_LABELS,
   LIGHTING_STYLE_LABELS,
   BACKGROUND_STYLE_LABELS,
+  ASPECT_RATIO_LABELS,
 } from "@/types/variations";
 import type {
   VariationStrategy,
@@ -48,6 +49,7 @@ import type {
   ProductAngle,
   LightingStyle,
   BackgroundStyle,
+  AspectRatio,
 } from "@/types/variations";
 import type { SavedAd, Board } from "@/types/boards";
 import type { Asset } from "@/types/assets";
@@ -119,6 +121,9 @@ export default function VariationsPageClient() {
   const [lighting, setLighting] = useState<string>("");
   const [background, setBackground] = useState<string>("");
   const [customInstruction, setCustomInstruction] = useState<string>("");
+
+  // ── Aspect ratio (both flows) ──
+  const [aspectRatio, setAspectRatio] = useState<string>("");
 
   // ── Channel ──
   const [channel, setChannel] = useState<string>("facebook");
@@ -296,6 +301,7 @@ export default function VariationsPageClient() {
     setSelectedGuidelineId("");
     setGuidelineAssets([]);
     setSelectedAssetId("");
+    setAspectRatio("");
     setError("");
     track("variation_source_toggled", { source: newSource });
   };
@@ -319,6 +325,8 @@ export default function VariationsPageClient() {
     try {
       const strategies = Array.from(selectedStrategies);
 
+      const aspectRatioValue = (aspectRatio && aspectRatio !== "auto" ? aspectRatio : undefined) as AspectRatio | undefined;
+
       const creativeOpts =
         variationSource === "asset"
           ? {
@@ -326,8 +334,11 @@ export default function VariationsPageClient() {
               lighting: lighting && lighting !== "auto" ? lighting : undefined,
               background: background && background !== "auto" ? background : undefined,
               customInstruction: customInstruction.trim() || undefined,
+              aspectRatio: aspectRatioValue,
             }
-          : undefined;
+          : aspectRatioValue
+            ? { aspectRatio: aspectRatioValue }
+            : undefined;
 
       const result = await generateVariationsAction({
         source: variationSource,
@@ -831,7 +842,7 @@ export default function VariationsPageClient() {
             </div>
           )}
 
-          {/* ── Step: Channel ── */}
+          {/* ── Step: Aspect Ratio (both flows) ── */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Badge
@@ -839,6 +850,49 @@ export default function VariationsPageClient() {
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
                 {isAssetFlow ? "4" : "3"}
+              </Badge>
+              <label className="text-sm font-medium">Aspect Ratio</label>
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setAspectRatio("auto")}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  !aspectRatio || aspectRatio === "auto"
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                }`}
+              >
+                Auto
+              </button>
+              {(Object.entries(ASPECT_RATIO_LABELS) as [AspectRatio, string][]).map(
+                ([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setAspectRatio(key)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                      aspectRatio === key
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-muted-foreground/50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+
+          {/* ── Step: Channel ── */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Badge
+                variant="secondary"
+                className="size-6 p-0 flex items-center justify-center text-xs font-bold"
+              >
+                {isAssetFlow ? "5" : "4"}
               </Badge>
               <label className="text-sm font-medium">Choose Channel</label>
             </div>
@@ -867,7 +921,7 @@ export default function VariationsPageClient() {
                 variant="secondary"
                 className="size-6 p-0 flex items-center justify-center text-xs font-bold"
               >
-                {isAssetFlow ? "5" : "4"}
+                {isAssetFlow ? "6" : "5"}
               </Badge>
               <label className="text-sm font-medium">Select Strategies</label>
             </div>

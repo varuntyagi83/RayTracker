@@ -99,6 +99,22 @@ describe("buildCreativeOptionsSection", () => {
     expect(result).toContain("CREATIVE DIRECTION");
     expect(result).toContain("Custom direction: Make it vibrant");
   });
+
+  it("includes aspect ratio when populated", () => {
+    const result = buildCreativeOptionsSection({ aspectRatio: "16:9" });
+    expect(result).toContain("CREATIVE DIRECTION");
+    expect(result).toContain("Aspect ratio: Landscape (16:9)");
+  });
+
+  it("includes aspect ratio with other options", () => {
+    const result = buildCreativeOptionsSection({
+      ...fullCreativeOptions,
+      aspectRatio: "4:5",
+    });
+    expect(result).toContain("Aspect ratio: Portrait (4:5)");
+    expect(result).toContain("3/4 View");
+    expect(result).toContain("Golden Hour");
+  });
 });
 
 // ─── buildTextPrompt (competitor-based) ─────────────────────────────────────
@@ -433,5 +449,21 @@ describe("buildAssetImagePrompt", () => {
     expect(prompt).not.toContain("Shoot from");
     expect(prompt).not.toContain("background should be");
     expect(prompt).not.toContain("Additional direction:");
+  });
+
+  it("includes aspect ratio when provided", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {
+      aspectRatio: "9:16",
+    });
+    expect(prompt).toContain("portrait (9:16)");
+  });
+
+  it("includes aspect ratio with other creative options", () => {
+    const prompt = buildAssetImagePrompt(mockAsset, "hero_product", {
+      angle: "front",
+      aspectRatio: "16:9",
+    });
+    expect(prompt).toContain("front view");
+    expect(prompt).toContain("landscape (16:9)");
   });
 });

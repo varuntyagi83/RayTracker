@@ -4,12 +4,15 @@ import type {
   VariationTextResult,
   BrandGuidelines,
   CreativeOptions,
+  AspectRatio,
 } from "@/types/variations";
 import {
   PRODUCT_ANGLE_LABELS,
   LIGHTING_STYLE_LABELS,
   BACKGROUND_STYLE_LABELS,
+  ASPECT_RATIO_LABELS,
 } from "@/types/variations";
+import { getDalleSize } from "./image-resize";
 import type { SavedAd } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 
@@ -43,6 +46,7 @@ export function buildCreativeOptionsSection(options?: CreativeOptions): string {
   if (options.angle) parts.push(`Product angle: ${PRODUCT_ANGLE_LABELS[options.angle]}`);
   if (options.lighting) parts.push(`Lighting: ${LIGHTING_STYLE_LABELS[options.lighting]}`);
   if (options.background) parts.push(`Background: ${BACKGROUND_STYLE_LABELS[options.background]}`);
+  if (options.aspectRatio) parts.push(`Aspect ratio: ${ASPECT_RATIO_LABELS[options.aspectRatio]}`);
   if (options.customInstruction) parts.push(`Custom direction: ${options.customInstruction}`);
 
   if (parts.length === 0) return "";
@@ -251,6 +255,9 @@ export function buildAssetImagePrompt(
   const customLine = creativeOptions?.customInstruction
     ? `Additional direction: ${creativeOptions.customInstruction}`
     : "";
+  const aspectLine = creativeOptions?.aspectRatio
+    ? `The image should be composed for a ${ASPECT_RATIO_LABELS[creativeOptions.aspectRatio].toLowerCase()} format.`
+    : "";
 
   const brandStyle = brandGuidelines?.colorPalette
     ? ` Use the brand color palette: ${brandGuidelines.colorPalette}.`
@@ -264,6 +271,7 @@ export function buildAssetImagePrompt(
     angleLine,
     lightingLine,
     backgroundLine,
+    aspectLine,
     customLine,
     `The image should be suitable for a social media ad — clean, modern, high-contrast, attention-grabbing.${brandStyle}`,
     "Remember: absolutely no text, letters, words, numbers, logos, labels, or watermarks anywhere in the image.",
@@ -295,7 +303,7 @@ export async function generateVariationImage(
     model: "dall-e-3",
     prompt,
     n: 1,
-    size: "1024x1024",
+    size: getDalleSize(creativeOptions?.aspectRatio),
     quality: "standard",
   });
 

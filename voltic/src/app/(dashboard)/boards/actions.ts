@@ -194,6 +194,7 @@ const generateVariationsSchema = z.object({
     lighting: z.string().optional(),
     background: z.string().optional(),
     customInstruction: z.string().max(500).optional(),
+    aspectRatio: z.enum(["1:1", "9:16", "16:9", "4:5", "3:4", "4:3", "5:4"]).optional(),
   }).optional(),
   brandGuidelineId: z.string().uuid().optional(),
 }).refine(

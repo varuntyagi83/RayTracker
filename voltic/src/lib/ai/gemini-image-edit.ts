@@ -5,7 +5,9 @@ import {
   PRODUCT_ANGLE_LABELS,
   LIGHTING_STYLE_LABELS,
   BACKGROUND_STYLE_LABELS,
+  ASPECT_RATIO_LABELS,
 } from "@/types/variations";
+import { resizeToAspectRatio } from "./image-resize";
 import type { Asset } from "@/types/assets";
 
 const STORAGE_BUCKET = "brand-assets";
@@ -58,6 +60,12 @@ export function buildGeminiEditPrompt(
 
   if (creativeOptions?.customInstruction) {
     directives.push(creativeOptions.customInstruction);
+  }
+
+  if (creativeOptions?.aspectRatio) {
+    directives.push(
+      `Compose the image for a ${ASPECT_RATIO_LABELS[creativeOptions.aspectRatio].toLowerCase()} format.`
+    );
   }
 
   if (brandGuidelines?.colorPalette) {
@@ -255,7 +263,12 @@ export async function editAssetImageWithGemini(
 
   // 5. Extract edited image from response
   const data = await response.json();
-  const resultBuffer = _extractImageFromResponse(data);
+  let resultBuffer = _extractImageFromResponse(data);
+
+  // 5b. Post-process: resize/crop to target aspect ratio if specified
+  if (creativeOptions?.aspectRatio) {
+    resultBuffer = await resizeToAspectRatio(resultBuffer, creativeOptions.aspectRatio);
+  }
 
   // 6. Upload to Supabase Storage
   await ensureStorageBucket();

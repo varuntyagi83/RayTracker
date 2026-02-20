@@ -148,4 +148,28 @@ describe("buildGeminiEditPrompt", () => {
     expect(prompt).not.toContain("Enhance this product image");
     expect(prompt).toContain("#FF0000");
   });
+
+  it("includes aspect ratio directive when specified", () => {
+    const prompt = buildGeminiEditPrompt(mockAsset, "hero_product", {
+      aspectRatio: "16:9",
+    });
+    expect(prompt).toContain("landscape (16:9)");
+  });
+
+  it("includes aspect ratio with other creative options", () => {
+    const prompt = buildGeminiEditPrompt(mockAsset, "hero_product", {
+      angle: "front",
+      aspectRatio: "4:5",
+    });
+    expect(prompt).toContain("front view");
+    expect(prompt).toContain("portrait (4:5)");
+  });
+
+  it("does not include default enhancement when only aspect ratio is provided", () => {
+    const prompt = buildGeminiEditPrompt(mockAsset, "hero_product", {
+      aspectRatio: "9:16",
+    });
+    expect(prompt).not.toContain("Enhance this product image");
+    expect(prompt).toContain("portrait (9:16)");
+  });
 });
