@@ -114,16 +114,24 @@ export async function generateBrandGuidelinesFromMedia(params: {
     messages: [{ role: "user", content: userContent }],
   });
 
-  // Parse the JSON response
-  const text = result.text.trim();
-  const jsonStart = text.indexOf("{");
-  const jsonEnd = text.lastIndexOf("}");
+  // Parse the JSON response — handle markdown-wrapped JSON (```json ... ```)
+  let jsonStr = result.text.trim();
+
+  // Strip markdown code fences if present
+  const fenceMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    jsonStr = fenceMatch[1].trim();
+  }
+
+  const jsonStart = jsonStr.indexOf("{");
+  const jsonEnd = jsonStr.lastIndexOf("}");
 
   if (jsonStart === -1 || jsonEnd === -1) {
+    console.error("[brand-guidelines] Failed to extract JSON. Raw response:", result.text.slice(0, 500));
     throw new Error("Failed to extract JSON from AI response");
   }
 
-  const parsed = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+  const parsed = JSON.parse(jsonStr.slice(jsonStart, jsonEnd + 1));
 
   return {
     brandName: parsed.brandName ?? existingName ?? "Untitled Brand",
