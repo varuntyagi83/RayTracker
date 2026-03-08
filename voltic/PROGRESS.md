@@ -1,6 +1,6 @@
 # Voltic — Development Progress
 
-> Last updated: 2026-02-19 (Session 3)
+> Last updated: 2026-03-08 (QA Sessions — Rounds 1–4 complete, Round 5 in progress)
 
 ---
 
@@ -11,6 +11,23 @@ The Variations feature has been significantly extended to support **two flows**:
 2. **Asset-based** (new) — edit/transform existing asset images using **Gemini 2.5 Flash Image** (`gemini-2.5-flash-image`) + generate text via GPT-4o
 
 The Ad Decomposition and Creative Builder features received bug fixes. The codebase is deployed on Vercel at `ray-tracker.vercel.app`.
+
+---
+
+## Recent Changes (QA Sessions: Mar 8, 2026)
+
+### Production QA Audit — Rounds 1–4
+
+Conducted 4 iterative deep QA audits of the production codebase. All 5 CRITICAL bugs fixed. 11 of 16 HIGH bugs fixed. 6 of 11 MEDIUM bugs fixed. See `BUGS_ISSUES.md` for full tracker.
+
+**Commits (in order):**
+- `3fc93d7` — Studio credit deduction, optimistic lock fix (C-1, C-2)
+- `4d9df08` — Slack token isolation, SSRF basic (H-1, M-3)
+- `aaab8ec` — Cron timing, variation modal scroll, Slack empty digest, N+1 query, prompt injection (H-2, H-3, H-4, H-5, H-6, H-7)
+- `546ff23` — Stripe idempotency, SSRF 169.254 gap, silent refund failure (C-3, C-4, C-5)
+- `7a2fdcd` — parseInt radix, JSON.parse guards, AbortController, blob URL cleanup, revalidatePath, upload Content-Length (H-13, H-14, H-15, H-16, M-9, M-10, M-11)
+
+**Remaining open issues (13):** H-8 (cron duplicate execution), H-9 (variation pagination), H-10 (asset upload server limit), H-11 (in-memory rate limiter), H-12 (parseInt in meta callback), M-4 (demo mode), M-5 (DST timezone), M-6 (silent error suppression), M-7 (magic numbers), M-8 (pagination cap), L-1, L-2, L-3.
 
 ---
 

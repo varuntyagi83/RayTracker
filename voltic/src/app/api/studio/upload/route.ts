@@ -66,7 +66,9 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const storagePath = `${workspace.id}/studio/${Date.now()}-${file.name}`;
+    // Sanitize filename to prevent path traversal and special-char storage issues
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+    const storagePath = `${workspace.id}/studio/${Date.now()}-${safeFileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from("brand-assets")

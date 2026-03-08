@@ -75,6 +75,12 @@ export async function POST(req: NextRequest) {
 
   // Validate all files upfront
   for (const file of rawFiles) {
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      return NextResponse.json(
+        { error: `${file.name}: only JPG, PNG, WebP, and SVG are allowed` },
+        { status: 400 }
+      );
+    }
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
         { error: `${file.name} exceeds 20MB limit` },
