@@ -140,6 +140,8 @@ export default function VariationsPageClient() {
   // ── History ──
   const [history, setHistory] = useState<VariationWithContext[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyNextCursor, setHistoryNextCursor] = useState<string | undefined>();
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
 
   // ── Brand guideline selector (asset flow) ──
   const [guidelines, setGuidelines] = useState<{ id: string; name: string }[]>([]);
@@ -165,8 +167,18 @@ export default function VariationsPageClient() {
   const loadHistory = useCallback(async () => {
     const result = await fetchAllVariations();
     if (result.data) setHistory(result.data);
+    setHistoryNextCursor(result.nextCursor);
     setHistoryLoading(false);
   }, []);
+
+  const loadMoreHistory = useCallback(async () => {
+    if (!historyNextCursor || historyLoadingMore) return;
+    setHistoryLoadingMore(true);
+    const result = await fetchAllVariations(historyNextCursor);
+    if (result.data) setHistory((prev) => [...prev, ...result.data!]);
+    setHistoryNextCursor(result.nextCursor);
+    setHistoryLoadingMore(false);
+  }, [historyNextCursor, historyLoadingMore]);
 
   const loadGuidelines = useCallback(async () => {
     const result = await fetchGuidelinesForVariations();
@@ -1052,15 +1064,32 @@ export default function VariationsPageClient() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {history.map((v) => (
-              <VariationHistoryCard
-                key={v.id}
-                variation={v}
-                onDelete={() => handleDeleteVariation(v.id)}
-                onPreview={(url, alt) => setPreviewImage({ url, alt })}
-              />
-            ))}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {history.map((v) => (
+                <VariationHistoryCard
+                  key={v.id}
+                  variation={v}
+                  onDelete={() => handleDeleteVariation(v.id)}
+                  onPreview={(url, alt) => setPreviewImage({ url, alt })}
+                />
+              ))}
+            </div>
+            {historyNextCursor && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  variant="outline"
+                  onClick={loadMoreHistory}
+                  disabled={historyLoadingMore}
+                >
+                  {historyLoadingMore ? (
+                    <><Loader2 className="size-4 animate-spin mr-2" />Loading…</>
+                  ) : (
+                    "Load More"
+                  )}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

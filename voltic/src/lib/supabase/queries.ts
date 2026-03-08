@@ -24,7 +24,7 @@ export async function getWorkspace(): Promise<Workspace | null> {
 
   const { data: workspace } = await admin
     .from("workspaces")
-    .select("id, name, slug, timezone, currency, credit_balance, settings, meta_access_token")
+    .select("id, name, slug, timezone, currency, credit_balance, settings, meta_access_token, slack_access_token, slack_team_name")
     .eq("id", member.workspace_id)
     .single();
 
@@ -39,6 +39,8 @@ export async function getWorkspace(): Promise<Workspace | null> {
     credit_balance: workspace.credit_balance,
     settings: workspace.settings as Record<string, unknown>,
     meta_connected: !!workspace.meta_access_token,
+    slack_connected: !!workspace.slack_access_token,
+    slack_team_name: workspace.slack_team_name ?? null,
   };
 }
 

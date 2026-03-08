@@ -11,6 +11,8 @@ export interface Workspace {
   credit_balance: number;
   settings: Record<string, unknown>;
   meta_connected: boolean;
+  slack_connected: boolean;
+  slack_team_name: string | null;
 }
 
 interface WorkspaceContextValue {

@@ -10,17 +10,26 @@ import type { Board, BoardWithAds } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 import type { VariationWithContext } from "@/lib/data/variations";
 
-// ─── Fetch All Workspace Variations (History) ──────────────────────────────
+// ─── Fetch Workspace Variations (Paginated) ────────────────────────────────
 
-export async function fetchAllVariations(): Promise<{
+const PAGE_SIZE = 20;
+
+export async function fetchAllVariations(cursor?: string): Promise<{
   data?: VariationWithContext[];
+  nextCursor?: string;
+  hasMore?: boolean;
   error?: string;
 }> {
   const workspace = await getWorkspace();
   if (!workspace) return { error: "No workspace" };
 
-  const variations = await getAllVariations(workspace.id, 100);
-  return { data: variations };
+  const variations = await getAllVariations(workspace.id, PAGE_SIZE, cursor);
+  const hasMore = variations.length === PAGE_SIZE;
+  const nextCursor = hasMore
+    ? variations[variations.length - 1].createdAt
+    : undefined;
+
+  return { data: variations, nextCursor, hasMore };
 }
 
 // ─── Fetch Boards for Competitor Selection ─────────────────────────────────

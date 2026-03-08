@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -6,16 +7,31 @@ import { createClient } from "@/lib/supabase/server";
  * Slack OAuth Callback
  *
  * Handles the OAuth redirect from Slack after a user authorizes the app.
- * Exchanges the code for an access token and stores it on the workspace.
+ * Validates the CSRF state token set by /api/auth/slack, then exchanges
+ * the authorization code for an access token and stores it on the workspace.
  */
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
   const error = searchParams.get("error");
+  const state = searchParams.get("state");
 
   if (error || !code) {
     return NextResponse.redirect(
       new URL(`/automations?slack_error=${error || "no_code"}`, request.url)
+    );
+  }
+
+  // Validate CSRF state token — prevents attackers from tricking authenticated
+  // users into linking the attacker's Slack workspace to their Voltic account.
+  const cookieStore = await cookies();
+  const expectedState = cookieStore.get("slack_oauth_state")?.value;
+  cookieStore.delete("slack_oauth_state");
+
+  if (!state || !expectedState || state !== expectedState) {
+    console.error("[slack-oauth] CSRF state mismatch — potential attack or stale link");
+    return NextResponse.redirect(
+      new URL("/automations?slack_error=invalid_state", request.url)
     );
   }
 

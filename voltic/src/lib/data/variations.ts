@@ -139,17 +139,18 @@ export async function deleteVariation(
 export interface VariationWithContext extends Variation {
   adBrandName: string | null;
   adImageUrl: string | null;
-  assetName: string;
-  assetImageUrl: string;
+  assetName: string | null;
+  assetImageUrl: string | null;
 }
 
 export async function getAllVariations(
   workspaceId: string,
-  limit: number = 50
+  limit: number = 20,
+  cursor?: string // ISO timestamp — fetch variations created before this time
 ): Promise<VariationWithContext[]> {
   const supabase = createAdminClient();
 
-  const { data } = await supabase
+  let query = supabase
     .from("variations")
     .select(
       "*, saved_ads(brand_name, image_url), assets!inner(name, image_url)"
@@ -158,13 +159,19 @@ export async function getAllVariations(
     .order("created_at", { ascending: false })
     .limit(limit);
 
+  if (cursor) {
+    query = query.lt("created_at", cursor);
+  }
+
+  const { data } = await query;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data ?? []).map((row: any) => ({
     ...mapRow(row),
     adBrandName: row.saved_ads?.brand_name ?? null,
     adImageUrl: row.saved_ads?.image_url ?? null,
-    assetName: row.assets?.name ?? "Unknown",
-    assetImageUrl: row.assets?.image_url ?? "",
+    assetName: row.assets?.name ?? null,
+    assetImageUrl: row.assets?.image_url ?? null,
   }));
 }
 

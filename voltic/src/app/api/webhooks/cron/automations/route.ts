@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAutomation } from "@/lib/automations/executor";
 import { trackServer } from "@/lib/analytics/posthog-server";
-import type { Automation } from "@/types/automation";
+import type { Automation, DayOfWeek } from "@/types/automation";
 
 /**
  * Cron Endpoint: Execute Due Automations
@@ -95,20 +95,41 @@ export async function GET(request: NextRequest) {
 
 // ─── Schedule Checker ───────────────────────────────────────────────────────
 
+/**
+ * Extract the current local time components in a given IANA timezone using
+ * Intl.DateTimeFormat.formatToParts() — DST-safe and spec-guaranteed, unlike
+ * the `new Date(toLocaleString(...))` pattern which is implementation-defined.
+ */
+const DAY_NAMES: DayOfWeek[] = [
+  "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+];
+
+function getLocalTimeParts(
+  date: Date,
+  timezone: string
+): { hours: number; minutes: number; dayName: DayOfWeek } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    weekday: "long",
+    hour12: false,
+  }).formatToParts(date);
+
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "0";
+  const hours = parseInt(get("hour"), 10) % 24; // "24" can appear at midnight in some impls
+  const minutes = parseInt(get("minute"), 10);
+  const rawDay = get("weekday").toLowerCase();
+  const dayName: DayOfWeek = (DAY_NAMES.includes(rawDay as DayOfWeek) ? rawDay : DAY_NAMES[date.getDay()]) as DayOfWeek;
+  return { hours, minutes, dayName };
+}
+
 function isAutomationDue(automation: Automation, now: Date): boolean {
   const schedule = automation.schedule;
   if (!schedule) return false;
 
-  // Resolve current time in the automation's configured timezone
-  const tzNow = new Date(
-    now.toLocaleString("en-US", { timeZone: schedule.timezone || "UTC" })
-  );
-
-  const dayNames = [
-    "sunday", "monday", "tuesday", "wednesday",
-    "thursday", "friday", "saturday",
-  ] as const;
-  const currentDay = dayNames[tzNow.getDay()];
+  const tz = schedule.timezone || "UTC";
+  const { hours, minutes, dayName: currentDay } = getLocalTimeParts(now, tz);
 
   // Daily automations run every day; weekly only on configured days
   if (schedule.frequency === "weekly" && !schedule.days.includes(currentDay)) {
@@ -127,7 +148,7 @@ function isAutomationDue(automation: Automation, now: Date): boolean {
   // Double-firing is prevented by the 55-minute idempotency guard below.
   const [scheduleHour, scheduleMinute] = schedule.time.split(":").map(Number);
   const scheduleMinutes = scheduleHour * 60 + scheduleMinute;
-  const currentMinutes = tzNow.getHours() * 60 + tzNow.getMinutes();
+  const currentMinutes = hours * 60 + minutes;
   const diff = Math.abs(currentMinutes - scheduleMinutes);
 
   if (diff > 10) return false;

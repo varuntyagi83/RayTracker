@@ -114,6 +114,9 @@ export interface EventPropertiesMap {
   meta_ad_accounts_synced: { account_count: number };
   meta_campaigns_synced: { workspace_id: string; ad_account_id: string; campaign_count: number };
 
+  // Slack Connection
+  slack_connect_initiated: Record<string, never>;
+
   // Extension (server-side)
   extension_auth_validated: { workspace_id: string };
   extension_ad_saved: {
