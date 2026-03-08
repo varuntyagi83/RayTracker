@@ -119,6 +119,17 @@ export async function executeAutomation(
           isTestRun
         );
         itemsCount = message.itemsCount;
+
+        // Don't send an empty report — skip silently and record as success
+        if (itemsCount === 0 && !isTestRun) {
+          return await recordRun(admin, automationId, {
+            success: true,
+            itemsCount: 0,
+            error: undefined,
+            durationMs: Date.now() - startTime,
+          });
+        }
+
         const result = await sendSlackMessage(message.slackMessage);
         if (!result.ok) throw new Error(result.error ?? "Slack send failed");
         break;

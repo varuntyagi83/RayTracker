@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
     .is("deleted_at", null);
 
   if (error) {
+    // eslint-disable-next-line no-console
     console.error("[cron] Failed to load automations:", error);
     trackServer("automation_cron_error", "system", {
       error: error.message,
@@ -55,7 +56,6 @@ export async function GET(request: NextRequest) {
   // Execute due automations
   const results = await Promise.allSettled(
     dueAutomations.map(async (a) => {
-      console.log(`[cron] Executing automation: ${a.name} (${a.id})`);
       const result = await executeAutomation(a.id);
       return { id: a.id, name: a.name, ...result };
     })
@@ -65,10 +65,6 @@ export async function GET(request: NextRequest) {
     if (r.status === "fulfilled") return r.value;
     return { error: r.reason?.message ?? "Unknown error" };
   });
-
-  console.log(
-    `[cron] Executed ${dueAutomations.length}/${automations.length} automations`
-  );
 
   trackServer("automation_cron_executed", "system", {
     total: automations.length,
@@ -88,39 +84,45 @@ function isAutomationDue(automation: Automation, now: Date): boolean {
   const schedule = automation.schedule;
   if (!schedule) return false;
 
-  // Check day of week
-  const dayNames = [
-    "sunday",
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-  ] as const;
-  const currentDay = dayNames[now.getDay()];
+  // Resolve current time in the automation's configured timezone
+  const tzNow = new Date(
+    now.toLocaleString("en-US", { timeZone: schedule.timezone || "UTC" })
+  );
 
+  const dayNames = [
+    "sunday", "monday", "tuesday", "wednesday",
+    "thursday", "friday", "saturday",
+  ] as const;
+  const currentDay = dayNames[tzNow.getDay()];
+
+  // Daily automations run every day; weekly only on configured days
   if (schedule.frequency === "weekly" && !schedule.days.includes(currentDay)) {
     return false;
   }
+  if (
+    schedule.frequency === "daily" &&
+    schedule.days.length > 0 &&
+    !schedule.days.includes(currentDay)
+  ) {
+    return false;
+  }
 
-  // Check time (within a 15-minute window)
+  // ±10-minute window absorbs Vercel Cron jitter — cron fires every 5 min,
+  // so any scheduled time is always within 10 minutes of a firing.
+  // Double-firing is prevented by the 55-minute idempotency guard below.
   const [scheduleHour, scheduleMinute] = schedule.time.split(":").map(Number);
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-
   const scheduleMinutes = scheduleHour * 60 + scheduleMinute;
-  const currentMinutes = currentHour * 60 + currentMinute;
+  const currentMinutes = tzNow.getHours() * 60 + tzNow.getMinutes();
   const diff = Math.abs(currentMinutes - scheduleMinutes);
 
-  if (diff > 15) return false;
+  if (diff > 10) return false;
 
-  // Check if already run recently (within 1 hour to avoid duplicates)
+  // Idempotency guard: skip if already run within the last 55 minutes.
+  // This prevents double-execution when the wider window catches two cron firings.
   if (automation.last_run_at) {
     const lastRun = new Date(automation.last_run_at);
-    const hoursSinceLastRun =
-      (now.getTime() - lastRun.getTime()) / (1000 * 60 * 60);
-    if (hoursSinceLastRun < 1) return false;
+    const minsSinceLastRun = (now.getTime() - lastRun.getTime()) / (1000 * 60);
+    if (minsSinceLastRun < 55) return false;
   }
 
   return true;

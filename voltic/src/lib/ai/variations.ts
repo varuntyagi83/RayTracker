@@ -47,7 +47,16 @@ export function buildCreativeOptionsSection(options?: CreativeOptions): string {
   if (options.lighting) parts.push(`Lighting: ${LIGHTING_STYLE_LABELS[options.lighting]}`);
   if (options.background) parts.push(`Background: ${BACKGROUND_STYLE_LABELS[options.background]}`);
   if (options.aspectRatio) parts.push(`Aspect ratio: ${ASPECT_RATIO_LABELS[options.aspectRatio]}`);
-  if (options.customInstruction) parts.push(`Custom direction: ${options.customInstruction}`);
+  if (options.customInstruction) {
+    // Sanitize to prevent prompt injection: strip newlines/section delimiters
+    // and truncate, then prefix to isolate from system instructions.
+    const safe = options.customInstruction
+      .replace(/[\r\n]+/g, " ")
+      .replace(/---/g, "—")
+      .trim()
+      .slice(0, 200);
+    parts.push(`User creative note: ${safe}`);
+  }
 
   if (parts.length === 0) return "";
 
@@ -207,7 +216,11 @@ export async function generateVariationText(
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("Empty response from OpenAI");
 
-  return JSON.parse(content) as VariationTextResult;
+  try {
+    return JSON.parse(content) as VariationTextResult;
+  } catch {
+    throw new Error("AI returned malformed JSON — please retry");
+  }
 }
 
 // ─── Competitor-Based Image Prompt ──────────────────────────────────────────

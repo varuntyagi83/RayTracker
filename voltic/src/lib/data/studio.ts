@@ -15,26 +15,23 @@ export async function listConversations(
 ): Promise<StudioConversation[]> {
   const supabase = createAdminClient();
 
+  // Single query: join the latest message per conversation using Supabase's
+  // relational select. studio_messages rows are ordered by created_at DESC
+  // and we take limit(1) via the foreign-key hint. This avoids the N+1 loop
+  // that previously fired one query per conversation.
   const { data, error } = await supabase
     .from("studio_conversations")
-    .select("*")
+    .select("*, studio_messages(content, created_at)")
     .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .order("created_at", { ascending: false, referencedTable: "studio_messages" });
 
   if (error || !data) return [];
 
-  // Get last message for each conversation
-  const conversations: StudioConversation[] = [];
-  for (const row of data) {
-    const { data: lastMsg } = await supabase
-      .from("studio_messages")
-      .select("content")
-      .eq("conversation_id", row.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
-
-    conversations.push({
+  return data.map((row) => {
+    const messages = (row.studio_messages ?? []) as Array<{ content: string; created_at: string }>;
+    const lastMsg = messages[0];
+    return {
       id: row.id,
       title: row.title,
       llmProvider: row.llm_provider as LLMProvider,
@@ -44,10 +41,8 @@ export async function listConversations(
       lastMessage: lastMsg?.content
         ? (lastMsg.content as string).slice(0, 100)
         : undefined,
-    });
-  }
-
-  return conversations;
+    };
+  });
 }
 
 export async function getConversation(

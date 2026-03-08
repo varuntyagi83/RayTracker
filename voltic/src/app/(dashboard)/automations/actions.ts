@@ -91,14 +91,22 @@ export async function toggleAutomationStatus(automationId: string) {
   if (!current) return { error: "Not found" };
 
   const newStatus = current.status === "active" ? "paused" : "active";
-  const { error } = await admin
+
+  // Optimistic lock: also match current status so two concurrent toggles
+  // don't both flip — the second will get 0 rows and return a safe error.
+  const { data: updated, error } = await admin
     .from("automations")
     .update({ status: newStatus })
     .eq("id", automationId)
-    .eq("workspace_id", workspace.id);
+    .eq("workspace_id", workspace.id)
+    .eq("status", current.status)
+    .select("status")
+    .single();
 
-  if (error) return { error: error.message };
+  if (error || !updated) {
+    return { error: error?.message ?? "Status changed concurrently — please refresh." };
+  }
 
   revalidatePath("/automations");
-  return { status: newStatus, error: null };
+  return { status: updated.status, error: null };
 }
