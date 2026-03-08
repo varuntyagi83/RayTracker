@@ -11,8 +11,21 @@ import {
 } from "@/types/decomposition";
 import type { SourceType } from "@/types/decomposition";
 
+/** Block SSRF: reject URLs pointing at private/internal networks */
+function isPublicUrl(rawUrl: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(rawUrl);
+    if (protocol !== "https:") return false;
+    // Block loopback and private ranges
+    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1|0\.0\.0\.0)/i;
+    return !BLOCKED.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 const decomposeSchema = z.object({
-  image_url: z.string().url("Invalid image URL"),
+  image_url: z.string().url("Invalid image URL").refine(isPublicUrl, "Image URL must be a public HTTPS URL"),
   source_type: z.enum(["saved_ad", "discover", "upload"] as const),
   source_id: z.string().uuid().optional(),
   generate_clean_image: z.boolean().optional().default(false),

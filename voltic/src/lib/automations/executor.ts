@@ -84,8 +84,17 @@ export async function executeAutomation(
     .eq("id", auto.workspace_id)
     .single();
 
-  const slackToken = workspace?.slack_access_token ?? process.env.SLACK_BOT_TOKEN;
+  const slackToken = workspace?.slack_access_token;
   const channel = auto.delivery?.slackChannelId ?? "";
+
+  if (!slackToken) {
+    return await recordRun(admin, automationId, {
+      success: false,
+      itemsCount: 0,
+      error: "Slack not connected — please connect Slack in Settings",
+      durationMs: Date.now() - startTime,
+    });
+  }
 
   if (!channel) {
     return await recordRun(admin, automationId, {

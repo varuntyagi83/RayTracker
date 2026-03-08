@@ -82,15 +82,16 @@ export async function addCredits(
 
   const newBalance = workspace.credit_balance + amount;
 
-  // Update balance
-  const { error: updateErr } = await supabase
+  // Update balance with optimistic concurrency check
+  const { data: updated, error: updateErr } = await supabase
     .from("workspaces")
     .update({ credit_balance: newBalance })
     .eq("id", workspaceId)
-    .eq("credit_balance", workspace.credit_balance);
+    .eq("credit_balance", workspace.credit_balance)
+    .select("credit_balance");
 
-  if (updateErr) {
-    return { success: false, newBalance: workspace.credit_balance, error: updateErr.message };
+  if (updateErr || !updated?.length) {
+    return { success: false, newBalance: workspace.credit_balance, error: updateErr?.message ?? "Balance changed concurrently — please retry." };
   }
 
   // Record transaction
