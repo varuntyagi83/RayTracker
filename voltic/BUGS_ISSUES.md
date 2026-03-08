@@ -2,7 +2,7 @@
 
 > Maintained by Claude Code across sessions.
 > Update status when a bug is fixed. Add new findings at the top of each severity section.
-> Last updated: 2026-03-08 (Round 10 fixes complete — all 5 R10 bugs resolved)
+> Last updated: 2026-03-08 (Round 11 fixes complete — all 9 R11 bugs resolved)
 
 ---
 
@@ -54,6 +54,9 @@
 | H-16 | ✅ Fixed | `src/app/(dashboard)/variations/components/variations-page-client.tsx` | **`URL.createObjectURL` never revoked** — revoke previous URL before creating new; clear + unmount cleanup. Commit: `7a2fdcd` |
 | H-22 | ✅ Fixed | `src/lib/ai/decompose.ts`:91 | **No timeout on `downloadImage()` fetch** — `downloadImage()` uses plain `fetch(imageUrl)` with no `AbortSignal`. L-4 added timeouts to Gemini API calls, but the image download step (which can hang on slow/unresponsive Facebook CDN URLs) has no timeout. A hanging download holds the Vercel lambda open until its `maxDuration` limit. Fix: add `AbortSignal.timeout(30_000)` to the `downloadImage` fetch. Round 10. Commit: `10bfcce` |
 | H-23 | ✅ Fixed | `src/lib/data/boards.ts`:20 | **Inefficient ad count query in `getBoards()`** — Fetches the `board_id` column of ALL `saved_ads` rows for a workspace to count ads per board in JavaScript. A workspace with 10,000 saved ads transfers 10,000 rows just to produce per-board counts. Fix: use Supabase relational count `select("id, name, ..., saved_ads(count)")` to push the aggregation to Postgres. Round 10. Commit: `10bfcce` |
+| H-24 | ✅ Fixed | `src/lib/ai/decompose.ts` | **No image size cap before base64 encoding** — `downloadImage()` fetched any size image into memory with no limit. A 200 MB image from Facebook CDN gets base64-encoded (267 MB), allocated into the Gemini API payload, and crashes the lambda with OOM — no credits refunded. Fix: 10 MB cap via `Content-Length` pre-check + actual buffer size check. Credit refund flows via outer catch already calling `refundCredits()`. Round 11. Commit: `5aaa82a` |
+| H-25 | ✅ Fixed | `src/app/api/webhooks/stripe/route.ts`:52 | **Stripe webhook missing-metadata silently dropped** — `break` inside the switch case fell through to the final `return NextResponse.json({ received: true })`. Stripe saw 200 OK and permanently stopped retrying — credits never added. Fix: explicit `return` with `console.error` alert so missing-metadata events are clearly flagged. Round 11. Commit: `5aaa82a` |
+| H-26 | ✅ Fixed | `src/app/api/ads/composite/route.ts`, `src/app/api/ads/composite-batch/route.ts` | **No input validation on composite routes — authenticated DoS via OOM** — `fontSize=1000000` with long text causes `wrapText()` to produce 50,000+ `<tspan>` elements, crashing the lambda. `combinations` array could be 10,000 entries. Fix: Zod schemas enforce `fontSize` 8-200, `text` max 500 chars, `combinations` max 50, hex color regex. Round 11. Commit: `5aaa82a` |
 | H-19 | ✅ Fixed | `src/lib/data/competitors.ts`:99 | **N+1 upsert loop in `saveCompetitorAds()`** — replaced sequential for-loop with single batch `supabase.upsert(rows, { onConflict: "workspace_id,meta_library_id" })`. Round 9. Commit: `4663a05` |
 | H-20 | ✅ Fixed | `src/app/api/meta/sync/route.ts`:15 | **No rate limiting on `/api/meta/sync`** — added `await apiLimiter.check(member.workspace_id, 3)` with 429 response. Round 9. Commit: `4663a05` |
 | H-21 | ✅ Fixed | `src/app/(dashboard)/discover/actions.ts`:103 | **TOCTOU double-charge race in insight analysis** — added re-check for existing insight after credit deduction; refunds and returns cached result if concurrent request won the race. Round 9. Commit: `4663a05` |
@@ -82,6 +85,9 @@
 | M-14 | ✅ Fixed | `src/app/(dashboard)/variations/actions.ts`:17 | **Cursor parameter not validated in `fetchAllVariations`** — added `z.string().datetime().optional()` Zod schema; returns `{ error: "Invalid cursor" }` on malformed input. Round 9. Commit: `4663a05` |
 | M-15 | ✅ Fixed | `src/lib/ai/openai.ts`, `src/lib/ai/gemini-image-edit.ts`, `src/lib/ai/decompose.ts` | **No retry on transient AI API failures** — set `maxRetries: 3` on OpenAI client; added `geminiPost()` helper with 3-attempt exponential backoff (1s/2s) for retryable status codes (429, 500, 503) in `gemini-image-edit.ts`; inline retry loop in `decompose.ts` `_inpaintWithGemini()`. Round 9. Commit: `4663a05` |
 | M-16 | ✅ Fixed | `src/lib/data/competitors.ts`:144 | **In-app filtering loads ALL competitor reports for deletion** — replaced fetch-all + JS filter with `.overlaps("competitor_brand_ids", brandIds)` Postgres array overlap query. Round 9. Commit: `4663a05` |
+| M-19 | ✅ Fixed | `src/lib/data/assets.ts`:uploadAssetImage | **Asset upload filename not sanitized** — `uploadAssetImage()` used the raw `fileName` param directly in the storage path, allowing `../` traversal or excessively long filenames. Studio uploads had M-12 fix; assets were missed. Fix: same pattern — `/[^a-zA-Z0-9._-]/g → "_"`, `.slice(0, 100)`. Round 11. Commit: `5aaa82a` |
+| M-20 | ✅ Fixed | `assets-client.tsx`, `credits-page-client.tsx`, `discover-client.tsx` | **Unhandled promise rejections in 3 client components** — `.then()` calls with no `.catch()` cause silent failures and unhandled rejection warnings. Fix: added `.catch((err) => console.warn(...))` to each. Round 11. Commit: `5aaa82a` |
+| M-21 | ✅ Fixed | `src/app/api/decompose/route.ts`:cache UPDATE | **Decompose cache UPDATE missing workspace_id filter** — UPDATE uses only `.eq("id", cached.id)` — a valid cache row ID from another workspace (obtained via timing attack) could theoretically update its `last_used_at`. Fix: added `.eq("workspace_id", workspaceId)` for defense-in-depth. Round 11. Commit: `5aaa82a` |
 
 ---
 
@@ -93,6 +99,9 @@
 | L-2 | ✅ Fixed | Multiple API routes | **Missing structured error context in logs** — added `workspace_id` to error logs in composite, composite-batch, download, generate-background, generate-image, and decompose routes using `let workspaceId` hoisted before try block. Commit: `4dc5296` |
 | L-3 | ✅ Fixed | `src/lib/data/studio.ts`:302 | **Sequential mention resolution** — `resolveMentions()` now uses `Promise.all()` to resolve all mentions in parallel; reduces latency by N-1 round-trips. Commit: `1771d60` |
 | L-4 | ✅ Fixed | `src/lib/ai/gemini-image-edit.ts`, `src/lib/ai/decompose.ts` | **No request timeout on Gemini API fetch calls** — added `AbortSignal.timeout(60_000)` to mask generation call and `AbortSignal.timeout(120_000)` to image editing calls. OpenAI SDK already applies its own timeout. Round 9. Commit: `4663a05` |
+| L-5 | ✅ Fixed | `src/app/(dashboard)/variations/components/variations-page-client.tsx` | **No unmount guard in handleGenerate** — async state updates after component unmount during generation. Fix: `mountedRef = useRef(true)` + cleanup `useEffect`. Round 11. Commit: `5aaa82a` |
+| L-6 | ✅ Fixed | `src/app/api/auth/slack/route.ts` | **Slack OAuth state cookie sameSite: "lax"** — CSRF state cookie used `sameSite: "lax"`, allowing cross-site GET requests to carry the cookie. Fix: changed to `"strict"`. Round 11. Commit: `5aaa82a` |
+| L-7 | ✅ Fixed | `src/app/(dashboard)/settings/components/settings-client.tsx` | **settings copyToken setTimeout not cleared on unmount** — `setTimeout(() => setTokenCopied(false), 2000)` fires on unmounted component. Fix: stored in `copyTimeoutRef`, cleared in unmount `useEffect`. Round 11. Commit: `5aaa82a` |
 
 ---
 
@@ -119,6 +128,14 @@
 | R10-3: `pageSize` not capped in `getCreditTransactions()` | FALSE POSITIVE — `credits/actions.ts` has `pageSize: z.number().int().min(1).max(100)` Zod validation at the caller; DB layer doesn't need to re-cap ✅ |
 | R10-4: DALL-E image URL expiration in variation modal | FALSE POSITIVE — Variation images are uploaded to Supabase Storage immediately after generation (permanent public URLs); no DALL-E ephemeral URLs are stored ✅ |
 | R10-5: Studio chat workspace validation missing | FALSE POSITIVE — Route calls `getWorkspace()` and uses `workspace.id` as the first param in every DB query ✅ |
+| R11-1: Admin client in `getWorkspace()` leaks cross-workspace data | FALSE POSITIVE — filters by `user.id` from JWT; admin client is correct for server-side workspace lookup by authenticated user ✅ |
+| R11-2: Meta OAuth state not validated | FALSE POSITIVE — `state` param is validated against `meta_oauth_state` cookie in the callback route ✅ |
+| R11-3: Gemini TEXT-only response skips credit refund | FALSE POSITIVE — TEXT-only response propagates error which is caught by outer `try/catch` in the decompose route, which calls `refundCredits()` ✅ |
+| R11-4: `.single()` missing error check | FALSE POSITIVE — All `.single()` uses have `if (error \|\| !data)` pattern catching PGRST116 ✅ |
+| R11-5: Slack OAuth initiation has no rate limiting | FALSE POSITIVE — Supabase Auth session is required; unauthenticated requests redirected to `/login` ✅ |
+| R11-6: `crypto.randomUUID()` state token could be reused | FALSE POSITIVE — cookie deleted immediately on first callback validation; no replay possible ✅ |
+| R11-7: `getBoards()` no pagination | FALSE POSITIVE — Board counts are typically small per workspace; no evidence of scale problem ✅ |
+| R11-8: Variation history load cursor not validated | FALSE POSITIVE — Fixed as M-14 in Round 9 with Zod datetime validation ✅ |
 
 ---
 
@@ -127,7 +144,7 @@
 | Severity | Total Found | Fixed | Won't Fix | Open |
 |----------|-------------|-------|-----------|------|
 | Critical | 7 | 7 | 0 | 0 |
-| High | 23 | 21 | 2 | 0 |
-| Medium | 18 | 17 | 1 | 0 |
-| Low | 4 | 4 | 0 | 0 |
-| **Total** | **52** | **49** | **3** | **0** |
+| High | 26 | 24 | 2 | 0 |
+| Medium | 21 | 20 | 1 | 0 |
+| Low | 7 | 7 | 0 | 0 |
+| **Total** | **61** | **58** | **3** | **0** |
