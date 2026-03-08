@@ -14,7 +14,19 @@ const ALLOWED_TYPES = [
   "application/pdf",
 ];
 
+const MAX_REQUEST_SIZE = MAX_FILES * MAX_FILE_SIZE; // 50MB hard cap for full request
+
 export async function POST(req: NextRequest) {
+  // Reject oversized requests before reading the body into memory.
+  // This prevents DoS via huge multipart uploads that exhaust server RAM.
+  const contentLength = req.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > MAX_REQUEST_SIZE) {
+    return NextResponse.json(
+      { error: "Request too large — maximum total upload size is 50MB" },
+      { status: 413 }
+    );
+  }
+
   const workspace = await getWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

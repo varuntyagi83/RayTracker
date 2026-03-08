@@ -68,7 +68,11 @@ export async function generateAdInsights(
     throw new Error("Empty response from OpenAI");
   }
 
-  return JSON.parse(content) as AdInsightData;
+  try {
+    return JSON.parse(content) as AdInsightData;
+  } catch {
+    throw new Error("AI returned malformed JSON for ad insights — please retry");
+  }
 }
 
 function buildUserPrompt(input: AdInsightInput): string {

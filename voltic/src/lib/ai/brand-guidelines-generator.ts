@@ -131,14 +131,19 @@ export async function generateBrandGuidelinesFromMedia(params: {
     throw new Error("Failed to extract JSON from AI response");
   }
 
-  const parsed = JSON.parse(jsonStr.slice(jsonStart, jsonEnd + 1));
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(jsonStr.slice(jsonStart, jsonEnd + 1));
+  } catch {
+    throw new Error("AI returned malformed JSON for brand guidelines — please retry");
+  }
 
   return {
-    brandName: parsed.brandName ?? existingName ?? "Untitled Brand",
-    brandVoice: parsed.brandVoice ?? "",
+    brandName: (parsed.brandName as string) ?? existingName ?? "Untitled Brand",
+    brandVoice: (parsed.brandVoice as string) ?? "",
     colorPalette: Array.isArray(parsed.colorPalette) ? parsed.colorPalette : [],
-    typography: parsed.typography ?? {},
-    targetAudience: parsed.targetAudience ?? "",
-    dosAndDonts: parsed.dosAndDonts ?? "",
+    typography: (parsed.typography as Record<string, string>) ?? {},
+    targetAudience: (parsed.targetAudience as string) ?? "",
+    dosAndDonts: (parsed.dosAndDonts as string) ?? "",
   };
 }

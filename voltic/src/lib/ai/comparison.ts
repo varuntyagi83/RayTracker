@@ -72,7 +72,11 @@ export async function generateAdComparison(
     throw new Error("Empty response from OpenAI");
   }
 
-  return JSON.parse(content) as ComparisonResult;
+  try {
+    return JSON.parse(content) as ComparisonResult;
+  } catch {
+    throw new Error("AI returned malformed JSON for ad comparison — please retry");
+  }
 }
 
 function buildComparisonPrompt(ads: ComparisonAdInput[]): string {

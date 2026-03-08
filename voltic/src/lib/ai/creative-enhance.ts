@@ -58,5 +58,9 @@ export async function enhanceCreativeText(
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error("Empty response from OpenAI");
 
-  return JSON.parse(content) as { headline: string; body: string };
+  try {
+    return JSON.parse(content) as { headline: string; body: string };
+  } catch {
+    throw new Error("AI returned malformed JSON for creative enhance — please retry");
+  }
 }

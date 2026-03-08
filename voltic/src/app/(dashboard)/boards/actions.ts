@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { getWorkspace } from "@/lib/supabase/queries";
 import {
   getBoards,
@@ -92,7 +93,9 @@ export async function createBoardAction(
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message };
 
-  return await createBoard(workspace.id, parsed.data.name, parsed.data.description);
+  const result = await createBoard(workspace.id, parsed.data.name, parsed.data.description);
+  if (result.success) revalidatePath("/boards");
+  return result;
 }
 
 // ─── Update Board ───────────────────────────────────────────────────────────
@@ -113,12 +116,14 @@ export async function updateBoardAction(
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message };
 
-  return await updateBoard(
+  const result = await updateBoard(
     workspace.id,
     parsed.data.boardId,
     parsed.data.name,
     parsed.data.description
   );
+  if (result.success) revalidatePath("/boards");
+  return result;
 }
 
 // ─── Delete Board ───────────────────────────────────────────────────────────
@@ -137,7 +142,9 @@ export async function deleteBoardAction(
   if (!parsed.success)
     return { success: false, error: parsed.error.issues[0].message };
 
-  return await deleteBoard(workspace.id, parsed.data.boardId);
+  const result = await deleteBoard(workspace.id, parsed.data.boardId);
+  if (result.success) revalidatePath("/boards");
+  return result;
 }
 
 // ─── Remove Ad from Board ───────────────────────────────────────────────────

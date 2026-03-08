@@ -157,12 +157,8 @@ async function syncCampaignsForAccount(
           name: campaign.name,
           status: campaign.status?.toLowerCase() || "unknown",
           objective: campaign.objective || null,
-          daily_budget: campaign.daily_budget
-            ? (parseInt(campaign.daily_budget) / 100).toFixed(2)
-            : null,
-          lifetime_budget: campaign.lifetime_budget
-            ? (parseInt(campaign.lifetime_budget) / 100).toFixed(2)
-            : null,
+          daily_budget: parseBudgetCents(campaign.daily_budget),
+          lifetime_budget: parseBudgetCents(campaign.lifetime_budget),
           updated_at: new Date().toISOString(),
         })
         .eq("id", existingCampaign.id);
@@ -176,12 +172,8 @@ async function syncCampaignsForAccount(
           name: campaign.name,
           status: campaign.status?.toLowerCase() || "unknown",
           objective: campaign.objective || null,
-          daily_budget: campaign.daily_budget
-            ? (parseInt(campaign.daily_budget) / 100).toFixed(2)
-            : null,
-          lifetime_budget: campaign.lifetime_budget
-            ? (parseInt(campaign.lifetime_budget) / 100).toFixed(2)
-            : null,
+          daily_budget: parseBudgetCents(campaign.daily_budget),
+          lifetime_budget: parseBudgetCents(campaign.lifetime_budget),
         })
         .select("id")
         .single();
@@ -251,8 +243,8 @@ async function syncCampaignMetrics(
       spend: spend.toFixed(2),
       revenue: revenue.toFixed(2),
       roas: roas.toFixed(4),
-      impressions: parseInt(day.impressions || "0"),
-      clicks: parseInt(day.clicks || "0"),
+      impressions: parseInt(day.impressions || "0", 10),
+      clicks: parseInt(day.clicks || "0", 10),
       ctr: parseFloat(day.ctr || "0").toFixed(4),
       purchases,
       landing_page_views: landingPageViews,
@@ -274,6 +266,18 @@ async function syncCampaignMetrics(
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Parse a Meta budget value (returned in cents as a string) to a decimal string.
+ *  Meta returns budgets as integer strings in the account currency's minor unit
+ *  (e.g. "5000" = $50.00 USD). Always use radix 10 to avoid octal parsing on
+ *  strings like "0800". Returns null for missing/invalid values.
+ */
+function parseBudgetCents(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const cents = parseInt(raw, 10);
+  if (isNaN(cents)) return null;
+  return (cents / 100).toFixed(2);
+}
 
 function extractActionValue(
   actions: Array<{ action_type: string; value: string }> | undefined,

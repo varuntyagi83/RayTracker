@@ -182,6 +182,16 @@ export default function VariationsPageClient() {
     track("variations_page_viewed");
   }, [loadBoards, loadAssets, loadHistory, loadGuidelines]);
 
+  // Revoke upload preview blob URL on unmount to release memory
+  useEffect(() => {
+    return () => {
+      setUploadPreview((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, []);
+
   // ── Board selection → load ads ──
 
   const handleBoardSelect = async (boardId: string) => {
@@ -240,12 +250,19 @@ export default function VariationsPageClient() {
       return;
     }
     setUploadFile(file);
-    setUploadPreview(URL.createObjectURL(file));
+    // Revoke previous blob URL before creating a new one to prevent memory leaks
+    setUploadPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
   };
 
   const clearUpload = () => {
     setUploadFile(null);
-    setUploadPreview(null);
+    setUploadPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setUploadName("");
     setUploadDesc("");
     if (fileInputRef.current) fileInputRef.current.value = "";

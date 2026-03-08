@@ -9,6 +9,7 @@ import { MentionEditor, type MentionEditorRef } from "@/components/shared/mentio
 import { MessageBubble, StreamingBubble } from "./message-bubble";
 import { LLMSelector } from "./llm-selector";
 import { SaveAsAssetDialog } from "./save-as-asset-dialog";
+import { toast } from "sonner";
 import { track } from "@/lib/analytics/events";
 import { fetchMentionablesAction } from "../actions";
 import type {
@@ -47,6 +48,17 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MentionEditorRef>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // AbortController stored in a ref so handleSubmit can cancel an in-flight
+  // stream when the component unmounts or a new message is submitted.
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Cancel any in-flight stream on unmount to prevent state updates on an
+  // already-unmounted component and stop dangling network requests.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // Scroll to bottom on new messages — target the Viewport, not the Root
   useEffect(() => {
@@ -118,6 +130,11 @@ export function ChatPanel({
       setStreaming(true);
       setStreamContent("");
 
+      // Create a fresh AbortController for this request; abort any previous one
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
         // Upload pending files first
         let attachments: MessageAttachment[] = [];
@@ -131,6 +148,7 @@ export function ChatPanel({
         const response = await fetch("/api/studio/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             conversationId: conversation.id,
             message: content,
@@ -171,7 +189,11 @@ export function ChatPanel({
           model: conversation.llmModel,
         });
       } catch (err) {
+        // Ignore AbortError — this is intentional cancellation (unmount / new message)
+        if (err instanceof Error && err.name === "AbortError") return;
+        const msg = err instanceof Error ? err.message : "Something went wrong";
         console.error("Chat error:", err);
+        toast.error(msg);
         setUploading(false);
       } finally {
         setStreaming(false);

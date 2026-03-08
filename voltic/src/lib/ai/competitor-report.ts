@@ -118,7 +118,12 @@ export async function generateCompetitorReport(
     throw new Error("Empty response from OpenAI");
   }
 
-  const parsed = JSON.parse(content) as CompetitorReportResult;
+  let parsed: CompetitorReportResult;
+  try {
+    parsed = JSON.parse(content) as CompetitorReportResult;
+  } catch {
+    throw new Error("AI returned malformed JSON for competitor report — please retry");
+  }
   return parsed;
 }
 

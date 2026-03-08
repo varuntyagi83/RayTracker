@@ -149,7 +149,12 @@ export async function decomposeAdImage(
     throw new Error("Empty response from GPT-4o Vision");
   }
 
-  const parsed = JSON.parse(content) as DecompositionResult;
+  let parsed: DecompositionResult;
+  try {
+    parsed = JSON.parse(content) as DecompositionResult;
+  } catch {
+    throw new Error("AI returned malformed JSON for decomposition — please retry");
+  }
 
   // Validate required fields exist
   if (!parsed.texts || !parsed.product || !parsed.background || !parsed.layout) {
