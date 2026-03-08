@@ -5,7 +5,6 @@ import { Zap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { track } from "@/lib/analytics/events";
 import type {
   TopCreative,
@@ -65,65 +64,49 @@ export function TopAssets({
         </TabsList>
 
         <TabsContent value="creatives" className="mt-4">
-          <ScrollArea className="w-full whitespace-nowrap">
-            <div className="flex gap-4 pb-4">
-              {creatives.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No creative data yet.
-                </p>
-              )}
-              {creatives.map((c) => (
-                <Card key={c.id} className="w-[220px] shrink-0">
-                  <CardContent className="p-0">
-                    <div className="relative h-32 w-full overflow-hidden rounded-t-lg bg-muted">
-                      {c.imageUrl ? (                        <Image src={c.imageUrl} alt={c.name} fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                          No image
-                        </div>
-                      )}
-                      <Badge
-                        variant="secondary"
-                        className="absolute left-2 top-2 text-[10px]"
-                      >
-                        {c.format.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="space-y-2 p-3">
-                      <p className="truncate text-sm font-medium">{c.name}</p>
-                      <div className="grid grid-cols-3 gap-1 text-center">
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">
-                            ROAS
-                          </p>
-                          <p className="text-xs font-semibold">
-                            {c.roas.toFixed(2)}x
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">
-                            SPEND
-                          </p>
-                          <p className="text-xs font-semibold">
-                            {formatCurrency(c.spend, currency)}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[10px] text-muted-foreground">
-                            IMPR
-                          </p>
-                          <p className="text-xs font-semibold">
-                            {formatNumber(c.impressions)}
-                          </p>
-                        </div>
+          {creatives.length === 0 && (
+            <p className="text-sm text-muted-foreground">No creative data yet.</p>
+          )}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {creatives.map((c) => (
+              <Card key={c.id}>
+                <CardContent className="p-0">
+                  <div className="relative h-32 w-full overflow-hidden rounded-t-lg bg-muted">
+                    {c.imageUrl ? (
+                      <Image src={c.imageUrl} alt={c.name} fill className="object-cover" sizes="(max-width: 768px) 50vw, 20vw" unoptimized />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                        No image
+                      </div>
+                    )}
+                    <Badge
+                      variant="secondary"
+                      className="absolute left-2 top-2 text-[10px]"
+                    >
+                      {c.format.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2 p-3">
+                    <p className="truncate text-sm font-medium">{c.name}</p>
+                    <div className="grid grid-cols-3 gap-1 text-center">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">ROAS</p>
+                        <p className="text-xs font-semibold">{c.roas.toFixed(2)}x</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">SPEND</p>
+                        <p className="text-xs font-semibold">{formatCurrency(c.spend, currency)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">IMPR</p>
+                        <p className="text-xs font-semibold">{formatNumber(c.impressions)}</p>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </TabsContent>
 
         <TabsContent value="headlines" className="mt-4">
