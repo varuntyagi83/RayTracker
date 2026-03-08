@@ -5,6 +5,7 @@ import { getModel } from "@/lib/ai/providers";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { aiLimiter } from "@/lib/utils/rate-limit";
 import { createMessage, getMessages, resolveMentions, buildMentionContext } from "@/lib/data/studio";
+import { checkAndDeductCredits, refundCredits } from "@/lib/data/insights";
 import type { LLMProvider, MessageAttachment } from "@/types/creative-studio";
 import { LLM_MODELS } from "@/types/creative-studio";
 
@@ -61,11 +62,16 @@ export async function POST(req: NextRequest) {
 
   const { conversationId, message, mentions, attachments, provider, model } = parsed.data;
 
-  // Find credit cost
+  // Find credit cost and deduct upfront
   const modelConfig = LLM_MODELS.find(
     (m) => m.provider === provider && m.model === model
   );
   const creditCost = modelConfig?.creditCost ?? 3;
+
+  const creditCheck = await checkAndDeductCredits(workspace.id, creditCost, "studio_chat");
+  if (!creditCheck.success) {
+    return NextResponse.json({ error: creditCheck.error ?? "Insufficient credits" }, { status: 402 });
+  }
 
   // Resolve mentions
   let contextStr = "";
@@ -173,7 +179,8 @@ export async function POST(req: NextRequest) {
 
     return result.toTextStreamResponse();
   } catch (error) {
-    console.error("Studio chat error:", error);
+    // Refund credits since the AI call failed
+    await refundCredits(workspace.id, creditCost);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Chat failed" },
       { status: 500 }

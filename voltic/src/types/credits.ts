@@ -4,6 +4,7 @@ export type TransactionType =
   | "variation"
   | "creative_enhance"
   | "ad_insight"
+  | "studio_chat"
   | "comparison"
   | "competitor_report"
   | "decomposition"
@@ -53,6 +54,7 @@ const DESCRIPTION_MAP: Record<TransactionType, (amount: number) => string> = {
   variation: (n) => `AI Variation generation (-${n} credits)`,
   creative_enhance: (n) => `Creative Enhancement (-${n} credits)`,
   ad_insight: (n) => `AI Ad Insight generation (-${n} credits)`,
+  studio_chat: (n) => `Creative Studio AI message (-${n} credits)`,
   comparison: (n) => `AI Ad Comparison (-${n} credits)`,
   competitor_report: (n) => `Competitor Report generation (-${n} credits)`,
   decomposition: (n) => `Ad Decomposition analysis (-${n} credits)`,
@@ -74,6 +76,7 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   variation: "Variation",
   creative_enhance: "Enhancement",
   ad_insight: "Ad Insight",
+  studio_chat: "Studio Chat",
   comparison: "Comparison",
   competitor_report: "Competitor Report",
   decomposition: "Decomposition",

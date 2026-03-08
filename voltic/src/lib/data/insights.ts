@@ -113,18 +113,22 @@ export async function checkAndDeductCredits(
   }
 
   // 2. Deduct credits with optimistic concurrency
+  // We select the updated row so we can detect 0-rows-updated (concurrent deduction).
+  // Supabase returns error:null with empty data when WHERE conditions don't match,
+  // so checking data.length guards against the silent-loss race condition.
   const newBalance = workspace.credit_balance - amount;
-  const { error: updateErr } = await supabase
+  const { data: updated, error: updateErr } = await supabase
     .from("workspaces")
     .update({ credit_balance: newBalance })
     .eq("id", workspaceId)
-    .eq("credit_balance", workspace.credit_balance);
+    .eq("credit_balance", workspace.credit_balance)
+    .select("credit_balance");
 
-  if (updateErr) {
+  if (updateErr || !updated?.length) {
     return {
       success: false,
       remainingBalance: workspace.credit_balance,
-      error: updateErr.message,
+      error: updateErr?.message ?? "Credit balance changed concurrently — please retry.",
     };
   }
 
