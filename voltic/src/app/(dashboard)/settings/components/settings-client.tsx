@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpen, ArrowRight, Check, ChevronsUpDown, Loader2, Globe, Chrome, Copy, Eye, EyeOff, AlertCircle, Unlink, RefreshCw } from "lucide-react";
@@ -97,6 +97,14 @@ export default function SettingsClient() {
   const [tokenVisible, setTokenVisible] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [tokenLoading, setTokenLoading] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear copy timeout on unmount to prevent setState on unmounted component (L-7)
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    };
+  }, []);
 
   const fetchApiToken = useCallback(async () => {
     setTokenLoading(true);
@@ -115,7 +123,8 @@ export default function SettingsClient() {
     track("api_token_copied");
     setTokenCopied(true);
     toast.success("Token copied to clipboard");
-    setTimeout(() => setTokenCopied(false), 2000);
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    copyTimeoutRef.current = setTimeout(() => setTokenCopied(false), 2000);
   }, [apiToken]);
 
   const timezoneOptions = useMemo(() => buildTimezoneOptions(), []);

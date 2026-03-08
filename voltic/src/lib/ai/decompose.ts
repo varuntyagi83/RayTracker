@@ -84,9 +84,12 @@ const BROWSER_HEADERS = {
 
 // ─── Download Image ─────────────────────────────────────────────────────────
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB — caps base64 payload + prevents Lambda OOM
+
 /**
  * Downloads an image and returns it as a Buffer.
  * Uses browser-like headers to handle Facebook CDN URLs that reject bare fetch calls.
+ * Enforces a 10 MB size limit to prevent huge base64 payloads to AI APIs.
  */
 export async function downloadImage(imageUrl: string): Promise<Buffer> {
   const res = await fetch(imageUrl, {
@@ -96,7 +99,17 @@ export async function downloadImage(imageUrl: string): Promise<Buffer> {
   if (!res.ok) {
     throw new Error(`Failed to fetch image: ${res.status}`);
   }
-  return Buffer.from(await res.arrayBuffer());
+  // Pre-flight size check via Content-Length header (when available)
+  const contentLength = res.headers.get("content-length");
+  if (contentLength && parseInt(contentLength, 10) > MAX_IMAGE_BYTES) {
+    throw new Error(`Image exceeds the 10 MB size limit (reported ${Math.round(parseInt(contentLength, 10) / 1024 / 1024)} MB)`);
+  }
+  const buffer = Buffer.from(await res.arrayBuffer());
+  // Always check actual buffer size — Content-Length can be absent or incorrect
+  if (buffer.length > MAX_IMAGE_BYTES) {
+    throw new Error(`Image exceeds the 10 MB size limit (actual ${Math.round(buffer.length / 1024 / 1024)} MB)`);
+  }
+  return buffer;
 }
 
 // ─── Decompose Ad Image ──────────────────────────────────────────────────────

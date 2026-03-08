@@ -24,7 +24,9 @@ export default function CreditsPageClient() {
 
   useEffect(() => {
     track("credits_page_viewed");
-    fetchTotalCreditsUsedAction().then(setCreditsUsed);
+    fetchTotalCreditsUsedAction()
+      .then(setCreditsUsed)
+      .catch((err) => console.warn("[credits] Failed to load credits used:", err));
   }, []);
 
   const balance = workspace?.credit_balance ?? 0;

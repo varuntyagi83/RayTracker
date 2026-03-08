@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set("slack_oauth_state", state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "strict",
     maxAge: 600, // 10 minutes
     path: "/",
   });

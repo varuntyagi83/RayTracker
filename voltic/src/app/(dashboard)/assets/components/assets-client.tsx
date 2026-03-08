@@ -93,9 +93,11 @@ export default function AssetsClient() {
 
   // Load guidelines on mount
   useEffect(() => {
-    fetchGuidelinesForAssetsAction().then((result) => {
-      if (result.data) setGuidelines(result.data);
-    });
+    fetchGuidelinesForAssetsAction()
+      .then((result) => {
+        if (result.data) setGuidelines(result.data);
+      })
+      .catch((err) => console.warn("[assets] Failed to load guidelines:", err));
   }, []);
 
   const loadAssets = useCallback(async (query?: string, guidelineId?: string) => {

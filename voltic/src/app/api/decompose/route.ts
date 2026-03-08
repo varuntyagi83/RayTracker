@@ -91,7 +91,8 @@ export async function POST(request: Request) {
       await admin
         .from("ad_decompositions")
         .update({ clean_image_url: cleanImageUrl, updated_at: new Date().toISOString() })
-        .eq("id", cached.id);
+        .eq("id", cached.id)
+        .eq("workspace_id", workspaceId);
     }
 
     return NextResponse.json({

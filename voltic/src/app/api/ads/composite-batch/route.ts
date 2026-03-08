@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { compositeTextOnImage } from "@/lib/compositing/text-overlay";
 import { uploadAdImage } from "@/lib/data/ads";
-import type { TextPosition } from "@/types/ads";
 
 export const maxDuration = 300;
 
@@ -18,15 +18,25 @@ function isPublicUrl(rawUrl: string): boolean {
   }
 }
 
-interface CombinationInput {
-  combinationId: string;
-  backgroundImageUrl: string;
-  text: string;
-  fontFamily: string;
-  fontSize: number;
-  textColor: string;
-  textPosition: TextPosition;
-}
+const TEXT_POSITION_TYPES = ["center", "top", "bottom", "top-left", "top-right", "bottom-left", "bottom-right", "custom"] as const;
+
+const combinationSchema = z.object({
+  combinationId: z.string().min(1).max(100),
+  backgroundImageUrl: z.string().url(),
+  text: z.string().min(1).max(500),
+  fontFamily: z.string().max(100).default("Inter"),
+  fontSize: z.number().int().min(8).max(200).default(48),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "textColor must be a valid hex color").default("#FFFFFF"),
+  textPosition: z.object({
+    type: z.enum(TEXT_POSITION_TYPES),
+    x: z.number().optional(),
+    y: z.number().optional(),
+  }).default({ type: "center" }),
+});
+
+const batchSchema = z.object({
+  combinations: z.array(combinationSchema).min(1).max(50),
+});
 
 export async function POST(request: Request) {
   let workspaceId: string | undefined;
@@ -37,15 +47,12 @@ export async function POST(request: Request) {
     }
     workspaceId = workspace.id;
 
-    const { combinations } = (await request.json()) as {
-      combinations: CombinationInput[];
-    };
-
-    if (!combinations?.length) {
-      return NextResponse.json(
-        { error: "combinations array is required" },
-        { status: 400 }
-      );
+    let combinations: z.infer<typeof combinationSchema>[];
+    try {
+      ({ combinations } = batchSchema.parse(await request.json()));
+    } catch (err) {
+      const message = err instanceof z.ZodError ? err.issues[0].message : "Invalid request body";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
     // Validate all URLs before fetching (SSRF guard)
@@ -91,10 +98,10 @@ export async function POST(request: Request) {
           const { buffer, width, height } = await compositeTextOnImage({
             backgroundBuffer: bgBuffer,
             text: combo.text,
-            fontFamily: combo.fontFamily ?? "Inter",
-            fontSize: combo.fontSize ?? 48,
-            textColor: combo.textColor ?? "#FFFFFF",
-            textPosition: combo.textPosition ?? { type: "center" },
+            fontFamily: combo.fontFamily,
+            fontSize: combo.fontSize,
+            textColor: combo.textColor,
+            textPosition: combo.textPosition,
           });
 
           const fileName = `ad-${combo.combinationId}-${Date.now()}.png`;

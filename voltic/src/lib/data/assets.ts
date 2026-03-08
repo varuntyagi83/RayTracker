@@ -81,7 +81,9 @@ export async function uploadAssetImage(
   await ensureStorageBucket();
   const supabase = createAdminClient();
 
-  const path = `${workspaceId}/assets/${Date.now()}-${fileName}`;
+  // Sanitize filename — same pattern as studio upload (M-12)
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+  const path = `${workspaceId}/assets/${Date.now()}-${safeFileName}`;
 
   const { error } = await supabase.storage
     .from(STORAGE_BUCKET)

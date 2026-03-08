@@ -204,6 +204,13 @@ export default function VariationsPageClient() {
     };
   }, []);
 
+  // Track mount state so handleGenerate doesn't setState after unmount (L-5)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   // ── Board selection → load ads ──
 
   const handleBoardSelect = async (boardId: string) => {

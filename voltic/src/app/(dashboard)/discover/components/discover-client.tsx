@@ -194,11 +194,13 @@ export default function DiscoverClient() {
 
   // Load boards on mount
   useEffect(() => {
-    fetchBoards().then((result) => {
-      if (!("error" in result)) {
-        setBoards(result);
-      }
-    });
+    fetchBoards()
+      .then((result) => {
+        if (!("error" in result)) {
+          setBoards(result);
+        }
+      })
+      .catch((err) => console.warn("[discover] Failed to load boards:", err));
   }, []);
 
   // Elapsed timer for loading state

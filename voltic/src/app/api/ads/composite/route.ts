@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { compositeTextOnImage } from "@/lib/compositing/text-overlay";
 import { uploadAdImage } from "@/lib/data/ads";
-import type { TextPosition } from "@/types/ads";
 
 export const maxDuration = 60;
 
@@ -18,6 +18,21 @@ function isPublicUrl(rawUrl: string): boolean {
   }
 }
 
+const TEXT_POSITION_TYPES = ["center", "top", "bottom", "top-left", "top-right", "bottom-left", "bottom-right", "custom"] as const;
+
+const compositeSchema = z.object({
+  backgroundImageUrl: z.string().url(),
+  text: z.string().min(1).max(500),
+  fontFamily: z.string().max(100).default("Inter"),
+  fontSize: z.number().int().min(8).max(200).default(48),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{3,8}$/, "textColor must be a valid hex color").default("#FFFFFF"),
+  textPosition: z.object({
+    type: z.enum(TEXT_POSITION_TYPES),
+    x: z.number().optional(),
+    y: z.number().optional(),
+  }).default({ type: "center" }),
+});
+
 export async function POST(request: Request) {
   let workspaceId: string | undefined;
   try {
@@ -27,29 +42,15 @@ export async function POST(request: Request) {
     }
     workspaceId = workspace.id;
 
-    const body = await request.json();
-    const {
-      backgroundImageUrl,
-      text,
-      fontFamily,
-      fontSize,
-      textColor,
-      textPosition,
-    } = body as {
-      backgroundImageUrl: string;
-      text: string;
-      fontFamily: string;
-      fontSize: number;
-      textColor: string;
-      textPosition: TextPosition;
-    };
-
-    if (!backgroundImageUrl || !text) {
-      return NextResponse.json(
-        { error: "backgroundImageUrl and text are required" },
-        { status: 400 }
-      );
+    let body: z.infer<typeof compositeSchema>;
+    try {
+      body = compositeSchema.parse(await request.json());
+    } catch (err) {
+      const message = err instanceof z.ZodError ? err.issues[0].message : "Invalid request body";
+      return NextResponse.json({ error: message }, { status: 400 });
     }
+
+    const { backgroundImageUrl, text, fontFamily, fontSize, textColor, textPosition } = body;
 
     if (!isPublicUrl(backgroundImageUrl)) {
       return NextResponse.json(
@@ -72,10 +73,10 @@ export async function POST(request: Request) {
     const { buffer, width, height } = await compositeTextOnImage({
       backgroundBuffer: bgBuffer,
       text,
-      fontFamily: fontFamily ?? "Inter",
-      fontSize: fontSize ?? 48,
-      textColor: textColor ?? "#FFFFFF",
-      textPosition: textPosition ?? { type: "center" },
+      fontFamily,
+      fontSize,
+      textColor,
+      textPosition,
     });
 
     // Upload

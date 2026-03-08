@@ -50,8 +50,18 @@ export async function POST(request: NextRequest) {
       const metadata = session.metadata;
 
       if (!metadata?.workspace_id || !metadata?.credits) {
-        trackServer("stripe_webhook_missing_metadata", "system", { session_id: session.id });
-        break;
+        // ALERT: session paid but metadata is missing — credits cannot be applied.
+        // Return 200 so Stripe stops retrying; investigate via console logs / PostHog.
+        console.error("[stripe-webhook] ALERT: Missing metadata on checkout.session.completed", {
+          session_id: session.id,
+          has_workspace_id: !!metadata?.workspace_id,
+          has_credits: !!metadata?.credits,
+        });
+        trackServer("stripe_webhook_missing_metadata", "system", {
+          session_id: session.id,
+          alert: true,
+        });
+        return NextResponse.json({ received: true });
       }
 
       const workspaceId = metadata.workspace_id;

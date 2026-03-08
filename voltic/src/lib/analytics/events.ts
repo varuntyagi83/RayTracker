@@ -161,7 +161,7 @@ export interface EventPropertiesMap {
   ad_deleted: { ad_id: string };
 
   // Stripe Webhooks (server-side)
-  stripe_webhook_missing_metadata: { session_id: string };
+  stripe_webhook_missing_metadata: { session_id: string; alert: boolean };
   credits_purchase_failed: { workspace_id: string; error: string | undefined };
 
   // AI / Credits (server-side)
