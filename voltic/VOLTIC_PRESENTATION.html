@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voltic - Meta Advertising Intelligence Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #0070C0;
+            --primary-dark: #003366;
+            --accent: #00B4D8;
+            --success: #00C853;
+            --text-dark: #1a1a1a;
+            --text-light: #666;
+            --bg-light: #f8f9fa;
+            --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --gradient-blue: linear-gradient(135deg, #0070C0 0%, #00B4D8 100%);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: var(--text-dark);
+            overflow-x: hidden;
+        }
+
+        /* Smooth scroll */
+        html {
+            scroll-behavior: smooth;
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            background: var(--gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M 100 0 L 0 0 0 100" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)" /></svg>');
+            opacity: 0.3;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            max-width: 900px;
+            padding: 2rem;
+            animation: fadeInUp 1s ease;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hero h1 {
+            font-size: 4.5rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            letter-spacing: -2px;
+            animation: fadeInUp 1s ease 0.2s both;
+        }
+
+        .hero .tagline {
+            font-size: 1.8rem;
+            margin-bottom: 2rem;
+            opacity: 0.95;
+            font-weight: 300;
+            animation: fadeInUp 1s ease 0.4s both;
+        }
+
+        .hero .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 3rem;
+            opacity: 0.9;
+            animation: fadeInUp 1s ease 0.6s both;
+        }
+
+        .cta-button {
+            display: inline-block;
+            padding: 1.2rem 3rem;
+            background: white;
+            color: var(--primary);
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            animation: fadeInUp 1s ease 0.8s both;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .scroll-indicator {
+            position: absolute;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% {
+                transform: translateX(-50%) translateY(0);
+            }
+            40% {
+                transform: translateX(-50%) translateY(-10px);
+            }
+            60% {
+                transform: translateX(-50%) translateY(-5px);
+            }
+        }
+
+        /* Section Styles */
+        .section {
+            padding: 6rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .section-title {
+            font-size: 3rem;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 1rem;
+            color: var(--primary-dark);
+        }
+
+        .section-subtitle {
+            font-size: 1.3rem;
+            text-align: center;
+            color: var(--text-light);
+            margin-bottom: 4rem;
+            max-width: 700px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Features Grid */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 2.5rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 5px 30px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, 0.15);
+            border-color: var(--accent);
+        }
+
+        .feature-icon {
+            width: 70px;
+            height: 70px;
+            background: var(--gradient-blue);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            color: white;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary-dark);
+        }
+
+        .feature-card p {
+            color: var(--text-light);
+            line-height: 1.7;
+        }
+
+        .feature-badge {
+            display: inline-block;
+            background: var(--success);
+            color: white;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        /* Stats Section */
+        .stats-section {
+            background: var(--bg-light);
+            padding: 5rem 2rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 3rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 4rem;
+            font-weight: 800;
+            background: var(--gradient-blue);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            color: var(--text-light);
+            font-weight: 500;
+        }
+
+        /* Screenshot Section */
+        .screenshot-section {
+            background: white;
+        }
+
+        .screenshot-container {
+            max-width: 1100px;
+            margin: 3rem auto;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+        }
+
+        .screenshot-placeholder {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 4rem;
+            text-align: center;
+            color: #666;
+            font-size: 1.2rem;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        /* Workflow Steps */
+        .workflow-steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .step {
+            position: relative;
+            padding: 2rem;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .step-number {
+            position: absolute;
+            top: -20px;
+            left: 30px;
+            width: 40px;
+            height: 40px;
+            background: var(--gradient-blue);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+
+        .step h4 {
+            margin-top: 1rem;
+            margin-bottom: 0.8rem;
+            color: var(--primary-dark);
+            font-size: 1.2rem;
+        }
+
+        .step p {
+            color: var(--text-light);
+            font-size: 0.95rem;
+        }
+
+        /* Pricing Table */
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2rem;
+            max-width: 1000px;
+            margin: 3rem auto;
+        }
+
+        .pricing-card {
+            background: white;
+            padding: 2.5rem;
+            border-radius: 20px;
+            box-shadow: 0 5px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+
+        .pricing-card.featured {
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .pricing-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--primary-dark);
+        }
+
+        .price {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin: 1rem 0;
+        }
+
+        .price-label {
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        .features-list {
+            list-style: none;
+            margin: 2rem 0;
+            text-align: left;
+        }
+
+        .features-list li {
+            padding: 0.5rem 0;
+            color: var(--text-light);
+            position: relative;
+            padding-left: 1.8rem;
+        }
+
+        .features-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        /* Testimonials */
+        .testimonials {
+            background: var(--bg-light);
+        }
+
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+
+        .testimonial-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .testimonial-text {
+            font-style: italic;
+            color: var(--text-light);
+            margin-bottom: 1.5rem;
+            line-height: 1.7;
+        }
+
+        .testimonial-author {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .author-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--gradient-blue);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 1.2rem;
+        }
+
+        .author-info h5 {
+            margin-bottom: 0.2rem;
+            color: var(--primary-dark);
+        }
+
+        .author-info p {
+            font-size: 0.9rem;
+            color: var(--text-light);
+        }
+
+        /* CTA Section */
+        .cta-section {
+            background: var(--gradient);
+            color: white;
+            text-align: center;
+            padding: 5rem 2rem;
+        }
+
+        .cta-section h2 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .cta-section p {
+            font-size: 1.3rem;
+            margin-bottom: 2.5rem;
+            opacity: 0.9;
+        }
+
+        /* Footer */
+        footer {
+            background: var(--primary-dark);
+            color: white;
+            padding: 3rem 2rem 1.5rem;
+            text-align: center;
+        }
+
+        footer p {
+            opacity: 0.8;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero .tagline {
+                font-size: 1.3rem;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+
+            .stat-number {
+                font-size: 2.5rem;
+            }
+
+            .pricing-card.featured {
+                transform: scale(1);
+            }
+        }
+
+        /* Animations on scroll */
+        .fade-in {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.6s ease;
+        }
+
+        .fade-in.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>VOLTIC</h1>
+            <p class="tagline">Meta Advertising Intelligence Platform</p>
+            <p class="subtitle">
+                Discover competitor ads • Generate AI variations • Automate reporting<br>
+                All in one powerful workspace
+            </p>
+            <a href="#features" class="cta-button">Explore Features →</a>
+        </div>
+        <div class="scroll-indicator">
+            <svg width="30" height="30" fill="white" opacity="0.7">
+                <path d="M15 20 L15 10 M15 20 L10 15 M15 20 L20 15" stroke="white" stroke-width="2" fill="none"/>
+            </svg>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="stats-grid">
+            <div class="stat-item fade-in">
+                <span class="stat-number">91+</span>
+                <p class="stat-label">Meta Ad Accounts</p>
+            </div>
+            <div class="stat-item fade-in">
+                <span class="stat-number">7</span>
+                <p class="stat-label">AI-Powered Features</p>
+            </div>
+            <div class="stat-item fade-in">
+                <span class="stat-number">6</span>
+                <p class="stat-label">Variation Strategies</p>
+            </div>
+            <div class="stat-item fade-in">
+                <span class="stat-number">∞</span>
+                <p class="stat-label">Ad Creatives</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="section" id="features">
+        <h2 class="section-title">Powerful Features, Unified Platform</h2>
+        <p class="section-subtitle">
+            Everything you need to dominate Meta advertising — from competitor intelligence to AI creative generation
+        </p>
+
+        <div class="features-grid">
+            <div class="feature-card fade-in">
+                <div class="feature-badge">NEW</div>
+                <div class="feature-icon">🎨</div>
+                <h3>Ad Generator</h3>
+                <p>
+                    Create hundreds of ad variations in minutes by combining backgrounds with text.
+                    Generate M×N combinations with professional text overlays at scale.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-badge">NEW</div>
+                <div class="feature-icon">✨</div>
+                <h3>AI-Powered Variations</h3>
+                <p>
+                    Generate variations from competitor ads OR your own products.
+                    Channel-aware copy (Facebook vs TikTok vs LinkedIn) with 6 proven strategies.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-badge">NEW</div>
+                <div class="feature-icon">🚀</div>
+                <h3>Gemini Image Editing</h3>
+                <p>
+                    Transform product images while preserving labels exactly.
+                    Mask-based AI editing that's 2-4x faster than DALL-E with superior accuracy.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🔍</div>
+                <h3>Ad Discovery</h3>
+                <p>
+                    Search Meta's Ad Library with advanced filters.
+                    Save to boards, analyze with AI, track competitors — all in one place.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-icon">📊</div>
+                <h3>Automated Reports</h3>
+                <p>
+                    Schedule performance, competitor, and comment reports to Slack.
+                    Set it once, forget it forever. Wake up to insights.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🎯</div>
+                <h3>Competitor Tracking</h3>
+                <p>
+                    Monitor competitor brands automatically.
+                    Get alerted when they launch new campaigns or change messaging strategies.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-icon">🗂️</div>
+                <h3>Boards & Swipe Files</h3>
+                <p>
+                    Organize saved ads into themed collections.
+                    Build inspiration libraries for your creative team with one-click saving.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-icon">📸</div>
+                <h3>Product Decomposition</h3>
+                <p>
+                    Extract product details from competitor ads using AI.
+                    Build a database of competitor products automatically.
+                </p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <div class="feature-icon">💬</div>
+                <h3>Creative Studio</h3>
+                <p>
+                    AI chat assistant for brainstorming, copywriting, and campaign planning.
+                    Context-aware with your workspace data.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Ad Generator Workflow -->
+    <section class="section">
+        <h2 class="section-title">Ad Generator: 7 Steps to 100+ Ads</h2>
+        <p class="section-subtitle">
+            The fastest way to create batch ad variations with text overlays
+        </p>
+
+        <div class="workflow-steps">
+            <div class="step fade-in">
+                <div class="step-number">1</div>
+                <h4>Select Brand Guideline</h4>
+                <p>Link to your brand identity for consistent styling across all ads</p>
+            </div>
+
+            <div class="step fade-in">
+                <div class="step-number">2</div>
+                <h4>Choose Backgrounds</h4>
+                <p>Select up to 20 product images or brand assets from your library</p>
+            </div>
+
+            <div class="step fade-in">
+                <div class="step-number">3</div>
+                <h4>Write Text Variants</h4>
+                <p>Create 5-10 headlines or ad copy variations to test</p>
+            </div>
+
+            <div class="step fade-in">
+                <div class="step-number">4</div>
+                <h4>Apply Styling</h4>
+                <p>Choose font, size, color, and position with live preview</p>
+            </div>
+
+            <div class="step fade-in">
+                <div class="step-number">5</div>
+                <h4>Generate Previews</h4>
+                <p>Click once → 50+ ads composited in ~20 seconds</p>
+            </div>
+
+            <div class="step fade-in">
+                <div class="step-number">6</div>
+                <h4>Approve/Reject</h4>
+                <p>Review grid, approve winners, reject losers</p>
+            </div>
+
+            <div class="step fade-in">
+                <div class="step-number">7</div>
+                <h4>Save & Download</h4>
+                <p>Approved ads saved to workspace, ready to deploy</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Screenshot Section -->
+    <section class="screenshot-section section">
+        <h2 class="section-title">See It In Action</h2>
+        <p class="section-subtitle">
+            Modern, intuitive interface designed for performance marketers
+        </p>
+
+        <div class="screenshot-container fade-in">
+            <div class="screenshot-placeholder">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">🖥️</div>
+                <p>Clean Dashboard • Powerful Tools • Beautiful Design</p>
+                <p style="font-size: 0.9rem; margin-top: 1rem; opacity: 0.7;">
+                    Screenshot: Ad Generator interface with grid preview
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Gemini Section -->
+    <section class="section" style="background: var(--bg-light);">
+        <h2 class="section-title">Powered by Google Gemini 2.5</h2>
+        <p class="section-subtitle">
+            Breakthrough AI technology for product image transformation
+        </p>
+
+        <div class="features-grid" style="max-width: 900px; margin: 0 auto;">
+            <div class="feature-card fade-in">
+                <h3>⚡ 2-4x Faster</h3>
+                <p>Process images in seconds, not minutes. Gemini Flash delivers production-quality edits at lightning speed.</p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <h3>🎯 Pixel-Perfect</h3>
+                <p>Mask-based editing preserves product labels, text, and packaging exactly — critical for e-commerce brands.</p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <h3>💰 Cost-Effective</h3>
+                <p>Gemini Flash costs less than DALL-E 3 while delivering superior accuracy for product photography.</p>
+            </div>
+
+            <div class="feature-card fade-in">
+                <h3>🔧 Creative Control</h3>
+                <p>Angle, lighting, background, custom instructions — full control over your product transformations.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section class="section">
+        <h2 class="section-title">Simple, Transparent Pricing</h2>
+        <p class="section-subtitle">
+            Pay only for AI features. Platform access included.
+        </p>
+
+        <div class="pricing-grid">
+            <div class="pricing-card fade-in">
+                <h3>Starter</h3>
+                <div class="price">$19</div>
+                <p class="price-label">100 credits</p>
+                <ul class="features-list">
+                    <li>10 AI variations</li>
+                    <li>20 decompositions</li>
+                    <li>6 image generations</li>
+                    <li>60+ chat messages</li>
+                    <li>Never expires</li>
+                </ul>
+            </div>
+
+            <div class="pricing-card featured fade-in">
+                <h3>Pro</h3>
+                <div class="price">$79</div>
+                <p class="price-label">500 credits</p>
+                <ul class="features-list">
+                    <li>50 AI variations</li>
+                    <li>100 decompositions</li>
+                    <li>33 image generations</li>
+                    <li>160+ chat messages</li>
+                    <li>Best value</li>
+                </ul>
+            </div>
+
+            <div class="pricing-card fade-in">
+                <h3>Enterprise</h3>
+                <div class="price">$249</div>
+                <p class="price-label">2,000 credits</p>
+                <ul class="features-list">
+                    <li>200 AI variations</li>
+                    <li>400 decompositions</li>
+                    <li>133 image generations</li>
+                    <li>660+ chat messages</li>
+                    <li>Volume pricing</li>
+                </ul>
+            </div>
+        </div>
+
+        <p style="text-align: center; margin-top: 2rem; color: var(--text-light);">
+            ✓ All plans include unlimited users &nbsp;•&nbsp; ✓ Connect 91+ ad accounts &nbsp;•&nbsp; ✓ Unlimited boards & assets
+        </p>
+    </section>
+
+    <!-- Testimonials -->
+    <section class="testimonials section">
+        <h2 class="section-title">Loved by Marketing Teams</h2>
+        <p class="section-subtitle">
+            See what customers say about Voltic
+        </p>
+
+        <div class="testimonial-grid">
+            <div class="testimonial-card fade-in">
+                <p class="testimonial-text">
+                    "The Ad Generator saved us 20+ hours per week. We went from creating 10 variations manually
+                    to generating 100+ in minutes. Game changer for our creative workflow."
+                </p>
+                <div class="testimonial-author">
+                    <div class="author-avatar">SM</div>
+                    <div class="author-info">
+                        <h5>Sarah Mitchell</h5>
+                        <p>Creative Director, E-commerce Brand</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="testimonial-card fade-in">
+                <p class="testimonial-text">
+                    "Gemini image editing is incredible. We can now transform product photos without losing label quality.
+                    Our conversion rates improved 15% after using AI-edited variations."
+                </p>
+                <div class="testimonial-author">
+                    <div class="author-avatar">JC</div>
+                    <div class="author-info">
+                        <h5>James Chen</h5>
+                        <p>Performance Marketing Lead</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="testimonial-card fade-in">
+                <p class="testimonial-text">
+                    "The competitor tracking alone is worth the price. We get Slack alerts when our competitors
+                    launch new campaigns. Staying ahead has never been easier."
+                </p>
+                <div class="testimonial-author">
+                    <div class="author-avatar">EW</div>
+                    <div class="author-info">
+                        <h5>Emily Watson</h5>
+                        <p>Head of Growth, SaaS Startup</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta-section">
+        <h2>Ready to Transform Your Ad Workflow?</h2>
+        <p>Join hundreds of marketing teams using Voltic to dominate Meta advertising</p>
+        <a href="#" class="cta-button">Start Free Trial →</a>
+        <p style="font-size: 0.9rem; margin-top: 1.5rem; opacity: 0.8;">
+            No credit card required • 14-day free trial • Cancel anytime
+        </p>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <p>&copy; 2026 Voltic Platform. All rights reserved.</p>
+        <p style="font-size: 0.9rem; margin-top: 0.5rem;">
+            Meta Advertising Intelligence • AI Creative Generation • Automated Reporting
+        </p>
+    </footer>
+
+    <script>
+        // Fade in animation on scroll
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('.fade-in').forEach(el => {
+            observer.observe(el);
+        });
+
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Add parallax effect to hero
+        window.addEventListener('scroll', () => {
+            const scrolled = window.pageYOffset;
+            const hero = document.querySelector('.hero-content');
+            if (hero && scrolled < window.innerHeight) {
+                hero.style.transform = `translateY(${scrolled * 0.5}px)`;
+                hero.style.opacity = 1 - (scrolled / window.innerHeight);
+            }
+        });
+    </script>
+</body>
+</html>

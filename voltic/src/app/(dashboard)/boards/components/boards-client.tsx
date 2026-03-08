@@ -280,6 +280,35 @@ export default function BoardsClient() {
   );
 }
 
+// ─── Board Thumbnail Cell ─────────────────────────────────────────────────
+
+const THUMBNAIL_GRADIENTS = [
+  "from-violet-400 to-purple-600",
+  "from-blue-400 to-cyan-600",
+  "from-emerald-400 to-teal-600",
+  "from-orange-400 to-amber-600",
+];
+
+function ThumbnailCell({ src, index }: { src: string | undefined; index: number }) {
+  const [errored, setErrored] = useState(false);
+  if (!src || errored) {
+    return (
+      <div className={`h-full w-full bg-gradient-to-br ${THUMBNAIL_GRADIENTS[index % THUMBNAIL_GRADIENTS.length]}`} />
+    );
+  }
+  return (
+    <Image
+      src={src}
+      alt=""
+      fill
+      className="h-full w-full object-cover"
+      sizes="(max-width: 768px) 100vw, 50vw"
+      unoptimized
+      onError={() => setErrored(true)}
+    />
+  );
+}
+
 // ─── Board Card ──────────────────────────────────────────────────────────────
 
 function BoardCard({
@@ -307,10 +336,7 @@ function BoardCard({
             <div className="grid grid-cols-2 grid-rows-2 h-full w-full">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="relative overflow-hidden">
-                  {thumbnails[i] ? (                    <Image src={thumbnails[i] || "/placeholder.svg"} alt="" fill className="h-full w-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" unoptimized />
-                  ) : (
-                    <div className="h-full w-full bg-muted" />
-                  )}
+                  <ThumbnailCell src={thumbnails[i]} index={i} />
                 </div>
               ))}
             </div>
