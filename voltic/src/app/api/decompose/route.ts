@@ -256,7 +256,7 @@ export async function POST(request: Request) {
       error: message,
     });
 
-    console.error("[decompose] Error:", message);
+    console.error("[decompose] Error:", { workspace_id: workspaceId, error: message });
     return NextResponse.json(
       { error: `${message}. Credits have been refunded.` },
       { status: 500 }

@@ -7,11 +7,13 @@ import type { TextPosition } from "@/types/ads";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
+  let workspaceId: string | undefined;
   try {
     const workspace = await getWorkspace();
     if (!workspace) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    workspaceId = workspace.id;
 
     const body = await request.json();
     const {
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
       height,
     });
   } catch (err) {
-    console.error("Composite error:", err);
+    console.error("[composite] Error:", { workspace_id: workspaceId, error: err });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

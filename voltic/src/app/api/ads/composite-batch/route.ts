@@ -17,11 +17,13 @@ interface CombinationInput {
 }
 
 export async function POST(request: Request) {
+  let workspaceId: string | undefined;
   try {
     const workspace = await getWorkspace();
     if (!workspace) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    workspaceId = workspace.id;
 
     const { combinations } = (await request.json()) as {
       combinations: CombinationInput[];
@@ -103,7 +105,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ results, errors });
   } catch (err) {
-    console.error("Batch composite error:", err);
+    console.error("[composite-batch] Error:", { workspace_id: workspaceId, error: err });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

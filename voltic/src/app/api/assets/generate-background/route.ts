@@ -8,11 +8,13 @@ import type { ColorSwatch } from "@/types/brand-guidelines";
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
+  let workspaceId: string | undefined;
   try {
     const workspace = await getWorkspace();
     if (!workspace) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    workspaceId = workspace.id;
 
     const { brandGuidelineId, prompt } = await request.json();
     if (!brandGuidelineId) {
@@ -103,7 +105,7 @@ export async function POST(request: Request) {
       },
     });
   } catch (err) {
-    console.error("Generate background error:", err);
+    console.error("[generate-background] Error:", { workspace_id: workspaceId, error: err });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

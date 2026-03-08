@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
       attachment: newAttachment,
     });
   } catch (error) {
-    console.error("Image generation error:", error);
+    console.error("[generate-image] Error:", { workspace_id: workspace.id, error });
     const msg =
       error instanceof Error ? error.message : "Image generation failed";
     return NextResponse.json({ error: msg }, { status: 500 });

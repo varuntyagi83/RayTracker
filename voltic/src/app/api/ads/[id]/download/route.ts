@@ -6,11 +6,13 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let workspaceId: string | undefined;
   try {
     const workspace = await getWorkspace();
     if (!workspace) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    workspaceId = workspace.id;
 
     const { id } = await params;
     const ad = await getGeneratedAd(workspace.id, id);
@@ -38,7 +40,7 @@ export async function GET(
       },
     });
   } catch (err) {
-    console.error("Download error:", err);
+    console.error("[download] Error:", { workspace_id: workspaceId, error: err });
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
