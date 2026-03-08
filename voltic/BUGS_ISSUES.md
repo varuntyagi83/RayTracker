@@ -2,7 +2,7 @@
 
 > Maintained by Claude Code across sessions.
 > Update status when a bug is fixed. Add new findings at the top of each severity section.
-> Last updated: 2026-03-08 (Round 7 fixes complete — 34/38 fixed)
+> Last updated: 2026-03-08 (Round 8 fixes complete — 34/38 fixed, 3 Won't Fix, H-11 fixed)
 
 ---
 
@@ -44,7 +44,7 @@
 | H-18 | ✅ Fixed | `src/app/api/brand-guidelines/upload/route.ts`:76 | **Batch brand-guidelines upload skips MIME type check** — added `ALLOWED_IMAGE_TYPES.includes(file.type)` check in batch loop before size check. Commit: `e1de9e4` |
 | H-9 | ✅ Fixed | `src/lib/data/variations.ts` | **No pagination on variation history** — added cursor-based pagination using `created_at` ISO timestamp as cursor. `getAllVariations()` accepts optional `cursor` param; UI shows "Load More" button, appends next page. PAGE_SIZE = 20. Commit: `271af1d` |
 | H-10 | 🚫 Won't Fix | `src/app/(dashboard)/assets/actions.ts`:59 | **No server-side file size limit** — False positive: `next.config.ts` already sets `serverActions.bodySizeLimit: "5mb"` which enforces the limit at the Next.js layer. File size check also runs server-side before buffering. |
-| H-11 | ❌ Open | `src/lib/utils/rate-limit.ts` | **In-memory rate limiter breaks on multi-instance Vercel** — each lambda has its own counter. Fix: Upstash Redis rate limiting. |
+| H-11 | ✅ Fixed | `src/lib/utils/rate-limit.ts` | **In-memory rate limiter breaks on multi-instance Vercel** — added `AsyncRateLimiter` that uses `@upstash/ratelimit` sliding window when `UPSTASH_REDIS_REST_URL`/`TOKEN` env vars are set; falls back to in-memory `RateLimiter` for local dev/test. All 4 callers updated to `await`. 12 tests pass. Commit: pending |
 | H-12 | 🚫 Won't Fix | `src/app/api/auth/meta/callback/route.ts` | **`parseInt` without radix** — False positive: no `parseInt` calls exist in this file. `account_status` is typed as `number` from the Meta API response — no parsing needed. `STATUS_MAP` lookup is a typed `Record<number, string>`. |
 | H-13 | ✅ Fixed | `src/app/api/meta/sync/route.ts` | **`parseInt` without radix in Meta sync route** — added `parseBudgetCents()` helper with radix 10 + NaN guard; all `parseInt` calls now use `, 10`. Commit: `7a2fdcd` |
 | H-14 | ✅ Fixed | 6 AI files | **Unguarded `JSON.parse` in 6 AI files** — wrapped all `JSON.parse` calls in try/catch with user-friendly errors (insights, comparison, creative-enhance, competitor-report, decompose, brand-guidelines-generator). Commit: `7a2fdcd` |
@@ -104,7 +104,7 @@
 | Severity | Total Found | Fixed | Won't Fix | Open |
 |----------|-------------|-------|-----------|------|
 | Critical | 5 | 5 | 0 | 0 |
-| High | 18 | 15 | 2 | 1 |
-| Medium | 12 | 10 | 1 | 1 |
+| High | 18 | 16 | 2 | 0 |
+| Medium | 12 | 11 | 1 | 0 |
 | Low | 3 | 3 | 0 | 0 |
-| **Total** | **38** | **33** | **3** | **2** |
+| **Total** | **38** | **35** | **3** | **0** |

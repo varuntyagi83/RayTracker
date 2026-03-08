@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limit
-  const rl = apiLimiter.check(user.id, 10);
+  const rl = await apiLimiter.check(user.id, 10);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

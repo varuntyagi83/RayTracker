@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { RateLimiter, apiLimiter, aiLimiter, authLimiter } from "./rate-limit";
+import { RateLimiter, AsyncRateLimiter, apiLimiter, aiLimiter, authLimiter } from "./rate-limit";
 
 describe("RateLimiter", () => {
   beforeEach(() => {
@@ -102,15 +102,15 @@ describe("RateLimiter", () => {
 });
 
 describe("exported limiter instances", () => {
-  it("apiLimiter exists and works", () => {
-    expect(apiLimiter).toBeInstanceOf(RateLimiter);
+  it("apiLimiter exists and is AsyncRateLimiter", () => {
+    expect(apiLimiter).toBeInstanceOf(AsyncRateLimiter);
   });
 
-  it("aiLimiter exists and works", () => {
-    expect(aiLimiter).toBeInstanceOf(RateLimiter);
+  it("aiLimiter exists and is AsyncRateLimiter", () => {
+    expect(aiLimiter).toBeInstanceOf(AsyncRateLimiter);
   });
 
-  it("authLimiter exists and works", () => {
-    expect(authLimiter).toBeInstanceOf(RateLimiter);
+  it("authLimiter exists and is AsyncRateLimiter", () => {
+    expect(authLimiter).toBeInstanceOf(AsyncRateLimiter);
   });
 });

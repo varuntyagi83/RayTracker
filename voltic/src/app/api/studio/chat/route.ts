@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Rate limit
-  const rl = aiLimiter.check(workspace.id, 20);
+  const rl = await aiLimiter.check(workspace.id, 20);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Rate limit by token
-  const rl = authLimiter.check(token, 10);
+  const rl = await authLimiter.check(token, 10);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
