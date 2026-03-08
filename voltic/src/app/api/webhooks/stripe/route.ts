@@ -59,6 +59,16 @@ export async function POST(request: NextRequest) {
       const packageId = metadata.package_id || "unknown";
       const userId = metadata.user_id || "unknown";
 
+      // Guard against corrupted metadata — parseInt returns NaN on non-numeric strings
+      if (!Number.isFinite(credits) || credits <= 0) {
+        console.error("[stripe-webhook] Invalid credits value in metadata:", {
+          raw: metadata.credits,
+          parsed: credits,
+          session_id: session.id,
+        });
+        return NextResponse.json({ error: "Invalid credits metadata" }, { status: 400 });
+      }
+
       // Idempotency guard: if this session was already processed, skip.
       // Stripe retries webhooks on 5xx — without this, credits would be
       // added multiple times for a single purchase.

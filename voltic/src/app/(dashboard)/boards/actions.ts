@@ -32,6 +32,7 @@ import {
 import { generateAdInsights } from "@/lib/ai/insights";
 import { generateVariationText, generateVariationImage, generateAssetVariationImage } from "@/lib/ai/variations";
 import { enhanceCreativeText } from "@/lib/ai/creative-enhance";
+import { aiLimiter } from "@/lib/utils/rate-limit";
 import { VARIATION_CREDIT_COST, CREATIVE_ENHANCE_CREDIT_COST } from "@/types/variations";
 import type { Board, BoardWithAds, SavedAd } from "@/types/boards";
 import type { Variation, CreativeOptions } from "@/types/variations";
@@ -221,6 +222,15 @@ export async function generateVariationsAction(
   const parsed = generateVariationsSchema.safeParse(input);
   if (!parsed.success)
     return { results: [], error: parsed.error.issues[0].message };
+
+  // Rate limit: max 5 variation generation requests per workspace per minute.
+  // Prevents concurrent duplicate submissions (two tabs clicking Generate at once)
+  // and API abuse. The optimistic credit lock handles the DB-level race, but this
+  // stops the duplicate generation work from running at all.
+  const rl = await aiLimiter.check(workspace.id, 5);
+  if (!rl.success) {
+    return { results: [], error: "Too many generation requests — please wait a moment and try again." };
+  }
 
   const { source, savedAdId, assetId, strategies, channel, creativeOptions: rawCreativeOptions, brandGuidelineId } = parsed.data;
   const creativeOptions = rawCreativeOptions as CreativeOptions | undefined;

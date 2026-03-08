@@ -6,6 +6,18 @@ import type { TextPosition } from "@/types/ads";
 
 export const maxDuration = 300;
 
+/** Block SSRF: reject URLs pointing at private/internal networks */
+function isPublicUrl(rawUrl: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(rawUrl);
+    if (protocol !== "https:") return false;
+    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
+    return !BLOCKED.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 interface CombinationInput {
   combinationId: string;
   backgroundImageUrl: string;
@@ -36,13 +48,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate all URLs before fetching (SSRF guard)
+    const invalidUrl = combinations.find((c) => !isPublicUrl(c.backgroundImageUrl));
+    if (invalidUrl) {
+      return NextResponse.json(
+        { error: "backgroundImageUrl must be a public HTTPS URL" },
+        { status: 400 }
+      );
+    }
+
     // Deduplicate and pre-fetch unique background images
     const uniqueUrls = [...new Set(combinations.map((c) => c.backgroundImageUrl))];
     const bgBufferMap = new Map<string, Buffer>();
 
     await Promise.all(
       uniqueUrls.map(async (url) => {
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(30_000) });
         if (res.ok) {
           bgBufferMap.set(url, Buffer.from(await res.arrayBuffer()));
         }

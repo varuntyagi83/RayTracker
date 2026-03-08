@@ -6,6 +6,18 @@ import type { TextPosition } from "@/types/ads";
 
 export const maxDuration = 60;
 
+/** Block SSRF: reject URLs pointing at private/internal networks */
+function isPublicUrl(rawUrl: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(rawUrl);
+    if (protocol !== "https:") return false;
+    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
+    return !BLOCKED.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: Request) {
   let workspaceId: string | undefined;
   try {
@@ -39,8 +51,15 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!isPublicUrl(backgroundImageUrl)) {
+      return NextResponse.json(
+        { error: "backgroundImageUrl must be a public HTTPS URL" },
+        { status: 400 }
+      );
+    }
+
     // Fetch background image
-    const bgResponse = await fetch(backgroundImageUrl);
+    const bgResponse = await fetch(backgroundImageUrl, { signal: AbortSignal.timeout(30_000) });
     if (!bgResponse.ok) {
       return NextResponse.json(
         { error: "Failed to fetch background image" },

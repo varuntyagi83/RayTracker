@@ -6,33 +6,21 @@ import type { Board, BoardWithAds, SavedAd } from "@/types/boards";
 export async function getBoards(workspaceId: string): Promise<Board[]> {
   const supabase = createAdminClient();
 
-  // Fetch boards with ad count via left join
+  // Single query: boards with ad count pushed to Postgres via relational count
   const { data: boards } = await supabase
     .from("boards")
-    .select("id, name, description, created_at, updated_at")
+    .select("id, name, description, created_at, updated_at, saved_ads(count)")
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false });
 
   if (!boards || boards.length === 0) return [];
 
-  // Get counts per board
-  const boardIds = boards.map((b) => b.id);
-  const { data: countRows } = await supabase
-    .from("saved_ads")
-    .select("board_id")
-    .eq("workspace_id", workspaceId)
-    .in("board_id", boardIds);
-
-  const countMap: Record<string, number> = {};
-  for (const row of countRows ?? []) {
-    countMap[row.board_id] = (countMap[row.board_id] ?? 0) + 1;
-  }
-
   return boards.map((b) => ({
     id: b.id,
     name: b.name,
     description: b.description,
-    adCount: countMap[b.id] ?? 0,
+    // saved_ads is returned as [{ count: N }] when using relational count
+    adCount: (b.saved_ads as unknown as Array<{ count: number }>)[0]?.count ?? 0,
     createdAt: b.created_at,
     updatedAt: b.updated_at,
   }));

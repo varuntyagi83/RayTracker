@@ -89,7 +89,10 @@ const BROWSER_HEADERS = {
  * Uses browser-like headers to handle Facebook CDN URLs that reject bare fetch calls.
  */
 export async function downloadImage(imageUrl: string): Promise<Buffer> {
-  const res = await fetch(imageUrl, { headers: BROWSER_HEADERS });
+  const res = await fetch(imageUrl, {
+    headers: BROWSER_HEADERS,
+    signal: AbortSignal.timeout(30_000),
+  });
   if (!res.ok) {
     throw new Error(`Failed to fetch image: ${res.status}`);
   }
