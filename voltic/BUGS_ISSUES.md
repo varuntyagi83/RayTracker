@@ -2,7 +2,7 @@
 
 > Maintained by Claude Code across sessions.
 > Update status when a bug is fixed. Add new findings at the top of each severity section.
-> Last updated: 2026-03-08 (Round 10 audit — 5 new bugs found)
+> Last updated: 2026-03-08 (Round 10 fixes complete — all 5 R10 bugs resolved)
 
 ---
 
@@ -25,7 +25,7 @@
 | C-3 | ✅ Fixed | `src/app/api/webhooks/stripe/route.ts`:62 | Stripe webhook missing idempotency — `addCredits()` called twice on Stripe retries, doubling credits. Fixed: dedup check via `reference_id` + pass `session.id` to insert. Commit: `546ff23` |
 | C-4 | ✅ Fixed | `src/app/api/decompose/route.ts`:20 | SSRF gap — `169.254.x.x` (AWS/GCP metadata) not blocked. Fixed: added `169\.254\.` to BLOCKED regex. Commit: `546ff23` |
 | C-5 | ✅ Fixed | `src/lib/data/insights.ts`:162 | Silent credit refund failure — `refundCredits()` retry only fired on `updateErr`, but Supabase returns `error:null` on 0-rows-updated. Fixed: 3-attempt loop checking `updated?.length`. Commit: `546ff23` |
-| C-7 | ❌ Open | `src/app/api/ads/composite/route.ts`:43, `src/app/api/ads/composite-batch/route.ts`:45 | **SSRF in ad compositing routes** — `fetch(backgroundImageUrl)` called with no URL allowlist or private-IP check. Both routes accept `backgroundImageUrl` from the request body and immediately fetch it. An authenticated user can probe internal endpoints (AWS metadata `169.254.169.254`, Supabase admin, internal services). C-4 fixed SSRF in `/api/decompose` but these two routes were missed. Fix: apply same `isPublicUrl()` guard from decompose route. Round 10. |
+| C-7 | ✅ Fixed | `src/app/api/ads/composite/route.ts`:43, `src/app/api/ads/composite-batch/route.ts`:45 | **SSRF in ad compositing routes** — `fetch(backgroundImageUrl)` called with no URL allowlist or private-IP check. Both routes accept `backgroundImageUrl` from the request body and immediately fetch it. An authenticated user can probe internal endpoints (AWS metadata `169.254.169.254`, Supabase admin, internal services). C-4 fixed SSRF in `/api/decompose` but these two routes were missed. Fix: apply same `isPublicUrl()` guard from decompose route. Round 10. Commit: `10bfcce` |
 | C-6 | ✅ Fixed | `src/lib/data/credits.ts`:102, `src/lib/data/insights.ts`:137,197 | **Credit transaction insert not error-checked** — added `const { error: txErr }` check on all 3 transaction inserts; logs `console.error` with context when ledger insert fails. Round 9. Commit: `4663a05` |
 
 ---
@@ -52,8 +52,8 @@
 | H-14 | ✅ Fixed | 6 AI files | **Unguarded `JSON.parse` in 6 AI files** — wrapped all `JSON.parse` calls in try/catch with user-friendly errors (insights, comparison, creative-enhance, competitor-report, decompose, brand-guidelines-generator). Commit: `7a2fdcd` |
 | H-15 | ✅ Fixed | `src/app/(dashboard)/creative-studio/components/chat-panel.tsx` | **No AbortController on streaming reader** — added AbortController ref, unmount cleanup, toast.error on real failures; AbortError ignored. Commit: `7a2fdcd` |
 | H-16 | ✅ Fixed | `src/app/(dashboard)/variations/components/variations-page-client.tsx` | **`URL.createObjectURL` never revoked** — revoke previous URL before creating new; clear + unmount cleanup. Commit: `7a2fdcd` |
-| H-22 | ❌ Open | `src/lib/ai/decompose.ts`:91 | **No timeout on `downloadImage()` fetch** — `downloadImage()` uses plain `fetch(imageUrl)` with no `AbortSignal`. L-4 added timeouts to Gemini API calls, but the image download step (which can hang on slow/unresponsive Facebook CDN URLs) has no timeout. A hanging download holds the Vercel lambda open until its `maxDuration` limit. Fix: add `AbortSignal.timeout(30_000)` to the `downloadImage` fetch. Round 10. |
-| H-23 | ❌ Open | `src/lib/data/boards.ts`:20 | **Inefficient ad count query in `getBoards()`** — Fetches the `board_id` column of ALL `saved_ads` rows for a workspace to count ads per board in JavaScript. A workspace with 10,000 saved ads transfers 10,000 rows just to produce per-board counts. Fix: use Supabase relational count `select("id, name, ..., saved_ads(count)")` to push the aggregation to Postgres. Round 10. |
+| H-22 | ✅ Fixed | `src/lib/ai/decompose.ts`:91 | **No timeout on `downloadImage()` fetch** — `downloadImage()` uses plain `fetch(imageUrl)` with no `AbortSignal`. L-4 added timeouts to Gemini API calls, but the image download step (which can hang on slow/unresponsive Facebook CDN URLs) has no timeout. A hanging download holds the Vercel lambda open until its `maxDuration` limit. Fix: add `AbortSignal.timeout(30_000)` to the `downloadImage` fetch. Round 10. Commit: `10bfcce` |
+| H-23 | ✅ Fixed | `src/lib/data/boards.ts`:20 | **Inefficient ad count query in `getBoards()`** — Fetches the `board_id` column of ALL `saved_ads` rows for a workspace to count ads per board in JavaScript. A workspace with 10,000 saved ads transfers 10,000 rows just to produce per-board counts. Fix: use Supabase relational count `select("id, name, ..., saved_ads(count)")` to push the aggregation to Postgres. Round 10. Commit: `10bfcce` |
 | H-19 | ✅ Fixed | `src/lib/data/competitors.ts`:99 | **N+1 upsert loop in `saveCompetitorAds()`** — replaced sequential for-loop with single batch `supabase.upsert(rows, { onConflict: "workspace_id,meta_library_id" })`. Round 9. Commit: `4663a05` |
 | H-20 | ✅ Fixed | `src/app/api/meta/sync/route.ts`:15 | **No rate limiting on `/api/meta/sync`** — added `await apiLimiter.check(member.workspace_id, 3)` with 429 response. Round 9. Commit: `4663a05` |
 | H-21 | ✅ Fixed | `src/app/(dashboard)/discover/actions.ts`:103 | **TOCTOU double-charge race in insight analysis** — added re-check for existing insight after credit deduction; refunds and returns cached result if concurrent request won the race. Round 9. Commit: `4663a05` |
@@ -76,8 +76,8 @@
 | M-9 | ✅ Fixed | `src/app/(dashboard)/boards/actions.ts` | **`revalidatePath` missing after mutations** — added `revalidatePath("/boards")` after create, update, delete. Commit: `7a2fdcd` |
 | M-10 | ✅ Fixed | `src/app/api/studio/upload/route.ts` | **File size checked after buffering** — added `Content-Length` check before `req.formData()` with 413 response. Commit: `7a2fdcd` |
 | M-11 | ✅ Fixed | `src/app/(dashboard)/creative-studio/components/chat-panel.tsx` | **No error toast on stream failure** — added `toast.error(msg)` in catch block (part of H-15 fix). Commit: `7a2fdcd` |
-| M-17 | ❌ Open | `src/app/api/webhooks/stripe/route.ts`:58 | **NaN credits from Stripe metadata `parseInt`** — `const credits = parseInt(metadata.credits, 10)` has no `isNaN` / `isFinite` guard. If `metadata.credits` is missing or non-numeric (e.g., corrupted metadata, Stripe test event with bad fixture), `credits` is `NaN`, which is then passed to `addCredits(workspaceId, NaN, ...)`. NaN credit balances corrupt the ledger silently. Fix: add guard `if (!credits || !Number.isFinite(credits)) { return 400 }`. Round 10. |
-| M-18 | ❌ Open | `src/app/(dashboard)/boards/actions.ts`:227 | **Concurrent variation generation double-charges credits** — `generateVariationsAction` deducts `totalCost` credits then loops through strategies. If two browser tabs submit simultaneously, both pass `checkAndDeductCredits` before either updates the balance, resulting in double deduction and double generation. Same class of bug as H-21 (insight TOCTOU). Fix: check for in-flight generation or add a workspace-level generation lock (can use the same "re-check after deduct" pattern from H-21). Round 10. |
+| M-17 | ✅ Fixed | `src/app/api/webhooks/stripe/route.ts`:58 | **NaN credits from Stripe metadata `parseInt`** — `const credits = parseInt(metadata.credits, 10)` has no `isNaN` / `isFinite` guard. If `metadata.credits` is missing or non-numeric (e.g., corrupted metadata, Stripe test event with bad fixture), `credits` is `NaN`, which is then passed to `addCredits(workspaceId, NaN, ...)`. NaN credit balances corrupt the ledger silently. Added Number.isFinite guard + logs + 400 return. Round 10. Commit: `10bfcce` |
+| M-18 | ✅ Fixed | `src/app/(dashboard)/boards/actions.ts`:227 | **Concurrent variation generation double-charges credits** — `generateVariationsAction` deducts `totalCost` credits then loops through strategies. If two browser tabs submit simultaneously, both pass `checkAndDeductCredits` before either updates the balance, resulting in double deduction and double generation. Same class of bug as H-21 (insight TOCTOU). Fixed: added aiLimiter.check(workspace.id, 5) to generateVariationsAction — max 5/min per workspace. Round 10. Commit: `10bfcce` |
 | M-13 | ✅ Fixed | `src/app/api/auth/meta/callback/route.ts`:75 | **Meta OAuth external error message leaked to redirect URL** — replaced `tokenData.error.message` with hardcoded `"token_exchange"` code. Round 9. Commit: `4663a05` |
 | M-14 | ✅ Fixed | `src/app/(dashboard)/variations/actions.ts`:17 | **Cursor parameter not validated in `fetchAllVariations`** — added `z.string().datetime().optional()` Zod schema; returns `{ error: "Invalid cursor" }` on malformed input. Round 9. Commit: `4663a05` |
 | M-15 | ✅ Fixed | `src/lib/ai/openai.ts`, `src/lib/ai/gemini-image-edit.ts`, `src/lib/ai/decompose.ts` | **No retry on transient AI API failures** — set `maxRetries: 3` on OpenAI client; added `geminiPost()` helper with 3-attempt exponential backoff (1s/2s) for retryable status codes (429, 500, 503) in `gemini-image-edit.ts`; inline retry loop in `decompose.ts` `_inpaintWithGemini()`. Round 9. Commit: `4663a05` |
@@ -126,8 +126,8 @@
 
 | Severity | Total Found | Fixed | Won't Fix | Open |
 |----------|-------------|-------|-----------|------|
-| Critical | 7 | 6 | 0 | 1 |
-| High | 23 | 19 | 2 | 2 |
-| Medium | 18 | 15 | 1 | 2 |
+| Critical | 7 | 7 | 0 | 0 |
+| High | 23 | 21 | 2 | 0 |
+| Medium | 18 | 17 | 1 | 0 |
 | Low | 4 | 4 | 0 | 0 |
-| **Total** | **52** | **44** | **3** | **5** |
+| **Total** | **52** | **49** | **3** | **0** |
