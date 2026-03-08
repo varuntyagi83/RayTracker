@@ -126,6 +126,15 @@ export async function analyzeAd(
     return { error: creditResult.error ?? "Insufficient credits" };
   }
 
+  // 4b. Re-check for a concurrent request that won the race and already saved
+  // the insight between our check (step 3) and deduction (step 4).
+  // If found, refund our deduction and return the cached result.
+  const raceExisting = await getExistingInsight(workspace.id, ad.id);
+  if (raceExisting) {
+    await refundCredits(workspace.id, INSIGHT_CREDIT_COST);
+    return { data: raceExisting };
+  }
+
   // 5. Generate insights via OpenAI
   try {
     const insights = await generateAdInsights({

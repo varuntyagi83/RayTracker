@@ -14,6 +14,37 @@ const STORAGE_BUCKET = "brand-assets";
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+// ─── Gemini fetch with exponential-backoff retry ─────────────────────────────
+// Retries on transient failures (429, 503, 500) with 1s → 2s → 4s delays.
+
+async function geminiPost(url: string, body: string, signal?: AbortSignal): Promise<Response> {
+  const RETRYABLE = new Set([429, 500, 503]);
+  let lastErr: Error = new Error("geminiPost: no attempts made");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+    }
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+        signal,
+      });
+      if (!res.ok && RETRYABLE.has(res.status)) {
+        lastErr = new Error(`Gemini HTTP ${res.status}`);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      // Don't retry on abort
+      if (lastErr.name === "AbortError") throw lastErr;
+    }
+  }
+  throw lastErr;
+}
+
 // ─── Strategy-Specific Visual Notes ─────────────────────────────────────────
 
 const STRATEGY_VISUAL_NOTES: Record<VariationStrategy, string> = {
@@ -112,18 +143,15 @@ async function _generateProductMask(
   imageBuffer: Buffer,
   apiKey: string
 ): Promise<Buffer> {
-  const response = await fetch(
+  const response = await geminiPost(
     `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: [
-                  "Create a precise binary segmentation mask of the product in this image.",
+    JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: [
+                "Create a precise binary segmentation mask of the product in this image.",
                   "Rules:",
                   "- The product (including its label, cap, and any attached elements) must be PURE WHITE (#FFFFFF).",
                   "- Everything else (background, shadows, reflections, surface) must be PURE BLACK (#000000).",
@@ -144,7 +172,7 @@ async function _generateProductMask(
           responseModalities: ["IMAGE"],
         },
       }),
-    }
+    AbortSignal.timeout(60_000)
   );
 
   if (!response.ok) {
@@ -218,39 +246,36 @@ export async function editAssetImageWithGemini(
   const prompt = buildGeminiEditPrompt(asset, strategy, creativeOptions, brandGuidelines);
 
   // 4. Call Gemini with original image + mask (same two-image pattern as decompose.ts)
-  const response = await fetch(
+  const response = await geminiPost(
     `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: "image/png",
-                  data: imageBuffer.toString("base64"),
-                },
+    JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                mimeType: "image/png",
+                data: imageBuffer.toString("base64"),
               },
-              {
-                text: "Product mask (WHITE = product to preserve exactly, BLACK = background to modify):",
+            },
+            {
+              text: "Product mask (WHITE = product to preserve exactly, BLACK = background to modify):",
+            },
+            {
+              inlineData: {
+                mimeType: "image/png",
+                data: maskBuffer.toString("base64"),
               },
-              {
-                inlineData: {
-                  mimeType: "image/png",
-                  data: maskBuffer.toString("base64"),
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"],
+            },
+          ],
         },
-      }),
-    }
+      ],
+      generationConfig: {
+        responseModalities: ["TEXT", "IMAGE"],
+      },
+    }),
+    AbortSignal.timeout(120_000)
   );
 
   if (!response.ok) {

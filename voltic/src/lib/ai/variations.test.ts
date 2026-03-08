@@ -89,7 +89,7 @@ describe("buildCreativeOptionsSection", () => {
     expect(result).toContain("Product angle: 3/4 View");
     expect(result).toContain("Lighting: Golden Hour");
     expect(result).toContain("Background: Outdoor");
-    expect(result).toContain("Custom direction: Show near a mountain trail");
+    expect(result).toContain("User creative note: Show near a mountain trail");
   });
 
   it("includes custom instruction alone", () => {
@@ -97,7 +97,7 @@ describe("buildCreativeOptionsSection", () => {
       customInstruction: "Make it vibrant",
     });
     expect(result).toContain("CREATIVE DIRECTION");
-    expect(result).toContain("Custom direction: Make it vibrant");
+    expect(result).toContain("User creative note: Make it vibrant");
   });
 
   it("includes aspect ratio when populated", () => {

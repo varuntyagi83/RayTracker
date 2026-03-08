@@ -305,40 +305,60 @@ Fill the removed text areas seamlessly with the surrounding background color, te
 
 CRITICAL: Do NOT alter the product, product packaging text, background, props, colors, or composition. ONLY remove the digitally-added marketing overlay text and fill with background.`;
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
+  const RETRYABLE = new Set([429, 500, 503]);
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
+  const geminiBody = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { text: prompt },
           {
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: "image/png",
-                  data: pngBuffer.toString("base64"),
-                },
-              },
-              {
-                text: "Reference mask (lighter areas = text to remove):",
-              },
-              {
-                inlineData: {
-                  mimeType: "image/png",
-                  data: maskBuffer.toString("base64"),
-                },
-              },
-            ],
+            inlineData: {
+              mimeType: "image/png",
+              data: pngBuffer.toString("base64"),
+            },
+          },
+          {
+            text: "Reference mask (lighter areas = text to remove):",
+          },
+          {
+            inlineData: {
+              mimeType: "image/png",
+              data: maskBuffer.toString("base64"),
+            },
           },
         ],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"],
-        },
-      }),
+      },
+    ],
+    generationConfig: {
+      responseModalities: ["TEXT", "IMAGE"],
+    },
+  });
+
+  let response!: Response;
+  let lastFetchErr: Error | undefined;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
     }
-  );
+    try {
+      response = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: geminiBody,
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!response.ok && RETRYABLE.has(response.status)) {
+        lastFetchErr = new Error(`Gemini HTTP ${response.status}`);
+        continue;
+      }
+      break;
+    } catch (err) {
+      lastFetchErr = err instanceof Error ? err : new Error(String(err));
+      if (lastFetchErr.name === "AbortError") throw lastFetchErr;
+    }
+  }
+  if (!response) throw lastFetchErr ?? new Error("Gemini fetch failed");
 
   if (!response.ok) {
     const errText = await response.text();

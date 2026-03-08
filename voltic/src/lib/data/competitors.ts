@@ -95,28 +95,32 @@ export async function saveCompetitorScrapeRun(
     brandId = newBrand.id;
   }
 
-  // 2. Upsert each ad
-  for (const ad of ads) {
-    await supabase.from("competitor_ads").upsert(
-      {
-        competitor_brand_id: brandId,
-        workspace_id: workspaceId,
-        meta_library_id: ad.id,
-        headline: ad.headline || null,
-        body_text: ad.bodyText || null,
-        format: ad.mediaType,
-        media_type: ad.mediaType,
-        image_url: ad.mediaThumbnailUrl || null,
-        landing_page_url: ad.linkUrl || null,
-        platforms: ad.platforms,
-        start_date: ad.startDate || null,
-        runtime_days: ad.runtimeDays,
-        is_active: ad.isActive,
-        ads_library_url: ad.adsLibraryUrl,
-        scraped_at: new Date().toISOString(),
-      },
-      { onConflict: "workspace_id,meta_library_id" }
-    );
+  // 2. Batch upsert all ads in one roundtrip instead of N sequential calls
+  const scrapedAt = new Date().toISOString();
+  const rows = ads.map((ad) => ({
+    competitor_brand_id: brandId,
+    workspace_id: workspaceId,
+    meta_library_id: ad.id,
+    headline: ad.headline || null,
+    body_text: ad.bodyText || null,
+    format: ad.mediaType,
+    media_type: ad.mediaType,
+    image_url: ad.mediaThumbnailUrl || null,
+    landing_page_url: ad.linkUrl || null,
+    platforms: ad.platforms,
+    start_date: ad.startDate || null,
+    runtime_days: ad.runtimeDays,
+    is_active: ad.isActive,
+    ads_library_url: ad.adsLibraryUrl,
+    scraped_at: scrapedAt,
+  }));
+
+  const { error: upsertErr } = await supabase
+    .from("competitor_ads")
+    .upsert(rows, { onConflict: "workspace_id,meta_library_id" });
+
+  if (upsertErr) {
+    return { success: false, error: upsertErr.message };
   }
 
   return { success: true };
@@ -139,28 +143,13 @@ export async function deleteCompetitorBrands(
 
   if (error) return { success: false, error: error.message };
 
-  // Also delete reports that reference these brands
-  // (Reports store brand IDs as text array, so we filter in-app)
-  const { data: reports } = await supabase
+  // Also delete reports that reference these brands using Postgres array overlap
+  // (cs = "contains" — finds rows where competitor_brand_ids overlaps brandIds)
+  await supabase
     .from("competitor_reports")
-    .select("id, competitor_brand_ids")
-    .eq("workspace_id", workspaceId);
-
-  if (reports) {
-    const reportIdsToDelete = reports
-      .filter((r) => {
-        const rBrandIds = r.competitor_brand_ids as string[];
-        return rBrandIds.some((id) => brandIds.includes(id));
-      })
-      .map((r) => r.id);
-
-    if (reportIdsToDelete.length > 0) {
-      await supabase
-        .from("competitor_reports")
-        .delete()
-        .in("id", reportIdsToDelete);
-    }
-  }
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .overlaps("competitor_brand_ids", brandIds);
 
   return { success: true };
 }

@@ -14,6 +14,8 @@ import type { VariationWithContext } from "@/lib/data/variations";
 
 const PAGE_SIZE = 20;
 
+const cursorSchema = z.string().datetime().optional();
+
 export async function fetchAllVariations(cursor?: string): Promise<{
   data?: VariationWithContext[];
   nextCursor?: string;
@@ -23,7 +25,10 @@ export async function fetchAllVariations(cursor?: string): Promise<{
   const workspace = await getWorkspace();
   if (!workspace) return { error: "No workspace" };
 
-  const variations = await getAllVariations(workspace.id, PAGE_SIZE, cursor);
+  const parsedCursor = cursorSchema.safeParse(cursor);
+  if (!parsedCursor.success) return { error: "Invalid cursor" };
+
+  const variations = await getAllVariations(workspace.id, PAGE_SIZE, parsedCursor.data);
   const hasMore = variations.length === PAGE_SIZE;
   const nextCursor = hasMore
     ? variations[variations.length - 1].createdAt

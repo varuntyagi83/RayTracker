@@ -8,7 +8,7 @@ export function getOpenAIClient(): OpenAI {
     if (!apiKey) {
       throw new Error("OPENAI_API_KEY environment variable is not set");
     }
-    _client = new OpenAI({ apiKey });
+    _client = new OpenAI({ apiKey, maxRetries: 3 });
   }
   return _client;
 }

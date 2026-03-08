@@ -97,15 +97,24 @@ export async function addCredits(
     return { success: false, newBalance: workspace.credit_balance, error: updateErr?.message ?? "Balance changed concurrently — please retry." };
   }
 
-  // Record transaction
+  // Record transaction — log on failure but don't fail the caller; the balance
+  // update already succeeded and rolling it back would require a separate lock.
   const txDescription = description ?? generateTransactionDescription(type, amount);
-  await supabase.from("credit_transactions").insert({
+  const { error: txErr } = await supabase.from("credit_transactions").insert({
     workspace_id: workspaceId,
     amount,
     type,
     description: txDescription,
     reference_id: referenceId ?? null,
   });
+  if (txErr) {
+    console.error("[addCredits] Ledger insert failed — balance updated but no transaction record:", {
+      workspace_id: workspaceId,
+      amount,
+      type,
+      error: txErr.message,
+    });
+  }
 
   return { success: true, newBalance };
 }

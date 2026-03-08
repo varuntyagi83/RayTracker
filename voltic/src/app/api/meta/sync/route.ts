@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { trackServer } from "@/lib/analytics/posthog-server";
+import { apiLimiter } from "@/lib/utils/rate-limit";
 
 const META_API_VERSION = "v21.0";
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -34,6 +35,12 @@ export async function POST() {
 
   if (!member) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
+  }
+
+  // Rate limit: 3 syncs per minute per workspace (each sync fans out to many Meta API calls)
+  const rl = await apiLimiter.check(member.workspace_id, 3);
+  if (!rl.success) {
+    return NextResponse.json({ error: "Too many sync requests — please wait before syncing again" }, { status: 429 });
   }
 
   const workspaceId = member.workspace_id;

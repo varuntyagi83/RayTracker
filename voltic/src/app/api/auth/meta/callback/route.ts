@@ -71,10 +71,7 @@ export async function GET(request: NextRequest) {
       error: tokenData.error.message || "token_exchange_failed",
     });
     return NextResponse.redirect(
-      new URL(
-        `/settings?meta_error=${encodeURIComponent(tokenData.error.message || "token_exchange")}`,
-        request.url
-      )
+      new URL("/settings?meta_error=token_exchange", request.url)
     );
   }
 

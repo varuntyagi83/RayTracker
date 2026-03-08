@@ -134,12 +134,20 @@ export async function checkAndDeductCredits(
 
   // 3. Record transaction with correct type
   const txDescription = description ?? generateTransactionDescription(type, amount);
-  await supabase.from("credit_transactions").insert({
+  const { error: txErr } = await supabase.from("credit_transactions").insert({
     workspace_id: workspaceId,
     amount: -amount,
     type,
     description: txDescription,
   });
+  if (txErr) {
+    console.error("[checkAndDeductCredits] Ledger insert failed — balance deducted but no transaction record:", {
+      workspace_id: workspaceId,
+      amount,
+      type,
+      error: txErr.message,
+    });
+  }
 
   return { success: true, remainingBalance: newBalance };
 }
@@ -194,12 +202,19 @@ export async function refundCredits(
   }
 
   // Record refund transaction
-  await supabase.from("credit_transactions").insert({
+  const { error: txErr } = await supabase.from("credit_transactions").insert({
     workspace_id: workspaceId,
     amount: amount,
     type: "refund",
     description: `Credit refund: ${amount} credits returned`,
   });
+  if (txErr) {
+    console.error("[refundCredits] Ledger insert failed — refund applied to balance but no transaction record:", {
+      workspace_id: workspaceId,
+      amount,
+      error: txErr.message,
+    });
+  }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
