@@ -23,8 +23,10 @@ export async function getCreditTransactions(
   totalPages: number;
 }> {
   const supabase = createAdminClient();
-  const { page, pageSize } = pagination;
-  const from = (page - 1) * pageSize;
+  const { pageSize } = pagination;
+  // Cap page to prevent arbitrarily large Postgres offsets
+  const safePage = Math.min(Math.max(1, pagination.page), 1000);
+  const from = (safePage - 1) * pageSize;
   const to = from + pageSize - 1;
 
   // Build query

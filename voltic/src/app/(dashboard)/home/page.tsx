@@ -1,5 +1,6 @@
 import { getWorkspace } from "@/lib/supabase/queries";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import {
   getWorkspaceKPIs,
   getTopCreatives,
@@ -36,8 +37,10 @@ export default async function HomePage() {
   const copy = results[3].status === "fulfilled" ? results[3].value : [];
   const landingPages = results[4].status === "fulfilled" ? results[4].value : [];
 
-  // Demo fallback: inject realistic placeholder data when no real metrics exist
-  const isDemoMode = kpis.today.revenue === 0 && kpis.today.spend === 0 && kpis.last7Days.revenue === 0;
+  // Demo fallback: only show placeholder data when no ad accounts are connected.
+  // Previously checked revenue/spend === 0, which incorrectly showed demo data
+  // to real users with connected accounts but no recent ad spend.
+  const isDemoMode = kpis.adAccountCount === 0;
   const displayKPIs = isDemoMode
     ? {
         adAccountCount: kpis.adAccountCount,
@@ -108,6 +111,19 @@ export default async function HomePage() {
   return (
     <div className="space-y-8 p-8">
       <DashboardTracker adAccountCount={displayKPIs.adAccountCount} />
+
+      {/* Demo data banner */}
+      {isDemoMode && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span className="text-base">⚡</span>
+          <span>
+            <strong>Sample data</strong> — Connect your Meta ad account to see real performance metrics.{" "}
+            <Link href="/settings" className="underline underline-offset-2 hover:text-amber-900 font-medium">
+              Connect now →
+            </Link>
+          </span>
+        </div>
+      )}
 
       {/* Page Header */}
       <div>

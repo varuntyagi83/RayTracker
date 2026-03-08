@@ -87,8 +87,10 @@ export async function createAssetAction(
   // Create asset record
   const result = await createAsset(workspace.id, name.trim(), upload.url, description?.trim(), brandGuidelineId);
   if (!result.success) {
-    // Clean up uploaded image
-    await deleteAssetImage(upload.url).catch(() => {});
+    // Clean up uploaded image — log but don't propagate; caller already has the real error
+    await deleteAssetImage(upload.url).catch((err) => {
+      console.warn("[assets] Failed to delete orphaned image after createAsset error:", err);
+    });
   }
   return result;
 }

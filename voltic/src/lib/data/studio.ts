@@ -297,66 +297,75 @@ export async function resolveMentions(
   mentions: Mention[]
 ): Promise<Record<string, unknown>> {
   const supabase = createAdminClient();
-  const resolved: Record<string, unknown> = {};
 
-  for (const mention of mentions) {
-    if (mention.type === "brand_guidelines") {
-      const { data } = await supabase
-        .from("brand_guidelines")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .eq("id", mention.id)
-        .single();
+  // Resolve all mentions in parallel instead of sequentially
+  const entries = await Promise.all(
+    mentions.map(async (mention): Promise<[string, unknown] | null> => {
+      if (mention.type === "brand_guidelines") {
+        const { data } = await supabase
+          .from("brand_guidelines")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("id", mention.id)
+          .single();
 
-      if (data) {
-        resolved[`@${mention.slug}`] = {
-          type: "brand_guidelines",
-          brandName: data.brand_name,
-          brandVoice: data.brand_voice,
-          colorPalette: data.color_palette,
-          typography: data.typography,
-          targetAudience: data.target_audience,
-          dosAndDonts: data.dos_and_donts,
-        };
+        if (!data) return null;
+        return [
+          `@${mention.slug}`,
+          {
+            type: "brand_guidelines",
+            brandName: data.brand_name,
+            brandVoice: data.brand_voice,
+            colorPalette: data.color_palette,
+            typography: data.typography,
+            targetAudience: data.target_audience,
+            dosAndDonts: data.dos_and_donts,
+          },
+        ];
+      } else if (mention.type === "asset") {
+        const { data } = await supabase
+          .from("assets")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("id", mention.id)
+          .single();
+
+        if (!data) return null;
+        return [
+          `@${mention.slug}`,
+          {
+            type: "asset",
+            name: data.name,
+            description: data.description,
+            imageUrl: data.image_url,
+          },
+        ];
+      } else if (mention.type === "competitor_report") {
+        const { data } = await supabase
+          .from("competitor_reports")
+          .select("*")
+          .eq("workspace_id", workspaceId)
+          .eq("id", mention.id)
+          .single();
+
+        if (!data) return null;
+        return [
+          `@${mention.slug}`,
+          {
+            type: "competitor_report",
+            title: data.title,
+            brandNames: data.competitor_brand_names,
+            adCount: data.ad_count,
+            perAdAnalyses: data.per_ad_analyses,
+            crossBrandSummary: data.cross_brand_summary,
+          },
+        ];
       }
-    } else if (mention.type === "asset") {
-      const { data } = await supabase
-        .from("assets")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .eq("id", mention.id)
-        .single();
+      return null;
+    })
+  );
 
-      if (data) {
-        resolved[`@${mention.slug}`] = {
-          type: "asset",
-          name: data.name,
-          description: data.description,
-          imageUrl: data.image_url,
-        };
-      }
-    } else if (mention.type === "competitor_report") {
-      const { data } = await supabase
-        .from("competitor_reports")
-        .select("*")
-        .eq("workspace_id", workspaceId)
-        .eq("id", mention.id)
-        .single();
-
-      if (data) {
-        resolved[`@${mention.slug}`] = {
-          type: "competitor_report",
-          title: data.title,
-          brandNames: data.competitor_brand_names,
-          adCount: data.ad_count,
-          perAdAnalyses: data.per_ad_analyses,
-          crossBrandSummary: data.cross_brand_summary,
-        };
-      }
-    }
-  }
-
-  return resolved;
+  return Object.fromEntries(entries.filter((e): e is [string, unknown] => e !== null));
 }
 
 // ─── Build Context String for LLM ──────────────────────────────────────────

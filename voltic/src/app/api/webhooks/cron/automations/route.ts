@@ -53,9 +53,24 @@ export async function GET(request: NextRequest) {
     isAutomationDue(a, now)
   );
 
+  // Atomically claim due automations to prevent duplicate execution when two
+  // Vercel invocations race (both pass isAutomationDue before either writes).
+  // The conditional WHERE (.or last_run_at IS NULL OR < cutoff) ensures only
+  // one instance wins the UPDATE per automation — the other gets 0 rows back.
+  const claimCutoff = new Date(now.getTime() - 55 * 60 * 1000);
+  const { data: claimed } = await admin
+    .from("automations")
+    .update({ last_run_at: now.toISOString() })
+    .in("id", dueAutomations.map((a) => a.id))
+    .or(`last_run_at.is.null,last_run_at.lt.${claimCutoff.toISOString()}`)
+    .select("id");
+
+  const claimedIds = new Set((claimed ?? []).map((a) => a.id));
+  const automationsToRun = dueAutomations.filter((a) => claimedIds.has(a.id));
+
   // Execute due automations
   const results = await Promise.allSettled(
-    dueAutomations.map(async (a) => {
+    automationsToRun.map(async (a) => {
       const result = await executeAutomation(a.id);
       return { id: a.id, name: a.name, ...result };
     })
@@ -68,11 +83,11 @@ export async function GET(request: NextRequest) {
 
   trackServer("automation_cron_executed", "system", {
     total: automations.length,
-    executed: dueAutomations.length,
+    executed: automationsToRun.length,
   });
 
   return NextResponse.json({
-    executed: dueAutomations.length,
+    executed: automationsToRun.length,
     total: automations.length,
     results: summary,
   });
