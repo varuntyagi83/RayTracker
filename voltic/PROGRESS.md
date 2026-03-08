@@ -1,6 +1,6 @@
 # Voltic — Development Progress
 
-> Last updated: 2026-03-08 (QA Sessions — Rounds 1–4 complete, Round 5 in progress)
+> Last updated: 2026-03-08 (QA Sessions — Rounds 1–7 complete)
 
 ---
 
@@ -28,12 +28,11 @@ Conducted 4 iterative deep QA audits of the production codebase. All 5 CRITICAL 
 - `7a2fdcd` — parseInt radix, JSON.parse guards, AbortController, blob URL cleanup, revalidatePath, upload Content-Length (H-13, H-14, H-15, H-16, M-9, M-10, M-11)
 - `e1de9e4` — Round 5 audit: batch MIME validation, filename sanitization (H-18, M-12)
 - `1771d60` — Round 5 continued: cron atomic claim, pagination cap, parallel mentions, demo mode fix, silent error logging (H-8, M-4, M-6, M-8, L-3)
+- `271af1d` — Rounds 6: Slack OAuth CSRF (H-17), DST-safe timezone (M-5), variation cursor pagination (H-9), null standardization (L-1)
+- `4dc5296` — Round 7: workspace_id in error logs (L-2); M-7 marked Won't Fix
 
-**Current status: 28/38 bugs fixed. 2 false positives. 8 remaining open.**
-Remaining open: H-9 (variation pagination), H-11 (Redis rate limiter), H-17 (Slack OAuth CSRF), M-5 (DST timezone), M-7 (magic numbers), L-1 (null inconsistency), L-2 (structured logging).
-
-
-**Remaining open issues (13):** H-8 (cron duplicate execution), H-9 (variation pagination), H-10 (asset upload server limit), H-11 (in-memory rate limiter), H-12 (parseInt in meta callback), M-4 (demo mode), M-5 (DST timezone), M-6 (silent error suppression), M-7 (magic numbers), M-8 (pagination cap), L-1, L-2, L-3.
+**Current status: 33/38 bugs fixed. 3 Won't Fix. 2 remaining open.**
+Remaining open: H-11 (Redis rate limiter — needs Upstash infrastructure), M-H open (see BUGS_ISSUES.md).
 
 ---
 

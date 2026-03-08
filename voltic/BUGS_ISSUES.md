@@ -77,7 +77,7 @@
 | ID | Status | File | Description |
 |----|--------|------|-------------|
 | L-1 | ✅ Fixed | `src/lib/data/variations.ts` | **Inconsistent null handling** — `VariationWithContext.assetName` and `assetImageUrl` typed as `string | null`; `getAllVariations` returns `null` instead of `"Unknown"` and `""` for missing fields. Commit: `271af1d` |
-| L-2 | ✅ Fixed | Multiple API routes | **Missing structured error context in logs** — added `workspace_id` to error logs in composite, composite-batch, download, generate-background, generate-image, and decompose routes using `let workspaceId` hoisted before try block. Commit: pending |
+| L-2 | ✅ Fixed | Multiple API routes | **Missing structured error context in logs** — added `workspace_id` to error logs in composite, composite-batch, download, generate-background, generate-image, and decompose routes using `let workspaceId` hoisted before try block. Commit: `4dc5296` |
 | L-3 | ✅ Fixed | `src/lib/data/studio.ts`:302 | **Sequential mention resolution** — `resolveMentions()` now uses `Promise.all()` to resolve all mentions in parallel; reduces latency by N-1 round-trips. Commit: `1771d60` |
 
 ---
