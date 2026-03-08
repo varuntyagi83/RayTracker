@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe/client";
 import { addCredits } from "@/lib/data/credits";
 import { trackServer } from "@/lib/analytics/posthog-server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * POST /api/webhooks/stripe
@@ -22,7 +23,6 @@ export async function POST(request: NextRequest) {
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET not set");
     return NextResponse.json(
       { error: "Webhook secret not configured" },
       { status: 500 }
@@ -37,7 +37,6 @@ export async function POST(request: NextRequest) {
     event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[stripe-webhook] Signature verification failed:", message);
     return NextResponse.json(
       { error: `Webhook signature verification failed: ${message}` },
       { status: 400 }
@@ -51,7 +50,7 @@ export async function POST(request: NextRequest) {
       const metadata = session.metadata;
 
       if (!metadata?.workspace_id || !metadata?.credits) {
-        console.error("[stripe-webhook] Missing metadata on session", session.id);
+        trackServer("stripe_webhook_missing_metadata", "system", { session_id: session.id });
         break;
       }
 
@@ -60,12 +59,29 @@ export async function POST(request: NextRequest) {
       const packageId = metadata.package_id || "unknown";
       const userId = metadata.user_id || "unknown";
 
-      // Add credits to workspace
+      // Idempotency guard: if this session was already processed, skip.
+      // Stripe retries webhooks on 5xx — without this, credits would be
+      // added multiple times for a single purchase.
+      const admin = createAdminClient();
+      const { data: existing } = await admin
+        .from("credit_transactions")
+        .select("id")
+        .eq("reference_id", session.id)
+        .limit(1)
+        .single();
+
+      if (existing) {
+        // Already processed — return 200 so Stripe stops retrying
+        break;
+      }
+
+      // Add credits to workspace, storing session.id as reference_id
       const result = await addCredits(
         workspaceId,
         credits,
         "purchase",
-        `Stripe purchase: ${credits} credits (${packageId} package)`
+        `Stripe purchase: ${credits} credits (${packageId} package)`,
+        session.id
       );
 
       if (result.success) {
@@ -76,14 +92,11 @@ export async function POST(request: NextRequest) {
           stripe_session_id: session.id,
           amount: session.amount_total ? session.amount_total / 100 : 0,
         });
-        console.log(
-          `[stripe-webhook] Added ${credits} credits to workspace ${workspaceId}`
-        );
       } else {
-        console.error(
-          `[stripe-webhook] Failed to add credits:`,
-          result.error
-        );
+        trackServer("credits_purchase_failed", userId, {
+          workspace_id: workspaceId,
+          error: result.error,
+        });
       }
       break;
     }

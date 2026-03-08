@@ -60,7 +60,8 @@ export async function addCredits(
   workspaceId: string,
   amount: number,
   type: TransactionType = "purchase",
-  description?: string
+  description?: string,
+  referenceId?: string
 ): Promise<{ success: boolean; newBalance: number; error?: string }> {
   const supabase = createAdminClient();
 
@@ -101,6 +102,7 @@ export async function addCredits(
     amount,
     type,
     description: txDescription,
+    reference_id: referenceId ?? null,
   });
 
   return { success: true, newBalance };

@@ -150,36 +150,47 @@ export async function refundCredits(
 ): Promise<void> {
   const supabase = createAdminClient();
 
-  // Increment balance with optimistic concurrency
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("credit_balance")
-    .eq("id", workspaceId)
-    .single();
+  // Retry up to 3 times to handle concurrent balance modifications.
+  // The previous implementation only retried on updateErr (a Supabase/network
+  // error), but Supabase returns error:null when 0 rows are updated — meaning
+  // an optimistic-lock collision was silently ignored and the refund was lost.
+  // Now we check updated.length to detect the 0-rows case and retry properly.
+  let refunded = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: workspace } = await supabase
+      .from("workspaces")
+      .select("credit_balance")
+      .eq("id", workspaceId)
+      .single();
 
-  if (workspace) {
-    // Optimistic lock: only update if balance hasn't changed since read
-    const { error: updateErr } = await supabase
+    if (!workspace) break;
+
+    // Skip for unlimited-credit accounts
+    if (isUnlimitedCredits(workspace.credit_balance)) {
+      refunded = true;
+      break;
+    }
+
+    const { data: updated } = await supabase
       .from("workspaces")
       .update({ credit_balance: workspace.credit_balance + amount })
       .eq("id", workspaceId)
-      .eq("credit_balance", workspace.credit_balance);
+      .eq("credit_balance", workspace.credit_balance)
+      .select("credit_balance");
 
-    if (updateErr) {
-      // Retry once on conflict — re-read and re-apply
-      const { data: retry } = await supabase
-        .from("workspaces")
-        .select("credit_balance")
-        .eq("id", workspaceId)
-        .single();
-      if (retry) {
-        await supabase
-          .from("workspaces")
-          .update({ credit_balance: retry.credit_balance + amount })
-          .eq("id", workspaceId)
-          .eq("credit_balance", retry.credit_balance);
-      }
+    if (updated?.length) {
+      refunded = true;
+      break;
     }
+    // 0 rows updated = another request changed credit_balance between our read
+    // and write — loop and re-read the current balance before retrying
+  }
+
+  if (!refunded) {
+    console.error(
+      `[refundCredits] Failed to refund ${amount} credits to workspace ${workspaceId} after 3 attempts`
+    );
+    return;
   }
 
   // Record refund transaction

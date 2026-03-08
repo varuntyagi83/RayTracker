@@ -16,8 +16,9 @@ function isPublicUrl(rawUrl: string): boolean {
   try {
     const { protocol, hostname } = new URL(rawUrl);
     if (protocol !== "https:") return false;
-    // Block loopback and private ranges
-    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1|0\.0\.0\.0)/i;
+    // Block loopback, private ranges, and cloud metadata endpoints.
+    // 169.254.x.x covers AWS IMDSv1 (169.254.169.254) and GCP metadata.
+    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
     return !BLOCKED.test(hostname);
   } catch {
     return false;
