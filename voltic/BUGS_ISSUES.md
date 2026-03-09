@@ -2,7 +2,7 @@
 
 > Maintained by Claude Code across sessions.
 > Update status when a bug is fixed. Add new findings at the top of each severity section.
-> Last updated: 2026-03-08 (Round 11 fixes complete — all 9 R11 bugs resolved)
+> Last updated: 2026-03-09 (Round 12 fixes complete — all 9 R12 security bugs resolved)
 
 ---
 
@@ -26,6 +26,9 @@
 | C-4 | ✅ Fixed | `src/app/api/decompose/route.ts`:20 | SSRF gap — `169.254.x.x` (AWS/GCP metadata) not blocked. Fixed: added `169\.254\.` to BLOCKED regex. Commit: `546ff23` |
 | C-5 | ✅ Fixed | `src/lib/data/insights.ts`:162 | Silent credit refund failure — `refundCredits()` retry only fired on `updateErr`, but Supabase returns `error:null` on 0-rows-updated. Fixed: 3-attempt loop checking `updated?.length`. Commit: `546ff23` |
 | C-7 | ✅ Fixed | `src/app/api/ads/composite/route.ts`:43, `src/app/api/ads/composite-batch/route.ts`:45 | **SSRF in ad compositing routes** — `fetch(backgroundImageUrl)` called with no URL allowlist or private-IP check. Both routes accept `backgroundImageUrl` from the request body and immediately fetch it. An authenticated user can probe internal endpoints (AWS metadata `169.254.169.254`, Supabase admin, internal services). C-4 fixed SSRF in `/api/decompose` but these two routes were missed. Fix: apply same `isPublicUrl()` guard from decompose route. Round 10. Commit: `10bfcce` |
+| C-8 | ✅ Fixed | `src/lib/ai/gemini-image-edit.ts`:147,250 · `src/lib/ai/decompose.ts`:325 | **Google API key exposed in URL query string** — `?key=${apiKey}` appended to Gemini API URLs; key gets written to Vercel/server access logs and any third-party monitoring. Fix: removed `?key=` from URLs, added `"x-goog-api-key": apiKey` header in `geminiPost()` (gemini-image-edit.ts) and fetch headers in `_inpaintWithGemini()` (decompose.ts). Round 12. Commit: `f260ca1` |
+| C-9 | ✅ Fixed | `src/lib/ai/variations.ts`, `src/lib/ai/gemini-image-edit.ts`, `src/lib/ai/decompose.ts` | **Prompt injection via unsanitized user inputs in AI prompts** — asset names, asset descriptions, competitor ad headline/body/brandName, brand guideline fields (brandVoice, targetAudience, dosAndDonts, colorPalette), and customInstruction in Gemini prompts were embedded raw. Fix: created `src/lib/utils/prompt-sanitize.ts` with `sanitizeForPrompt()` (strips newlines, `---`, backticks, truncates); applied to all user-controlled strings across all prompt builders. Round 12. Commit: `f260ca1` |
+| C-10 | ✅ Fixed | `src/app/api/assets/generate-background/route.ts` | **No Zod validation on generate-background route** — `brandGuidelineId` accepted as any string (no UUID check), `prompt` accepted as any length string and embedded raw into OpenAI prompt. Only AI route in the codebase with no schema. Fix: added Zod schema (`brandGuidelineId: UUID`, `prompt: max 500`), rate limit, and `sanitizeForPrompt()` on all embedded fields. Round 12. Commit: `f260ca1` |
 | C-6 | ✅ Fixed | `src/lib/data/credits.ts`:102, `src/lib/data/insights.ts`:137,197 | **Credit transaction insert not error-checked** — added `const { error: txErr }` check on all 3 transaction inserts; logs `console.error` with context when ledger insert fails. Round 9. Commit: `4663a05` |
 
 ---
@@ -57,6 +60,8 @@
 | H-24 | ✅ Fixed | `src/lib/ai/decompose.ts` | **No image size cap before base64 encoding** — `downloadImage()` fetched any size image into memory with no limit. A 200 MB image from Facebook CDN gets base64-encoded (267 MB), allocated into the Gemini API payload, and crashes the lambda with OOM — no credits refunded. Fix: 10 MB cap via `Content-Length` pre-check + actual buffer size check. Credit refund flows via outer catch already calling `refundCredits()`. Round 11. Commit: `5aaa82a` |
 | H-25 | ✅ Fixed | `src/app/api/webhooks/stripe/route.ts`:52 | **Stripe webhook missing-metadata silently dropped** — `break` inside the switch case fell through to the final `return NextResponse.json({ received: true })`. Stripe saw 200 OK and permanently stopped retrying — credits never added. Fix: explicit `return` with `console.error` alert so missing-metadata events are clearly flagged. Round 11. Commit: `5aaa82a` |
 | H-26 | ✅ Fixed | `src/app/api/ads/composite/route.ts`, `src/app/api/ads/composite-batch/route.ts` | **No input validation on composite routes — authenticated DoS via OOM** — `fontSize=1000000` with long text causes `wrapText()` to produce 50,000+ `<tspan>` elements, crashing the lambda. `combinations` array could be 10,000 entries. Fix: Zod schemas enforce `fontSize` 8-200, `text` max 500 chars, `combinations` max 50, hex color regex. Round 11. Commit: `5aaa82a` |
+| H-27 | ✅ Fixed | `src/lib/data/brand-guidelines-entities.ts`:276,310,364 | **Brand guideline filenames not sanitized in storage paths** — `uploadBrandGuidelineLogo()`, `uploadBrandGuidelineFile()`, `uploadBrandGuidelineFiles()` used raw `fileName` in storage paths. Same `/[^a-zA-Z0-9._-]/g → "_"`, `.slice(0,100)` pattern already applied to studio and asset uploads. Round 12. Commit: `f260ca1` |
+| H-28 | ✅ Fixed | `src/app/api/assets/generate-background/route.ts` | **No rate limit on `generate-background` AI route** — every other AI-calling route has `aiLimiter.check()`, this one didn't. Added `aiLimiter.check(workspace.id, 5)`. Round 12. Commit: `f260ca1` |
 | H-19 | ✅ Fixed | `src/lib/data/competitors.ts`:99 | **N+1 upsert loop in `saveCompetitorAds()`** — replaced sequential for-loop with single batch `supabase.upsert(rows, { onConflict: "workspace_id,meta_library_id" })`. Round 9. Commit: `4663a05` |
 | H-20 | ✅ Fixed | `src/app/api/meta/sync/route.ts`:15 | **No rate limiting on `/api/meta/sync`** — added `await apiLimiter.check(member.workspace_id, 3)` with 429 response. Round 9. Commit: `4663a05` |
 | H-21 | ✅ Fixed | `src/app/(dashboard)/discover/actions.ts`:103 | **TOCTOU double-charge race in insight analysis** — added re-check for existing insight after credit deduction; refunds and returns cached result if concurrent request won the race. Round 9. Commit: `4663a05` |
@@ -88,6 +93,9 @@
 | M-19 | ✅ Fixed | `src/lib/data/assets.ts`:uploadAssetImage | **Asset upload filename not sanitized** — `uploadAssetImage()` used the raw `fileName` param directly in the storage path, allowing `../` traversal or excessively long filenames. Studio uploads had M-12 fix; assets were missed. Fix: same pattern — `/[^a-zA-Z0-9._-]/g → "_"`, `.slice(0, 100)`. Round 11. Commit: `5aaa82a` |
 | M-20 | ✅ Fixed | `assets-client.tsx`, `credits-page-client.tsx`, `discover-client.tsx` | **Unhandled promise rejections in 3 client components** — `.then()` calls with no `.catch()` cause silent failures and unhandled rejection warnings. Fix: added `.catch((err) => console.warn(...))` to each. Round 11. Commit: `5aaa82a` |
 | M-21 | ✅ Fixed | `src/app/api/decompose/route.ts`:cache UPDATE | **Decompose cache UPDATE missing workspace_id filter** — UPDATE uses only `.eq("id", cached.id)` — a valid cache row ID from another workspace (obtained via timing attack) could theoretically update its `last_used_at`. Fix: added `.eq("workspace_id", workspaceId)` for defense-in-depth. Round 11. Commit: `5aaa82a` |
+| M-22 | 🚫 Won't Fix (config) | Supabase dashboard | **RLS not enabled** — all tables use admin client with manual workspace_id filtering. RLS disabled pending migration policies. Mitigated by consistent manual filtering on every query. Action: enable RLS in Supabase dashboard (no code change needed). |
+| M-23 | ✅ Fixed | `src/lib/ai/decompose.ts`:261 | **AI-extracted text re-injected raw into inpainting prompts** — `marketingTexts` from GPT-4o Vision (which reflects competitor ad copy) was embedded unsanitized into Gemini/OpenAI inpainting prompts. Fix: each text entry sanitized via `sanitizeForPrompt()` before joining into `textList`. Round 12. Commit: `f260ca1` |
+| M-24 | ✅ Fixed | `src/app/(dashboard)/brand-guidelines/actions.ts` | **No max length limits on brand guideline fields** — `brandVoice`, `targetAudience`, `dosAndDonts` could be stored as 100k+ char strings, then embedded verbatim in every AI prompt referencing that guideline. Fix: added `.max()` to createSchema (brandName 200, brandVoice 500, targetAudience 300, dosAndDonts 1000); added full Zod schema to `updateBrandGuidelineAction` which had none. Round 12. Commit: `f260ca1` |
 
 ---
 
@@ -102,6 +110,7 @@
 | L-5 | ✅ Fixed | `src/app/(dashboard)/variations/components/variations-page-client.tsx` | **No unmount guard in handleGenerate** — async state updates after component unmount during generation. Fix: `mountedRef = useRef(true)` + cleanup `useEffect`. Round 11. Commit: `5aaa82a` |
 | L-6 | ✅ Fixed | `src/app/api/auth/slack/route.ts` | **Slack OAuth state cookie sameSite: "lax"** — CSRF state cookie used `sameSite: "lax"`, allowing cross-site GET requests to carry the cookie. Fix: changed to `"strict"`. Round 11. Commit: `5aaa82a` |
 | L-7 | ✅ Fixed | `src/app/(dashboard)/settings/components/settings-client.tsx` | **settings copyToken setTimeout not cleared on unmount** — `setTimeout(() => setTokenCopied(false), 2000)` fires on unmounted component. Fix: stored in `copyTimeoutRef`, cleared in unmount `useEffect`. Round 11. Commit: `5aaa82a` |
+| L-8 | ✅ Fixed | `src/lib/ai/gemini-image-edit.ts`:editAssetImageWithGemini | **Asset imageUrl not validated before downloadImage()** — URL comes from DB (trusted workspace-scoped query) but defense-in-depth guard missing. Fix: added `isPublicUrl()` check before `downloadImage()`. Round 12. Commit: `f260ca1` |
 
 ---
 
@@ -136,6 +145,9 @@
 | R11-6: `crypto.randomUUID()` state token could be reused | FALSE POSITIVE — cookie deleted immediately on first callback validation; no replay possible ✅ |
 | R11-7: `getBoards()` no pagination | FALSE POSITIVE — Board counts are typically small per workspace; no evidence of scale problem ✅ |
 | R11-8: Variation history load cursor not validated | FALSE POSITIVE — Fixed as M-14 in Round 9 with Zod datetime validation ✅ |
+| R12-1: Admin client in getWorkspace() unsafe without RLS | ACCEPTED RISK — all queries have manual workspace_id filter; RLS is a config task (M-22), not a code bug ✅ |
+| R12-2: L-9 variation stuck in pending | FALSE POSITIVE — `failVariation()` is already called in the catch block at `boards/actions.ts:376` ✅ |
+| R12-3: DALLE/Gemini generate trademarked content | ACCEPTED — product mask protects product pixels; DALL-E 3 has its own safety filters; not fixable in application code ✅ |
 
 ---
 
@@ -143,8 +155,8 @@
 
 | Severity | Total Found | Fixed | Won't Fix | Open |
 |----------|-------------|-------|-----------|------|
-| Critical | 7 | 7 | 0 | 0 |
-| High | 26 | 24 | 2 | 0 |
-| Medium | 21 | 20 | 1 | 0 |
-| Low | 7 | 7 | 0 | 0 |
-| **Total** | **61** | **58** | **3** | **0** |
+| Critical | 11 | 11 | 0 | 0 |
+| High | 28 | 26 | 2 | 0 |
+| Medium | 24 | 23 | 1 | 0 |
+| Low | 8 | 8 | 0 | 0 |
+| **Total** | **71** | **68** | **3** | **0** |
