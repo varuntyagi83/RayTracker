@@ -1,5 +1,6 @@
 import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
 import { downloadImage } from "./decompose";
+import { sanitizeForPrompt } from "@/lib/utils/prompt-sanitize";
 import type { CreativeOptions, BrandGuidelines, VariationStrategy } from "@/types/variations";
 import {
   PRODUCT_ANGLE_LABELS,
@@ -14,12 +15,32 @@ const STORAGE_BUCKET = "brand-assets";
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
+// ─── SSRF guard ──────────────────────────────────────────────────────────────
+// Asset imageUrls come from Supabase Storage (trusted) but we validate anyway
+// in case the DB row was ever written with a tampered URL (L-8).
+
+function isPublicUrl(rawUrl: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(rawUrl);
+    if (protocol !== "https:") return false;
+    const BLOCKED =
+      /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
+    return !BLOCKED.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ─── Gemini fetch with exponential-backoff retry ─────────────────────────────
 // Retries on transient failures (429, 503, 500) with 1s → 2s → 4s delays.
 
-async function geminiPost(url: string, body: string, signal?: AbortSignal): Promise<Response> {
+async function geminiPost(url: string, body: string, signal?: AbortSignal, apiKey?: string): Promise<Response> {
   const RETRYABLE = new Set([429, 500, 503]);
   let lastErr: Error = new Error("geminiPost: no attempts made");
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // Pass API key as a request header instead of a URL query parameter to avoid
+  // the key being logged in server access logs, Vercel logs, or third-party systems.
+  if (apiKey) headers["x-goog-api-key"] = apiKey;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
       await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
@@ -27,7 +48,7 @@ async function geminiPost(url: string, body: string, signal?: AbortSignal): Prom
     try {
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body,
         signal,
       });
@@ -90,7 +111,7 @@ export function buildGeminiEditPrompt(
   }
 
   if (creativeOptions?.customInstruction) {
-    directives.push(creativeOptions.customInstruction);
+    directives.push(sanitizeForPrompt(creativeOptions.customInstruction, 200));
   }
 
   if (creativeOptions?.aspectRatio) {
@@ -101,7 +122,7 @@ export function buildGeminiEditPrompt(
 
   if (brandGuidelines?.colorPalette) {
     directives.push(
-      `Use the brand color palette where appropriate: ${brandGuidelines.colorPalette}.`
+      `Use the brand color palette where appropriate: ${sanitizeForPrompt(brandGuidelines.colorPalette, 200)}.`
     );
   }
 
@@ -118,8 +139,8 @@ export function buildGeminiEditPrompt(
   }
 
   return [
-    `Edit this product image of "${asset.name}" for a social media ad.`,
-    asset.description ? `Product context: ${asset.description}.` : "",
+    `Edit this product image of "${sanitizeForPrompt(asset.name, 200)}" for a social media ad.`,
+    asset.description ? `Product context: ${sanitizeForPrompt(asset.description)}.` : "",
     "",
     "A product mask is provided as the second image — WHITE areas are the product, BLACK areas are the background.",
     "",
@@ -144,7 +165,7 @@ async function _generateProductMask(
   apiKey: string
 ): Promise<Buffer> {
   const response = await geminiPost(
-    `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent`,
     JSON.stringify({
       contents: [
         {
@@ -172,7 +193,8 @@ async function _generateProductMask(
           responseModalities: ["IMAGE"],
         },
       }),
-    AbortSignal.timeout(60_000)
+    AbortSignal.timeout(60_000),
+    apiKey
   );
 
   if (!response.ok) {
@@ -236,7 +258,10 @@ export async function editAssetImageWithGemini(
     throw new Error("GOOGLE_GENERATIVE_AI_API_KEY not set — cannot use Gemini image editing");
   }
 
-  // 1. Download the source asset image
+  // 1. Download the source asset image (validate URL first — L-8)
+  if (!isPublicUrl(imageUrl)) {
+    throw new Error("Asset image URL must be a public HTTPS URL");
+  }
   const imageBuffer = await downloadImage(imageUrl);
 
   // 2. Generate product segmentation mask (white = product, black = background)
@@ -247,7 +272,7 @@ export async function editAssetImageWithGemini(
 
   // 4. Call Gemini with original image + mask (same two-image pattern as decompose.ts)
   const response = await geminiPost(
-    `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+    `${GEMINI_API_BASE}/${GEMINI_MODEL}:generateContent`,
     JSON.stringify({
       contents: [
         {
@@ -275,7 +300,8 @@ export async function editAssetImageWithGemini(
         responseModalities: ["TEXT", "IMAGE"],
       },
     }),
-    AbortSignal.timeout(120_000)
+    AbortSignal.timeout(120_000),
+    apiKey
   );
 
   if (!response.ok) {

@@ -273,7 +273,9 @@ export async function uploadBrandGuidelineLogo(
 ): Promise<{ url?: string; error?: string }> {
   await ensureStorageBucket();
   const supabase = createAdminClient();
-  const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${fileName}`;
+  // Sanitize filename — same pattern as studio/asset uploads (H-27)
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+  const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${safeFileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from(STORAGE_BUCKET)
@@ -307,7 +309,9 @@ export async function uploadBrandGuidelineFile(
 ): Promise<{ file?: BrandGuidelineFile; error?: string }> {
   await ensureStorageBucket();
   const supabase = createAdminClient();
-  const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${fileName}`;
+  // Sanitize filename — same pattern as studio/asset uploads (H-27)
+  const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+  const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${safeFileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from(STORAGE_BUCKET)
@@ -361,7 +365,9 @@ export async function uploadBrandGuidelineFiles(
   // Upload all files to storage in parallel
   const uploadResults = await Promise.all(
     files.map(async ({ fileName, fileBuffer, contentType, fileSize }) => {
-      const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${fileName}`;
+      // Sanitize filename — same pattern as studio/asset uploads (H-27)
+      const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+      const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${safeFileName}`;
 
       const { error: uploadError } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -377,7 +383,7 @@ export async function uploadBrandGuidelineFiles(
       } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
 
       return {
-        name: fileName,
+        name: safeFileName,
         url: publicUrl,
         path: storagePath,
         size: fileSize,

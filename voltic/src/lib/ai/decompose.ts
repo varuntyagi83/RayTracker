@@ -2,6 +2,7 @@ import { toFile } from "openai";
 import sharp from "sharp";
 import { getOpenAIClient } from "./openai";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { sanitizeForPrompt } from "@/lib/utils/prompt-sanitize";
 import type { BoundingBox, DecompositionResult } from "@/types/decomposition";
 
 // ─── System Prompt ───────────────────────────────────────────────────────────
@@ -258,7 +259,10 @@ export async function generateCleanProductImage(
   const imgHeight = metadata.height ?? 1024;
   const maskBuffer = await generateMask(imgWidth, imgHeight, boundingBoxes);
 
-  const textList = marketingTexts.map((t) => `"${t}"`).join(", ");
+  // Sanitize AI-extracted text before re-embedding into inpainting prompts.
+  // Although the text originated from GPT-4o Vision, it reflects the competitor
+  // ad's actual copy — which could contain injected instructions (M-23).
+  const textList = marketingTexts.map((t) => `"${sanitizeForPrompt(t, 200)}"`).join(", ");
 
   // Try Gemini 2.5 Flash Image first (better preservation of original)
   try {
@@ -322,7 +326,8 @@ Fill the removed text areas seamlessly with the surrounding background color, te
 CRITICAL: Do NOT alter the product, product packaging text, background, props, colors, or composition. ONLY remove the digitally-added marketing overlay text and fill with background.`;
 
   const RETRYABLE = new Set([429, 500, 503]);
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
+  // Key passed as header — not in URL — to avoid logging in server/Vercel access logs (C-8)
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`;
   const geminiBody = JSON.stringify({
     contents: [
       {
@@ -360,7 +365,7 @@ CRITICAL: Do NOT alter the product, product packaging text, background, props, c
     try {
       response = await fetch(geminiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
         body: geminiBody,
         signal: AbortSignal.timeout(120_000),
       });

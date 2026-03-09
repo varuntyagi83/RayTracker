@@ -49,16 +49,16 @@ export async function fetchBrandGuidelineAction(input: {
 
 const createSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
-  brandName: z.string().optional(),
-  brandVoice: z.string().optional(),
+  brandName: z.string().max(200).optional(),
+  brandVoice: z.string().max(500).optional(),
   colorPalette: z.array(z.object({ hex: z.string(), name: z.string() })).optional(),
   typography: z.object({
-    headingFont: z.string().optional(),
-    bodyFont: z.string().optional(),
+    headingFont: z.string().max(100).optional(),
+    bodyFont: z.string().max(100).optional(),
     sizes: z.record(z.string(), z.string()).optional(),
   }).optional(),
-  targetAudience: z.string().optional(),
-  dosAndDonts: z.string().optional(),
+  targetAudience: z.string().max(300).optional(),
+  dosAndDonts: z.string().max(1000).optional(),
   isDefault: z.boolean().optional(),
 });
 
@@ -76,21 +76,32 @@ export async function createBrandGuidelineAction(
 
 // ─── Update ─────────────────────────────────────────────────────────────────
 
-export async function updateBrandGuidelineAction(input: {
-  id: string;
-  name?: string;
-  brandName?: string;
-  brandVoice?: string;
-  colorPalette?: ColorSwatch[];
-  typography?: Typography;
-  targetAudience?: string;
-  dosAndDonts?: string;
-  isDefault?: boolean;
-}): Promise<{ success: boolean; error?: string }> {
+const updateSchema = z.object({
+  id: z.string().uuid("id must be a valid UUID"),
+  name: z.string().min(1).max(100).optional(),
+  brandName: z.string().max(200).optional(),
+  brandVoice: z.string().max(500).optional(),
+  colorPalette: z.array(z.object({ hex: z.string(), name: z.string() })).optional(),
+  typography: z.object({
+    headingFont: z.string().max(100).optional(),
+    bodyFont: z.string().max(100).optional(),
+    sizes: z.record(z.string(), z.string()).optional(),
+  }).optional(),
+  targetAudience: z.string().max(300).optional(),
+  dosAndDonts: z.string().max(1000).optional(),
+  isDefault: z.boolean().optional(),
+});
+
+export async function updateBrandGuidelineAction(
+  input: z.input<typeof updateSchema>
+): Promise<{ success: boolean; error?: string }> {
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
 
-  const { id, ...updates } = input;
+  const parsed = updateSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
+
+  const { id, ...updates } = parsed.data;
   return await updateBrandGuideline(workspace.id, id, updates);
 }
 

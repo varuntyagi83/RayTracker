@@ -1,4 +1,5 @@
 import { getOpenAIClient } from "./openai";
+import { sanitizeForPrompt } from "@/lib/utils/prompt-sanitize";
 import type {
   VariationStrategy,
   VariationTextResult,
@@ -22,11 +23,11 @@ export function buildBrandGuidelinesSection(guidelines?: BrandGuidelines): strin
   if (!guidelines) return "";
 
   const parts: string[] = [];
-  if (guidelines.brandName) parts.push(`Brand Name: ${guidelines.brandName}`);
-  if (guidelines.brandVoice) parts.push(`Brand Voice: ${guidelines.brandVoice}`);
-  if (guidelines.colorPalette) parts.push(`Color Palette: ${guidelines.colorPalette}`);
-  if (guidelines.targetAudience) parts.push(`Target Audience: ${guidelines.targetAudience}`);
-  if (guidelines.dosAndDonts) parts.push(`Guidelines: ${guidelines.dosAndDonts}`);
+  if (guidelines.brandName) parts.push(`Brand Name: ${sanitizeForPrompt(guidelines.brandName, 200)}`);
+  if (guidelines.brandVoice) parts.push(`Brand Voice: ${sanitizeForPrompt(guidelines.brandVoice)}`);
+  if (guidelines.colorPalette) parts.push(`Color Palette: ${sanitizeForPrompt(guidelines.colorPalette, 200)}`);
+  if (guidelines.targetAudience) parts.push(`Target Audience: ${sanitizeForPrompt(guidelines.targetAudience)}`);
+  if (guidelines.dosAndDonts) parts.push(`Guidelines: ${sanitizeForPrompt(guidelines.dosAndDonts)}`);
 
   if (parts.length === 0) return "";
 
@@ -48,14 +49,7 @@ export function buildCreativeOptionsSection(options?: CreativeOptions): string {
   if (options.background) parts.push(`Background: ${BACKGROUND_STYLE_LABELS[options.background]}`);
   if (options.aspectRatio) parts.push(`Aspect ratio: ${ASPECT_RATIO_LABELS[options.aspectRatio]}`);
   if (options.customInstruction) {
-    // Sanitize to prevent prompt injection: strip newlines/section delimiters
-    // and truncate, then prefix to isolate from system instructions.
-    const safe = options.customInstruction
-      .replace(/[\r\n]+/g, " ")
-      .replace(/---/g, "—")
-      .trim()
-      .slice(0, 200);
-    parts.push(`User creative note: ${safe}`);
+    parts.push(`User creative note: ${sanitizeForPrompt(options.customInstruction, 200)}`);
   }
 
   if (parts.length === 0) return "";
@@ -142,14 +136,14 @@ export function buildTextPrompt(
     channelLine,
     "",
     "--- COMPETITOR AD (inspiration) ---",
-    `Brand: ${ad.brandName ?? "Unknown"}`,
-    `Headline: ${ad.headline ?? "(none)"}`,
-    `Body: ${ad.body ?? "(none)"}`,
+    `Brand: ${sanitizeForPrompt(ad.brandName) || "Unknown"}`,
+    `Headline: ${sanitizeForPrompt(ad.headline) || "(none)"}`,
+    `Body: ${sanitizeForPrompt(ad.body) || "(none)"}`,
     `Format: ${ad.format}`,
     "",
     "--- YOUR PRODUCT ---",
-    `Product: ${asset.name}`,
-    `Description: ${asset.description ?? "(no description)"}`,
+    `Product: ${sanitizeForPrompt(asset.name, 200)}`,
+    `Description: ${sanitizeForPrompt(asset.description) || "(no description)"}`,
     buildBrandGuidelinesSection(brandGuidelines),
     "",
     "Match the tone and style of the original ad but adapt it for the new product.",
@@ -177,8 +171,8 @@ export function buildAssetTextPrompt(
     channelLine,
     "",
     "--- YOUR PRODUCT ---",
-    `Product: ${asset.name}`,
-    `Description: ${asset.description ?? "(no description)"}`,
+    `Product: ${sanitizeForPrompt(asset.name, 200)}`,
+    `Description: ${sanitizeForPrompt(asset.description) || "(no description)"}`,
     buildCreativeOptionsSection(creativeOptions),
     buildBrandGuidelinesSection(brandGuidelines),
     "",
@@ -232,14 +226,14 @@ export function buildImagePrompt(
   brandGuidelines?: BrandGuidelines
 ): string {
   const brandStyle = brandGuidelines?.colorPalette
-    ? ` Use the brand color palette: ${brandGuidelines.colorPalette}.`
+    ? ` Use the brand color palette: ${sanitizeForPrompt(brandGuidelines.colorPalette, 200)}.`
     : "";
 
   return [
     "CRITICAL: This image must contain ZERO text, ZERO letters, ZERO words, ZERO logos, ZERO watermarks, ZERO labels, ZERO brand names — purely visual, no typography of any kind.",
-    `Create a professional Meta (Facebook/Instagram) ad image featuring a product: ${asset.name}.`,
-    asset.description ? `Product context: ${asset.description}` : "",
-    `Inspired by the visual style of ${ad.brandName ?? "a competitor"}'s ${ad.format} ad.`,
+    `Create a professional Meta (Facebook/Instagram) ad image featuring a product: ${sanitizeForPrompt(asset.name, 200)}.`,
+    asset.description ? `Product context: ${sanitizeForPrompt(asset.description)}` : "",
+    `Inspired by the visual style of ${sanitizeForPrompt(ad.brandName, 100) || "a competitor"}'s ${ad.format} ad.`,
     IMAGE_STYLE_NOTES[strategy],
     `The image should be suitable for a social media ad — clean, modern, high-contrast, attention-grabbing.${brandStyle}`,
     "Remember: absolutely no text, letters, words, numbers, logos, labels, or watermarks anywhere in the image.",
@@ -266,20 +260,20 @@ export function buildAssetImagePrompt(
     ? `The background should be ${BACKGROUND_STYLE_LABELS[creativeOptions.background].toLowerCase()}.`
     : "";
   const customLine = creativeOptions?.customInstruction
-    ? `Additional direction: ${creativeOptions.customInstruction}`
+    ? `Additional direction: ${sanitizeForPrompt(creativeOptions.customInstruction, 200)}`
     : "";
   const aspectLine = creativeOptions?.aspectRatio
     ? `The image should be composed for a ${ASPECT_RATIO_LABELS[creativeOptions.aspectRatio].toLowerCase()} format.`
     : "";
 
   const brandStyle = brandGuidelines?.colorPalette
-    ? ` Use the brand color palette: ${brandGuidelines.colorPalette}.`
+    ? ` Use the brand color palette: ${sanitizeForPrompt(brandGuidelines.colorPalette, 200)}.`
     : "";
 
   return [
     "CRITICAL: This image must contain ZERO text, ZERO letters, ZERO words, ZERO logos, ZERO watermarks, ZERO labels, ZERO brand names — purely visual, no typography of any kind.",
-    `Create a professional Meta (Facebook/Instagram) ad image featuring a product: ${asset.name}.`,
-    asset.description ? `Product context: ${asset.description}` : "",
+    `Create a professional Meta (Facebook/Instagram) ad image featuring a product: ${sanitizeForPrompt(asset.name, 200)}.`,
+    asset.description ? `Product context: ${sanitizeForPrompt(asset.description)}` : "",
     IMAGE_STYLE_NOTES[strategy],
     angleLine,
     lightingLine,
