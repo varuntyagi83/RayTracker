@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { z } from "zod";
 import { validateExtensionToken } from "@/lib/extension/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
+import { authLimiter } from "@/lib/utils/rate-limit";
 
 const saveAdSchema = z.object({
   boardId: z.string().uuid(),
@@ -29,6 +31,15 @@ export async function POST(req: NextRequest) {
       { error: "Missing Authorization header" },
       { status: 401 }
     );
+  }
+
+  // Hash token to reduce memory footprint in rate-limit key store (L-10)
+  const tokenKey = crypto.createHash("sha256").update(token).digest("hex");
+
+  // Rate limit by token (H-30)
+  const rl = await authLimiter.check(tokenKey, 30);
+  if (!rl.success) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   const auth = await validateExtensionToken(token);

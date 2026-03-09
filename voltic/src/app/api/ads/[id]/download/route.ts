@@ -2,6 +2,18 @@ import { NextResponse } from "next/server";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { getGeneratedAd } from "@/lib/data/ads";
 
+/** Block SSRF: reject URLs pointing at private/internal networks */
+function isPublicUrl(rawUrl: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(rawUrl);
+    if (protocol !== "https:") return false;
+    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
+    return !BLOCKED.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -18,6 +30,11 @@ export async function GET(
     const ad = await getGeneratedAd(workspace.id, id);
     if (!ad) {
       return NextResponse.json({ error: "Ad not found" }, { status: 404 });
+    }
+
+    // Validate URL before fetching to prevent SSRF
+    if (!ad.imageUrl || !isPublicUrl(ad.imageUrl)) {
+      return NextResponse.json({ error: "Invalid image URL" }, { status: 400 });
     }
 
     // Fetch the image

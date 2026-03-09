@@ -11,6 +11,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendSlackMessage } from "@/lib/slack/client";
+import { decryptToken } from "@/lib/utils/token-crypto";
 import type {
   Automation,
   PerformanceConfig,
@@ -84,7 +85,8 @@ export async function executeAutomation(
     .eq("id", auto.workspace_id)
     .single();
 
-  const slackToken = workspace?.slack_access_token;
+  // Decrypt Slack token (handles encrypted and legacy plaintext — M-27)
+  const slackToken = decryptToken(workspace?.slack_access_token ?? null);
   const channel = auto.delivery?.slackChannelId ?? "";
 
   if (!slackToken) {

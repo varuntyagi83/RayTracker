@@ -5,6 +5,27 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const runtime = "nodejs";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
+
+function verifyMagicBytes(buf: Buffer, mimeType: string): boolean {
+  if (mimeType === "image/jpeg") {
+    return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  }
+  if (mimeType === "image/png") {
+    return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  }
+  if (mimeType === "image/webp") {
+    return buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP";
+  }
+  if (mimeType === "image/gif") {
+    const sig = buf.slice(0, 6).toString("ascii");
+    return sig === "GIF87a" || sig === "GIF89a";
+  }
+  if (mimeType === "application/pdf") {
+    return buf.slice(0, 4).toString("ascii") === "%PDF";
+  }
+  // Unknown type — reject
+  return false;
+}
 const MAX_FILES = 5;
 const ALLOWED_TYPES = [
   "image/jpeg",
@@ -66,6 +87,23 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Defense-in-depth: verify actual byte count (Content-Length is client-supplied
+    // and spoofable — this checks the real size after reading) (L-9 fix)
+    if (buffer.byteLength > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `File "${file.name}" exceeds 10MB limit` },
+        { status: 413 }
+      );
+    }
+
+    if (!verifyMagicBytes(buffer, file.type)) {
+      return NextResponse.json(
+        { error: "File content does not match declared type" },
+        { status: 400 }
+      );
+    }
+
     // Sanitize filename to prevent path traversal and special-char storage issues
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
     const storagePath = `${workspace.id}/studio/${Date.now()}-${safeFileName}`;

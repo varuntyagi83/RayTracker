@@ -1,11 +1,22 @@
 import { createClient } from "@supabase/supabase-js";
 
 // Admin client that bypasses RLS — use only in server actions/API routes
+let _adminClient: ReturnType<typeof createClient> | null = null;
+
 export function createAdminClient() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  if (!_adminClient) {
+    _adminClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
+    );
+  }
+  return _adminClient;
 }
 
 // Ensure the "brand-assets" storage bucket exists (idempotent, called once per cold start)

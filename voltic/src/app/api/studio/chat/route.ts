@@ -12,6 +12,17 @@ import { LLM_MODELS } from "@/types/creative-studio";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+function isPublicUrl(rawUrl: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(rawUrl);
+    if (protocol !== "https:") return false;
+    const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
+    return !BLOCKED.test(hostname);
+  } catch {
+    return false;
+  }
+}
+
 const chatSchema = z.object({
   conversationId: z.string().min(1),
   message: z.string().min(1).max(10000),
@@ -28,7 +39,7 @@ const chatSchema = z.object({
   attachments: z
     .array(
       z.object({
-        url: z.string().url(),
+        url: z.string().url().refine(isPublicUrl, { message: "Attachment URL must be a public HTTPS URL" }),
         name: z.string(),
         type: z.string(),
         size: z.number(),

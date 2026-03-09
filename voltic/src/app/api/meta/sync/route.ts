@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { apiLimiter } from "@/lib/utils/rate-limit";
+import { decryptToken } from "@/lib/utils/token-crypto";
 
 const META_API_VERSION = "v21.0";
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -56,7 +57,11 @@ export async function POST() {
     return NextResponse.json({ error: "Meta not connected" }, { status: 400 });
   }
 
-  const accessToken = workspace.meta_access_token;
+  // Decrypt token (handles both encrypted and legacy plaintext — M-27)
+  const accessToken = decryptToken(workspace.meta_access_token);
+  if (!accessToken) {
+    return NextResponse.json({ error: "Meta token could not be read — please reconnect" }, { status: 500 });
+  }
 
   // 4. Get all ad accounts for this workspace
   const { data: adAccounts } = await admin

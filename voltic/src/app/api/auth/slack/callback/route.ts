@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { encryptToken } from "@/lib/utils/token-crypto";
 
 /**
  * Slack OAuth Callback
@@ -80,12 +81,12 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Store Slack credentials on workspace
+  // Store Slack credentials on workspace (access token encrypted at rest — M-27)
   const { error: updateError } = await admin
     .from("workspaces")
     .update({
       slack_team_id: tokenData.team?.id ?? null,
-      slack_access_token: tokenData.access_token,
+      slack_access_token: encryptToken(tokenData.access_token),
       slack_team_name: tokenData.team?.name ?? null,
     })
     .eq("id", member.workspace_id);

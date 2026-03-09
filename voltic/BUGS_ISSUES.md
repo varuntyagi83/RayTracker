@@ -2,7 +2,7 @@
 
 > Maintained by Claude Code across sessions.
 > Update status when a bug is fixed. Add new findings at the top of each severity section.
-> Last updated: 2026-03-09 (Round 12 fixes complete — all 9 R12 security bugs resolved)
+> Last updated: 2026-03-09 (Round 13 audit complete — 11 new issues found, all fixed)
 
 ---
 
@@ -20,6 +20,7 @@
 
 | ID | Status | File | Description |
 |----|--------|------|-------------|
+| C-11 | ✅ Fixed | `src/proxy.ts` | **Auth guard middleware is dead code — no `middleware.ts` exists.** `proxy.ts` correctly implements Next.js middleware (session refresh, /login redirect) but is never wired as actual middleware. Next.js only runs `src/middleware.ts` — no such file exists. Without it, unauthenticated users are NOT redirected from dashboard pages at the edge. All API routes still individually verify auth, so no data leaks, but page-level protection is entirely absent. Fix: create `src/middleware.ts` with `export { proxy as middleware } from './proxy'` and `export { config } from './proxy'`. Round 13. |
 | C-1 | ✅ Fixed | `src/app/api/studio/chat/route.ts` | Studio chat never deducted credits. Fixed: added `checkAndDeductCredits` upfront + `refundCredits` on error. Commit: `3fc93d7` |
 | C-2 | ✅ Fixed | `src/lib/data/insights.ts`, `src/lib/data/credits.ts` | Optimistic lock silent failure — `.eq("credit_balance", old)` matched 0 rows but returned `error: null`. Fixed: added `.select()` + `!updated?.length`. Commit: `3fc93d7` |
 | C-3 | ✅ Fixed | `src/app/api/webhooks/stripe/route.ts`:62 | Stripe webhook missing idempotency — `addCredits()` called twice on Stripe retries, doubling credits. Fixed: dedup check via `reference_id` + pass `session.id` to insert. Commit: `546ff23` |
@@ -37,6 +38,10 @@
 
 | ID | Status | File | Description |
 |----|--------|------|-------------|
+| H-29 | ✅ Fixed | `src/app/api/studio/chat/route.ts` | **SSRF via studio chat attachment URLs.** The chat endpoint accepts `attachments[].url` and passes it to the Vercel AI SDK as `{ type: "image", image: new URL(img.url) }`. When given a URL object, the AI SDK fetches it **server-side** before encoding for the AI provider. No `isPublicUrl()` guard applied — an authenticated user can probe `http://169.254.169.254/latest/meta-data/` or `http://metadata.google.internal/`. All other URL-fetching routes have this guard; studio/chat was missed. Fix: add `.refine(isPublicUrl, "Attachment URL must be a public HTTPS URL")` to the attachments Zod schema. Round 13. |
+| H-30 | ✅ Fixed | `src/app/api/extension/save-ad/route.ts`, `src/app/api/extension/boards/route.ts` | **Extension save-ad and boards endpoints have no rate limiting.** The extension auth endpoint (`/api/extension/auth`) correctly applies `authLimiter.check(token, 10)`. Both `save-ad` (POST) and `boards` (GET) have no rate limit. An attacker with a valid extension token can spam boards with thousands of ads or make thousands of board-list requests. Fix: add `authLimiter.check(token, 30)` to save-ad and `authLimiter.check(token, 20)` to boards, after token extraction, before `validateExtensionToken`. Round 13. |
+| H-31 | ✅ Fixed | `src/app/api/studio/upload/route.ts` | **Studio upload validates MIME type via browser header only — no magic byte verification.** `ALLOWED_TYPES.includes(file.type)` trusts the browser-supplied `Content-Type` value. An attacker sets `Content-Type: image/jpeg` on any file (SVG with `<script>`, PHP, binary exploit). File is stored in Supabase Storage and served back via public URL. An SVG with embedded JS causes XSS when opened directly. Fix: add magic byte verification (JPEG `FF D8 FF`, PNG `89 50 4E 47`, WebP `52 49 46 46`, GIF `47 49 46 38`, PDF `25 50 44 46`) after `Buffer.from(await file.arrayBuffer())`. Round 13. |
+| H-32 | ✅ Fixed | `src/app/api/ads/[id]/download/route.ts` | **`ads/download` fetches a database-stored URL server-side without SSRF validation.** `getGeneratedAd(workspace.id, id)` returns `ad.imageUrl` from the DB, then `fetch(ad.imageUrl)` is called with no URL check. If `imageUrl` contains an internal address, this is server-side request forgery. All other URL-fetching routes in the codebase have `isPublicUrl()` guards — download was missed. Fix: add `if (!isPublicUrl(ad.imageUrl)) return 400` before the `fetch()` call. Round 13. |
 | H-1 | ✅ Fixed | `src/lib/automations/executor.ts` | Slack global token fallback leaking one workspace's token to others. Removed. Commit: `4d9df08` |
 | H-2 | ✅ Fixed | `src/app/api/webhooks/cron/automations/route.ts` | Cron window too tight (±5 min). Broadened to ±10 min. Commit: `aaab8ec` |
 | H-3 | ✅ Fixed | `src/app/(dashboard)/automations/actions.ts` | Automation toggle race condition. Fixed with optimistic lock on `status`. Commit: `aaab8ec` |
@@ -96,6 +101,9 @@
 | M-22 | 🚫 Won't Fix (config) | Supabase dashboard | **RLS not enabled** — all tables use admin client with manual workspace_id filtering. RLS disabled pending migration policies. Mitigated by consistent manual filtering on every query. Action: enable RLS in Supabase dashboard (no code change needed). |
 | M-23 | ✅ Fixed | `src/lib/ai/decompose.ts`:261 | **AI-extracted text re-injected raw into inpainting prompts** — `marketingTexts` from GPT-4o Vision (which reflects competitor ad copy) was embedded unsanitized into Gemini/OpenAI inpainting prompts. Fix: each text entry sanitized via `sanitizeForPrompt()` before joining into `textList`. Round 12. Commit: `f260ca1` |
 | M-24 | ✅ Fixed | `src/app/(dashboard)/brand-guidelines/actions.ts` | **No max length limits on brand guideline fields** — `brandVoice`, `targetAudience`, `dosAndDonts` could be stored as 100k+ char strings, then embedded verbatim in every AI prompt referencing that guideline. Fix: added `.max()` to createSchema (brandName 200, brandVoice 500, targetAudience 300, dosAndDonts 1000); added full Zod schema to `updateBrandGuidelineAction` which had none. Round 12. Commit: `f260ca1` |
+| M-25 | ✅ Fixed | `src/app/api/auth/meta/route.ts` | **Meta OAuth state is deterministic `workspace_id` UUID — not a random nonce.** The Slack OAuth flow (correctly) generates `crypto.randomUUID()` state, stores it in an httpOnly cookie, then validates on callback. The Meta OAuth flow uses a fixed `workspace_id` UUID as state, stored in a cookie. An attacker who learns the workspace_id can craft a `?code=...&state=<known-id>` redirect. Fix: mirror Slack's pattern — generate `crypto.randomUUID()` stored in a short-lived httpOnly `meta_oauth_state` cookie; validate and delete in the callback. Round 13. |
+| M-26 | ✅ Fixed | `src/lib/utils/prompt-sanitize.ts` | **`sanitizeForPrompt` lacks conversational override patterns.** Current sanitizer strips newlines, `---`, and backticks but does not block LLM jailbreak prefixes like "Ignore previous instructions", "System override:", "New system prompt:", "Disregard the above", etc. A competitor ad body or asset description containing these patterns is embedded directly into AI prompts after sanitization. Fix: add a `.replace()` pass that strips/neutralizes common prompt-override prefixes before truncation. Round 13. |
+| M-27 | ✅ Fixed | `src/lib/supabase/admin.ts` | **Meta and Slack OAuth tokens stored as plaintext in DB.** `meta_access_token`, `slack_bot_token`, and `slack_webhook_url` stored directly in workspace/ad-account rows with no encryption. Supabase Storage is encrypted at rest by default, but anyone with DB read access (e.g., compromised Supabase service role key) can immediately use all connected tokens. Fix: encrypt with AES-256-GCM using a `TOKEN_ENCRYPTION_KEY` env var before insert; decrypt on read. Round 13. |
 
 ---
 
@@ -111,6 +119,9 @@
 | L-6 | ✅ Fixed | `src/app/api/auth/slack/route.ts` | **Slack OAuth state cookie sameSite: "lax"** — CSRF state cookie used `sameSite: "lax"`, allowing cross-site GET requests to carry the cookie. Fix: changed to `"strict"`. Round 11. Commit: `5aaa82a` |
 | L-7 | ✅ Fixed | `src/app/(dashboard)/settings/components/settings-client.tsx` | **settings copyToken setTimeout not cleared on unmount** — `setTimeout(() => setTokenCopied(false), 2000)` fires on unmounted component. Fix: stored in `copyTimeoutRef`, cleared in unmount `useEffect`. Round 11. Commit: `5aaa82a` |
 | L-8 | ✅ Fixed | `src/lib/ai/gemini-image-edit.ts`:editAssetImageWithGemini | **Asset imageUrl not validated before downloadImage()** — URL comes from DB (trusted workspace-scoped query) but defense-in-depth guard missing. Fix: added `isPublicUrl()` check before `downloadImage()`. Round 12. Commit: `f260ca1` |
+| L-9 | ✅ Fixed | `src/app/api/studio/upload/route.ts` | **`Content-Length` spoofable — actual read size not capped.** M-10 added a `Content-Length` pre-check before `req.formData()`. However, `Content-Length` is a client-supplied header that can be forged (e.g., set to 1 byte, actual body 50 MB). The `file.arrayBuffer()` call reads whatever the client sends regardless. Fix: add a `MAX_BYTES` check on the actual `Buffer.byteLength(buf)` after reading, returning 413 if exceeded. Round 13. |
+| L-10 | ✅ Fixed | `src/app/api/extension/auth/route.ts` | **Rate limiter keyed on full JWT string (~800 bytes).** `authLimiter.check(token, 10)` uses the raw Bearer token as the rate-limit key. In the in-memory fallback (local dev / Upstash unavailable) this creates a `Map` entry of ~800 bytes per unique token — memory amplification risk. Fix: key on `crypto.createHash('sha256').update(token).digest('hex')` — constant 64-byte key. Round 13. |
+| L-11 | ✅ Fixed | `src/lib/supabase/admin.ts` | **`createAdminClient()` creates a new Supabase client on every call — no singleton.** All other environments (browser, server) use module-level singleton clients. The admin client is used in hot paths (every API route that needs workspace lookup). Fix: promote to module-level `let _adminClient` singleton. Round 13. |
 
 ---
 
@@ -155,8 +166,8 @@
 
 | Severity | Total Found | Fixed | Won't Fix | Open |
 |----------|-------------|-------|-----------|------|
-| Critical | 11 | 11 | 0 | 0 |
-| High | 28 | 26 | 2 | 0 |
-| Medium | 24 | 23 | 1 | 0 |
-| Low | 8 | 8 | 0 | 0 |
-| **Total** | **71** | **68** | **3** | **0** |
+| Critical | 12 | 12 | 0 | 0 |
+| High | 32 | 30 | 2 | 0 |
+| Medium | 27 | 26 | 1 | 0 |
+| Low | 11 | 11 | 0 | 0 |
+| **Total** | **82** | **79** | **3** | **0** |

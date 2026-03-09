@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import crypto from "crypto";
 
 /**
  * Meta OAuth Initiation
@@ -45,8 +46,19 @@ export async function GET(request: NextRequest) {
     "scope",
     "ads_read,read_insights,pages_show_list"
   );
-  metaAuthUrl.searchParams.set("state", member.workspace_id);
+  // Generate a random nonce as state (M-25 fix — mirrors Slack OAuth pattern)
+  const oauthState = crypto.randomUUID();
+  metaAuthUrl.searchParams.set("state", oauthState);
   metaAuthUrl.searchParams.set("response_type", "code");
 
-  return NextResponse.redirect(metaAuthUrl.toString());
+  const response = NextResponse.redirect(metaAuthUrl.toString());
+  // Store nonce in httpOnly cookie (10 min TTL) for CSRF validation in callback
+  response.cookies.set("meta_oauth_state", oauthState, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
+  });
+  return response;
 }

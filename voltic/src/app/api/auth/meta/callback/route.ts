@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { trackServer } from "@/lib/analytics/posthog-server";
+import { encryptToken } from "@/lib/utils/token-crypto";
 
 const META_API_VERSION = "v21.0";
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -15,7 +16,7 @@ const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
-  const state = searchParams.get("state"); // workspace_id
+  const state = searchParams.get("state");
   const error = searchParams.get("error");
 
   if (error || !code) {
@@ -24,7 +25,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // 1. Verify user is authenticated
+  // 1. Validate CSRF state nonce (M-25 fix — mirrors Slack OAuth pattern)
+  const storedState = request.cookies.get("meta_oauth_state")?.value;
+  if (!storedState || storedState !== state) {
+    return NextResponse.redirect(
+      new URL("/settings?meta_error=invalid_state", request.url)
+    );
+  }
+
+  // 2. Verify user is authenticated
   const supabase = await createClient();
   const {
     data: { user },
@@ -36,14 +45,14 @@ export async function GET(request: NextRequest) {
 
   const admin = createAdminClient();
 
-  // 2. Verify state (workspace_id) belongs to user
+  // 3. Get workspace from authenticated session
   const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
     .eq("user_id", user.id)
     .single();
 
-  if (!member || member.workspace_id !== state) {
+  if (!member) {
     return NextResponse.redirect(
       new URL("/settings?meta_error=invalid_workspace", request.url)
     );
@@ -102,10 +111,10 @@ export async function GET(request: NextRequest) {
 
   const longLivedToken = longTokenData.access_token;
 
-  // 5. Store long-lived token on workspace
+  // 5. Store long-lived token on workspace (encrypted at rest — M-27)
   const { error: updateError } = await admin
     .from("workspaces")
-    .update({ meta_access_token: longLivedToken })
+    .update({ meta_access_token: encryptToken(longLivedToken) })
     .eq("id", workspaceId);
 
   if (updateError) {
@@ -134,9 +143,12 @@ export async function GET(request: NextRequest) {
     ad_account_count: adAccountCount,
   });
 
-  return NextResponse.redirect(
+  const successResponse = NextResponse.redirect(
     new URL("/settings?meta_connected=true", request.url)
   );
+  // Delete the CSRF state cookie now that it has been consumed (M-25)
+  successResponse.cookies.delete("meta_oauth_state");
+  return successResponse;
 }
 
 // ─── Ad Account Sync ────────────────────────────────────────────────────────

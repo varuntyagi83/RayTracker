@@ -25,6 +25,8 @@ export function sanitizeForPrompt(
     .replace(/[\r\n]+/g, " ")
     .replace(/---+/g, "—")
     .replace(/```/g, "` ` `")
+    // Strip LLM jailbreak / override prefixes
+    .replace(/\b(ignore\s+(previous|all|above|prior)\s+(instructions?|prompts?|context)|system\s+override[:\s]|new\s+system\s+prompt[:\s]|disregard\s+(the\s+)?(above|previous|prior|all)|forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|context)|you\s+are\s+now|act\s+as\s+(if|a|an))/gi, "[removed]")
     .trim()
     .slice(0, maxLen);
 }

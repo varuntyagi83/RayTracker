@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { validateExtensionToken } from "@/lib/extension/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
@@ -15,8 +16,11 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Hash token to reduce memory footprint in rate-limit key store (L-10)
+  const tokenKey = crypto.createHash("sha256").update(token).digest("hex");
+
   // Rate limit by token
-  const rl = await authLimiter.check(token, 10);
+  const rl = await authLimiter.check(tokenKey, 10);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
