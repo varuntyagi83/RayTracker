@@ -160,6 +160,14 @@ export interface EventPropertiesMap {
   ad_downloaded: { ad_id: string };
   ad_deleted: { ad_id: string };
 
+  // Video Analysis (server-side)
+  video_analysis_started: { workspace_id: string; brand: string; provider: string; depth: string; video_count?: number };
+  video_analysis_completed: { workspace_id: string; brand: string; videos_analyzed: number; failed?: number; provider?: string; total_duration_ms?: number; credits_used?: number };
+  video_analysis_failed: { workspace_id: string; brand: string; error: string; video_id?: string };
+  hooks_matrix_generated: { workspace_id: string; competitor_count: number; videos_analyzed: number; hooks_generated: number; credits_used?: number };
+  hooks_matrix_exported: { workspace_id: string; format: string; hook_count: number };
+  hooks_matrix_sent_to_studio: { workspace_id: string; hook_count: number };
+
   // MCP (server-side)
   mcp_tool_invoked: {
     tool_name: string;
@@ -168,6 +176,7 @@ export interface EventPropertiesMap {
   };
   mcp_key_created: { workspace_id: string; key_id: string; name: string; scopes: string[] };
   mcp_key_deleted: { workspace_id: string; key_id: string };
+  mcp_key_toggled: { workspace_id: string; key_id: string; is_active: boolean };
   mcp_media_downloaded: { workspace_id: string; brand: string; media_type: string; file_size: number };
   mcp_batch_download_completed: { workspace_id: string; brand: string; total: number; downloaded: number; failed: number; total_size_mb: number };
 

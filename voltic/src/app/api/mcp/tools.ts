@@ -18,6 +18,9 @@ import { generateCompetitorReport } from "@/lib/ai/competitor-report";
 import { decomposeAdImage } from "@/lib/ai/decompose";
 import { downloadAndStoreMedia, downloadBatchMedia } from "@/lib/media/download";
 import { trackServer } from "@/lib/analytics/posthog-server";
+import { analyzeVideoAd } from "@/lib/ai/video-analysis";
+import { generateHooksMatrix as generateHooksMatrixAI } from "@/lib/ai/hooks-generator";
+import { getDownloadedVideosByBrand, getVideoAnalysesByBrand } from "@/lib/data/video-analysis";
 import {
   getTopAdsReport,
   getTopCampaignsReport,
@@ -369,6 +372,99 @@ export const TOOL_LIST: McpToolDefinition[] = [
         },
       },
       required: ["report_type", "date_from", "date_to"],
+    },
+  },
+  {
+    name: "analyze_video_ad",
+    description:
+      "Analyze a competitor video ad using AI. Extracts the opening hook, narrative structure, CTA, brand elements, and all text overlays. Choose 'gemini' for speed/cost or 'gpt4o' for maximum accuracy.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        video_url: {
+          type: "string",
+          description: "Storage URL of the video to analyze (from download_ad_media or download_competitor_ads_batch)",
+        },
+        brand_name: {
+          type: "string",
+          description: "Name of the competitor brand",
+        },
+        provider: {
+          type: "string",
+          enum: ["gemini", "gpt4o"],
+          description: "AI provider. 'gemini' is faster and cheaper; 'gpt4o' refines with GPT-4o for deeper marketing insight.",
+        },
+        depth: {
+          type: "string",
+          enum: ["quick", "detailed"],
+          description: "Analysis depth. 'quick' returns hook + CTA only; 'detailed' returns full narrative breakdown.",
+        },
+      },
+      required: ["video_url", "brand_name"],
+    },
+  },
+  {
+    name: "analyze_competitor_videos_batch",
+    description:
+      "Analyze ALL downloaded videos for a competitor brand. Queries the Voltic media library for all videos for that brand and runs AI analysis on each.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        brand_name: {
+          type: "string",
+          description: "Competitor brand name to analyze all videos for",
+        },
+        provider: {
+          type: "string",
+          enum: ["gemini", "gpt4o"],
+          description: "AI provider to use for all videos",
+        },
+        depth: {
+          type: "string",
+          enum: ["quick", "detailed"],
+          description: "Analysis depth for all videos",
+        },
+        max_concurrent: {
+          type: "number",
+          description: "Max parallel analyses (default: 3, max: 5)",
+        },
+      },
+      required: ["brand_name"],
+    },
+  },
+  {
+    name: "generate_hooks_matrix",
+    description:
+      "Generate a hooks matrix with creative briefs based on competitor video analyses. Outputs hooks written for your brand, inspired by competitor patterns. This is the final step of the competitor research pipeline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        competitor_brands: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of competitor brand names to pull video analyses from",
+        },
+        your_brand: {
+          type: "object",
+          description: "Your brand details",
+          properties: {
+            name: { type: "string", description: "Your brand name" },
+            product_description: { type: "string", description: "What your product does and who it's for" },
+            target_audience: { type: "string", description: "Your target audience (optional)" },
+          },
+          required: ["name", "product_description"],
+        },
+        hook_count: {
+          type: "number",
+          description: "Number of hooks to generate (default: 45)",
+        },
+        strategies: {
+          type: "array",
+          items: { type: "string" },
+          description: "Hook strategies to generate: curiosity, pain_point, social_proof, urgency, contrarian, authority, storytelling, statistic. Defaults to all.",
+        },
+      },
+      required: ["competitor_brands", "your_brand"],
     },
   },
 ];
@@ -759,6 +855,152 @@ export async function handleMcpMethod(
             `Invalid report_type. Must be one of: top-ads, top-campaigns, top-creatives, top-landing-pages, top-headlines, top-copy`
           );
       }
+    }
+
+    // ── analyze_video_ad ────────────────────────────────────────────────────
+    case "analyze_video_ad": {
+      requireScope("ai");
+      if (!params.video_url) throw new Error("video_url is required");
+      if (!params.brand_name) throw new Error("brand_name is required");
+      if (String(params.video_url).length > 2048) throw new Error("video_url exceeds 2048 characters");
+      if (String(params.brand_name).length > 100) throw new Error("brand_name must be 100 characters or fewer");
+
+      const VALID_PROVIDERS = ["gemini", "gpt4o"] as const;
+      const provider = (params.provider ?? "gemini") as string;
+      if (!VALID_PROVIDERS.includes(provider as typeof VALID_PROVIDERS[number])) {
+        throw new Error("provider must be 'gemini' or 'gpt4o'");
+      }
+      const VALID_DEPTHS = ["quick", "detailed"] as const;
+      const depth = (params.depth ?? "quick") as string;
+      if (!VALID_DEPTHS.includes(depth as typeof VALID_DEPTHS[number])) {
+        throw new Error("depth must be 'quick' or 'detailed'");
+      }
+
+      const result = await analyzeVideoAd({
+        videoUrl: String(params.video_url),
+        brandName: String(params.brand_name),
+        provider: provider as "gemini" | "gpt4o",
+        depth: depth as "quick" | "detailed",
+      });
+
+      trackServer("video_analysis_started", workspaceId, {
+        workspace_id: workspaceId,
+        brand: String(params.brand_name),
+        provider,
+        depth,
+      });
+
+      return result;
+    }
+
+    // ── analyze_competitor_videos_batch ─────────────────────────────────────
+    case "analyze_competitor_videos_batch": {
+      requireScope("ai");
+      if (!params.brand_name) throw new Error("brand_name is required");
+      if (String(params.brand_name).length > 100) throw new Error("brand_name must be 100 characters or fewer");
+
+      const provider = (params.provider ?? "gemini") as "gemini" | "gpt4o";
+      const depth = (params.depth ?? "quick") as "quick" | "detailed";
+      const maxConcurrent = params.max_concurrent ? Math.min(Number(params.max_concurrent), 5) : 3;
+
+      const videos = await getDownloadedVideosByBrand(workspaceId, String(params.brand_name));
+      if (videos.length === 0) {
+        return { analyzed: 0, failed: 0, results: [], message: `No downloaded videos found for brand '${params.brand_name}'` };
+      }
+
+      const results: import("@/lib/ai/video-analysis").VideoAnalysisResult[] = [];
+      const errors: Array<{ filename: string; error: string }> = [];
+
+      for (let i = 0; i < videos.length; i += maxConcurrent) {
+        const chunk = videos.slice(i, i + maxConcurrent);
+        const settled = await Promise.allSettled(
+          chunk.map((v) =>
+            analyzeVideoAd({ videoUrl: v.storage_url, brandName: String(params.brand_name), provider, depth })
+          )
+        );
+        for (let j = 0; j < settled.length; j++) {
+          const s = settled[j];
+          if (s.status === "fulfilled") {
+            results.push(s.value);
+          } else {
+            errors.push({
+              filename: chunk[j].filename,
+              error: s.reason instanceof Error ? s.reason.message : String(s.reason),
+            });
+          }
+        }
+      }
+
+      trackServer("video_analysis_completed", workspaceId, {
+        workspace_id: workspaceId,
+        brand: String(params.brand_name),
+        videos_analyzed: results.length,
+        failed: errors.length,
+      });
+
+      return { analyzed: results.length, failed: errors.length, results, errors };
+    }
+
+    // ── generate_hooks_matrix ────────────────────────────────────────────────
+    case "generate_hooks_matrix": {
+      requireScope("ai");
+      if (!params.competitor_brands || !Array.isArray(params.competitor_brands)) {
+        throw new Error("competitor_brands must be an array of strings");
+      }
+      if (!params.your_brand || typeof params.your_brand !== "object") {
+        throw new Error("your_brand is required");
+      }
+      const yourBrand = params.your_brand as Record<string, unknown>;
+      if (!yourBrand.name) throw new Error("your_brand.name is required");
+      if (!yourBrand.product_description) throw new Error("your_brand.product_description is required");
+
+      const brands = (params.competitor_brands as unknown[]).map(String);
+      const VALID_STRATEGIES = ["curiosity", "pain_point", "social_proof", "urgency", "contrarian", "authority", "storytelling", "statistic"] as const;
+      const strategies = params.strategies && Array.isArray(params.strategies)
+        ? (params.strategies as unknown[]).map(String).filter((s) => VALID_STRATEGIES.includes(s as typeof VALID_STRATEGIES[number]))
+        : [...VALID_STRATEGIES];
+
+      if (strategies.length === 0) throw new Error("strategies must include at least one valid strategy");
+
+      // Fetch existing analyses for these brands
+      const competitorAnalyses = await Promise.all(
+        brands.map(async (brand) => ({
+          brand,
+          videos: (await getVideoAnalysesByBrand(workspaceId, brand)).map((r) => ({
+            hook: r.hook!,
+            narrative: r.narrative!,
+            cta: r.cta!,
+            brand_elements: r.brand_elements!,
+            text_overlays: r.text_overlays ?? [],
+            competitive_insight: r.competitive_insight ?? "",
+          })).filter((r) => r.hook && r.narrative && r.cta),
+        }))
+      );
+
+      const totalVideos = competitorAnalyses.reduce((sum, b) => sum + b.videos.length, 0);
+      if (totalVideos === 0) {
+        throw new Error("No completed video analyses found for the specified brands. Run analyze_competitor_videos_batch first.");
+      }
+
+      const result = await generateHooksMatrixAI({
+        competitorAnalyses: competitorAnalyses as Parameters<typeof generateHooksMatrixAI>[0]["competitorAnalyses"],
+        yourBrand: {
+          name: String(yourBrand.name),
+          product_description: String(yourBrand.product_description),
+          target_audience: yourBrand.target_audience ? String(yourBrand.target_audience) : undefined,
+        },
+        hookCount: params.hook_count ? Math.min(Math.max(Number(params.hook_count), 5), 100) : 45,
+        strategies: strategies as Parameters<typeof generateHooksMatrixAI>[0]["strategies"],
+      });
+
+      trackServer("hooks_matrix_generated", workspaceId, {
+        workspace_id: workspaceId,
+        competitor_count: brands.length,
+        videos_analyzed: totalVideos,
+        hooks_generated: result.hooks.length,
+      });
+
+      return result;
     }
 
     // ── Unknown ─────────────────────────────────────────────────────────────
