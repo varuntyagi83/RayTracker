@@ -1,7 +1,33 @@
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnySupabaseClient = any;
+
+// ─── R2 Client (singleton) ────────────────────────────────────────────────────
+
+let _r2Client: S3Client | null = null;
+
+function getR2Client(): S3Client {
+  if (!_r2Client) {
+    const accountId = process.env.R2_ACCOUNT_ID;
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+
+    if (!accountId || !accessKeyId || !secretAccessKey) {
+      throw new Error(
+        "R2 credentials not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY in .env.local"
+      );
+    }
+
+    _r2Client = new S3Client({
+      region: "auto",
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      credentials: { accessKeyId, secretAccessKey },
+    });
+  }
+  return _r2Client;
+}
 
 export interface DownloadResult {
   storage_url: string;
@@ -155,24 +181,23 @@ export async function downloadAndStoreMedia(params: {
   const filename = `${safeBrand}_${adIndex}${ext}`;
   const storagePath = `${workspaceId}/${safeBrand}/${filename}`;
 
+  // ── Upload to Cloudflare R2 ──────────────────────────────────────────────
+  const r2 = getR2Client();
+  const bucketName = process.env.R2_BUCKET_NAME ?? "competitor-media";
+  const publicUrlBase = process.env.R2_PUBLIC_URL ?? "";
+
+  await r2.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: storagePath,
+      Body: Buffer.from(buffer),
+      ContentType: contentType,
+    })
+  );
+
+  const storage_url = `${publicUrlBase}/${storagePath}`;
+
   const admin = createAdminClient() as AnySupabaseClient;
-
-  const { error: uploadError } = await admin.storage
-    .from("competitor-media")
-    .upload(storagePath, buffer, {
-      contentType,
-      upsert: true,
-    });
-
-  if (uploadError) {
-    throw new Error(`Storage upload failed: ${(uploadError as { message: string }).message}`);
-  }
-
-  const { data: publicUrlData } = admin.storage
-    .from("competitor-media")
-    .getPublicUrl(storagePath);
-
-  const storage_url = (publicUrlData as { publicUrl: string }).publicUrl;
 
   const { error: insertError } = await admin.from("downloaded_media").insert({
     workspace_id: workspaceId,
