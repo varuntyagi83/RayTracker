@@ -160,6 +160,17 @@ export interface EventPropertiesMap {
   ad_downloaded: { ad_id: string };
   ad_deleted: { ad_id: string };
 
+  // MCP (server-side)
+  mcp_tool_invoked: {
+    tool_name: string;
+    duration_ms: number;
+    status: "success" | "error";
+  };
+  mcp_key_created: { workspace_id: string; key_id: string; name: string; scopes: string[] };
+  mcp_key_deleted: { workspace_id: string; key_id: string };
+  mcp_media_downloaded: { workspace_id: string; brand: string; media_type: string; file_size: number };
+  mcp_batch_download_completed: { workspace_id: string; brand: string; total: number; downloaded: number; failed: number; total_size_mb: number };
+
   // Stripe Webhooks (server-side)
   stripe_webhook_missing_metadata: { session_id: string; alert: boolean };
   credits_purchase_failed: { workspace_id: string; error: string | undefined };

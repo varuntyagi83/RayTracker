@@ -729,6 +729,56 @@ export const adDecompositions = pgTable(
   ]
 );
 
+// Phase 23 tables — MCP Server
+
+export const mcpApiKeys = pgTable(
+  "mcp_api_keys",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    keyHash: text("key_hash").unique().notNull(), // SHA-256 of the raw key — plaintext never stored
+    name: text("name").notNull(), // e.g. "Claude Cowork", "n8n Production"
+    scopes: text("scopes").array().notNull().default([]), // ['read', 'write', 'ai']
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    isActive: boolean("is_active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_mcp_api_keys_workspace_id").on(table.workspaceId),
+    index("idx_mcp_api_keys_key_hash").on(table.keyHash),
+  ]
+);
+
+export const downloadedMedia = pgTable(
+  "downloaded_media",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    brandName: text("brand_name").notNull(),
+    originalUrl: text("original_url").notNull(),
+    storageUrl: text("storage_url").notNull(),
+    thumbnailUrl: text("thumbnail_url"),
+    mediaType: text("media_type").notNull(), // 'image' | 'video'
+    fileSize: integer("file_size").notNull(), // bytes
+    filename: text("filename").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_downloaded_media_workspace_id").on(table.workspaceId),
+    index("idx_downloaded_media_brand_name").on(table.brandName),
+  ]
+);
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
@@ -754,6 +804,8 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   studioMessages: many(studioMessages),
   adDecompositions: many(adDecompositions),
   generatedAds: many(generatedAds),
+  mcpApiKeys: many(mcpApiKeys),
+  downloadedMedia: many(downloadedMedia),
 }));
 
 export const workspaceMembersRelations = relations(

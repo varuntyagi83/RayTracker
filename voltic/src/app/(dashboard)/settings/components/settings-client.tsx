@@ -26,6 +26,7 @@ import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { track } from "@/lib/analytics/events";
 import { createClient } from "@/lib/supabase/client";
 import { updateWorkspaceTimezoneAction, disconnectMetaAction } from "../actions";
+import McpKeysCard from "./mcp-keys-card";
 
 // ─── Timezone helpers ────────────────────────────────────────────────────────
 
@@ -517,6 +518,8 @@ export default function SettingsClient() {
               </div>
             </CardContent>
           </Card>
+          {/* MCP API Keys */}
+          <McpKeysCard />
         </TabsContent>
 
         {/* ── Brand Guidelines ────────────────────────────────────────── */}

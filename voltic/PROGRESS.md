@@ -1,6 +1,6 @@
 # Voltic — Development Progress
 
-> Last updated: 2026-03-08 (QA Sessions — Rounds 1–7 complete)
+> Last updated: 2026-03-10 (Phase 23: MCP Server complete)
 
 ---
 
@@ -11,6 +11,30 @@ The Variations feature has been significantly extended to support **two flows**:
 2. **Asset-based** (new) — edit/transform existing asset images using **Gemini 2.5 Flash Image** (`gemini-2.5-flash-image`) + generate text via GPT-4o
 
 The Ad Decomposition and Creative Builder features received bug fixes. The codebase is deployed on Vercel at `ray-tracker.vercel.app`.
+
+---
+
+## Recent Changes (Session: Mar 10, 2026)
+
+### Phase 23: MCP Server ✅
+
+Exposed Voltic as an MCP (Model Context Protocol) server, enabling Claude Desktop, Claude Code, n8n, and any MCP-compatible agent to programmatically access Voltic's full capability set.
+
+**Files created/modified:**
+- `src/lib/mcp/auth.ts` — API key generation (vlt_sk_…), SHA-256 hashing, workspace resolution with last_used_at tracking
+- `src/lib/media/download.ts` — SSRF-safe media download to Supabase Storage with Content-Type validation, 100MB video cap, batch parallel download
+- `src/app/api/mcp/route.ts` — Stateless JSON-RPC 2.0 endpoint (GET = server info, POST = tool call), Bearer auth, 60 req/min rate limiting, PostHog tracking
+- `src/app/api/mcp/tools.ts` — 12 MCP tools: search_ads, list_boards, create_board, save_to_board, list_competitors, get_dashboard_kpis, decompose_ad, generate_variations, analyze_ad, compare_ads, generate_competitor_report, download_ad_media
+- `src/lib/mcp/tools/index.ts` — Barrel re-export for tools
+- `src/db/schema.ts` — Added mcp_api_keys and downloaded_media tables
+- `supabase/migrations/008_mcp_server.sql` — Migration for both tables
+- `settings/actions.ts` — createMcpApiKeyAction, listMcpApiKeysAction, deleteMcpApiKeyAction, toggleMcpApiKeyAction
+- `settings/components/mcp-keys-card.tsx` — Create/list/delete API keys UI with one-time key reveal, scope selection, quick-start config snippet
+- `src/lib/analytics/events.ts` — Added mcp_tool_invoked, mcp_key_created, mcp_key_deleted, mcp_media_downloaded, mcp_batch_download_completed events
+
+Also completed Round 13 QA audit (11 bugs fixed) — see BUGS_ISSUES.md.
+
+**Commit:** `feat: MCP server with 12 tools, API key auth, media download, and settings UI`
 
 ---
 
