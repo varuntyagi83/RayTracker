@@ -255,8 +255,9 @@ export async function generateVariationsAction(
       .single();
 
     if (!adRow) {
-      await refundCredits(workspace.id, totalCost);
-      return { results: [], error: "Saved ad not found" };
+      const refund = await refundCredits(workspace.id, totalCost);
+      const refundNote = refund.success ? "" : " If credits were not restored, please contact support.";
+      return { results: [], error: `Saved ad not found.${refundNote}` };
     }
 
     savedAd = {
@@ -281,8 +282,9 @@ export async function generateVariationsAction(
   // Fetch asset
   const asset = await getAsset(workspace.id, assetId);
   if (!asset) {
-    await refundCredits(workspace.id, totalCost);
-    return { results: [], error: "Asset not found" };
+    const refund = await refundCredits(workspace.id, totalCost);
+    const refundNote = refund.success ? "" : " If credits were not restored, please contact support.";
+    return { results: [], error: `Asset not found.${refundNote}` };
   }
 
   // Fetch brand guidelines — use specific guideline if selected, otherwise workspace-level
@@ -320,8 +322,9 @@ export async function generateVariationsAction(
     );
 
     if (!variationResult.success || !variationResult.id) {
-      await refundCredits(workspace.id, VARIATION_CREDIT_COST);
-      results.push({ strategy, success: false, error: variationResult.error });
+      const refund = await refundCredits(workspace.id, VARIATION_CREDIT_COST);
+      const refundNote = refund.success ? "" : " If credits were not restored, please contact support.";
+      results.push({ strategy, success: false, error: (variationResult.error ?? "Generation failed") + refundNote });
       continue;
     }
 
@@ -374,11 +377,12 @@ export async function generateVariationsAction(
       results.push({ strategy, success: true, variationId });
     } catch (err) {
       await failVariation(workspace.id, variationId);
-      await refundCredits(workspace.id, VARIATION_CREDIT_COST);
+      const refund = await refundCredits(workspace.id, VARIATION_CREDIT_COST);
+      const refundNote = refund.success ? "" : " If credits were not restored, please contact support.";
       results.push({
         strategy,
         success: false,
-        error: err instanceof Error ? err.message : "Generation failed",
+        error: (err instanceof Error ? err.message : "Generation failed") + refundNote,
       });
     }
   }
@@ -450,8 +454,9 @@ export async function enhanceCreativesAction(
 
     return { results };
   } catch (err) {
-    await refundCredits(workspace.id, totalCost);
-    return { error: err instanceof Error ? err.message : "Enhancement failed" };
+    const refund = await refundCredits(workspace.id, totalCost);
+    const refundNote = refund.success ? "" : " If credits were not restored, please contact support.";
+    return { error: (err instanceof Error ? err.message : "Enhancement failed") + refundNote };
   }
 }
 
@@ -521,7 +526,8 @@ export async function analyzeAdAction(
 
     return { data: insights, cached: false };
   } catch (err) {
-    await refundCredits(workspace.id, INSIGHT_CREDIT_COST);
-    return { error: err instanceof Error ? err.message : "Analysis failed" };
+    const refund = await refundCredits(workspace.id, INSIGHT_CREDIT_COST);
+    const refundNote = refund.success ? "" : " If credits were not restored, please contact support.";
+    return { error: (err instanceof Error ? err.message : "Analysis failed") + refundNote };
   }
 }

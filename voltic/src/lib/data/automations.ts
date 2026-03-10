@@ -10,7 +10,6 @@ export async function getAutomations(
     .from("automations")
     .select("*")
     .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
     .order("updated_at", { ascending: false });
 
   if (error || !data) return [];
@@ -29,7 +28,6 @@ export async function getAutomation(
     .select("*")
     .eq("id", automationId)
     .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
     .single();
 
   if (error || !data) return null;

@@ -141,12 +141,22 @@ export async function checkAndDeductCredits(
     description: txDescription,
   });
   if (txErr) {
-    console.error("[checkAndDeductCredits] Ledger insert failed — balance deducted but no transaction record:", {
-      workspace_id: workspaceId,
-      amount,
-      type,
-      error: txErr.message,
-    });
+    // Ledger insert failed — refund balance to keep credits and audit trail in sync
+    const refund = await refundCredits(workspaceId, amount);
+    if (!refund.success) {
+      console.error("[checkAndDeductCredits] Ledger insert failed AND refund failed — manual intervention required:", {
+        workspace_id: workspaceId,
+        amount,
+        type,
+        ledgerError: txErr.message,
+        refundError: refund.error,
+      });
+    }
+    return {
+      success: false,
+      remainingBalance: workspace.credit_balance,
+      error: "Transaction recording failed, credits restored.",
+    };
   }
 
   return { success: true, remainingBalance: newBalance };
@@ -155,7 +165,7 @@ export async function checkAndDeductCredits(
 export async function refundCredits(
   workspaceId: string,
   amount: number
-): Promise<void> {
+): Promise<{ success: boolean; error?: string }> {
   const supabase = createAdminClient();
 
   // Retry up to 3 times to handle concurrent balance modifications.
@@ -195,10 +205,9 @@ export async function refundCredits(
   }
 
   if (!refunded) {
-    console.error(
-      `[refundCredits] Failed to refund ${amount} credits to workspace ${workspaceId} after 3 attempts`
-    );
-    return;
+    const msg = `Failed to refund ${amount} credits to workspace ${workspaceId} after 3 attempts`;
+    console.error(`[refundCredits] ${msg}`);
+    return { success: false, error: msg };
   }
 
   // Record refund transaction
@@ -215,6 +224,8 @@ export async function refundCredits(
       error: txErr.message,
     });
   }
+
+  return { success: true };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

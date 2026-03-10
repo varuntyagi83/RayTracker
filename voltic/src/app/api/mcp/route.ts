@@ -74,7 +74,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // 1. Auth
   const authResult = await authenticate(req);
   if (authResult instanceof NextResponse) return authResult;
-  const { workspaceId } = authResult;
+  const { workspaceId, scopes } = authResult;
+
+  // C-2: Guard against non-string or blank workspaceId before rate limiter
+  if (typeof workspaceId !== "string" || !workspaceId.trim()) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   // 2. Rate limiting — 60 calls per minute per workspace
   const rl = await apiLimiter.check(workspaceId, 60);
@@ -125,7 +130,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     : {};
 
   try {
-    const result = await handleMcpMethod(method, toolParams, workspaceId);
+    const result = await handleMcpMethod(method, toolParams, workspaceId, scopes);
 
     trackServer("mcp_tool_invoked", workspaceId, {
       tool_name: method,
@@ -139,7 +144,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       result,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Internal tool error";
+    const isKnownError = err instanceof Error && (
+      err.message.startsWith("Unknown method:") ||
+      err.message.includes(" is required") ||
+      err.message.includes("must be ") ||
+      err.message.includes("Invalid ") ||
+      err.message.includes("Maximum ")
+    );
+    const message = isKnownError && err instanceof Error
+      ? err.message
+      : "Internal server error";
+    // Log full error server-side
+    if (!isKnownError) {
+      console.error("[mcp] tool error:", err);
+    }
 
     trackServer("mcp_tool_invoked", workspaceId, {
       tool_name: method,
@@ -168,4 +186,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       { status: 500 }
     );
   }
+}
+
+// L-3: OPTIONS handler for CORS preflight
+export async function OPTIONS(): Promise<NextResponse> {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
 }

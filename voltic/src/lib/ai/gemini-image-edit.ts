@@ -93,21 +93,18 @@ export function buildGeminiEditPrompt(
   const directives: string[] = [];
 
   if (creativeOptions?.angle) {
-    directives.push(
-      `Adjust the product angle to a ${PRODUCT_ANGLE_LABELS[creativeOptions.angle].toLowerCase()} perspective.`
-    );
+    const label = PRODUCT_ANGLE_LABELS[creativeOptions.angle];
+    if (label) directives.push(`Adjust the product angle to a ${label.toLowerCase()} perspective.`);
   }
 
   if (creativeOptions?.lighting) {
-    directives.push(
-      `Change the lighting to ${LIGHTING_STYLE_LABELS[creativeOptions.lighting].toLowerCase()}.`
-    );
+    const label = LIGHTING_STYLE_LABELS[creativeOptions.lighting];
+    if (label) directives.push(`Change the lighting to ${label.toLowerCase()}.`);
   }
 
   if (creativeOptions?.background) {
-    directives.push(
-      `Change the background to ${BACKGROUND_STYLE_LABELS[creativeOptions.background].toLowerCase()}.`
-    );
+    const label = BACKGROUND_STYLE_LABELS[creativeOptions.background];
+    if (label) directives.push(`Change the background to ${label.toLowerCase()}.`);
   }
 
   if (creativeOptions?.customInstruction) {

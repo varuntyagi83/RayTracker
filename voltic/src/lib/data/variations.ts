@@ -87,7 +87,7 @@ export async function completeVariation(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createAdminClient();
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("variations")
     .update({
       generated_headline: content.generatedHeadline ?? null,
@@ -96,9 +96,11 @@ export async function completeVariation(
       status: "completed",
     })
     .eq("id", variationId)
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", workspaceId)
+    .select("id");
 
   if (error) return { success: false, error: error.message };
+  if (!updated?.length) return { success: false, error: "Variation not found" };
   return { success: true };
 }
 

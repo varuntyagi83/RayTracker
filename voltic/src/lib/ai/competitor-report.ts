@@ -1,6 +1,53 @@
+import { z } from "zod";
 import { getOpenAIClient } from "./openai";
 import type { CompetitorAd } from "@/types/competitors";
 import type { CompetitorAdAnalysis, CrossBrandSummary } from "@/types/competitors";
+
+// ─── Zod schema for AI response validation ───────────────────────────────────
+
+const CompetitorAdAnalysisSchema = z.object({
+  adId: z.string(),
+  metaLibraryId: z.string(),
+  brandName: z.string(),
+  headline: z.string(),
+  bodyText: z.string(),
+  format: z.string(),
+  hookType: z.string(),
+  hookExplanation: z.string(),
+  ctaType: z.string(),
+  ctaAnalysis: z.string(),
+  targetAudience: z.object({
+    primary: z.string(),
+    interests: z.array(z.string()),
+    painPoints: z.array(z.string()),
+  }),
+  copyStructure: z.object({
+    framework: z.string(),
+    structure: z.string(),
+    headlineFormula: z.string(),
+  }),
+  strengths: z.array(z.string()),
+  weaknesses: z.array(z.string()),
+  improvements: z.array(z.string()),
+  estimatedClicksRange: z.object({ low: z.number(), high: z.number() }),
+  estimatedROAS: z.object({ low: z.number(), high: z.number() }),
+  estimatedTargetGroup: z.string(),
+  performanceScore: z.number(),
+  performanceRationale: z.string(),
+}) satisfies z.ZodType<CompetitorAdAnalysis>;
+
+const CrossBrandSummarySchema = z.object({
+  commonPatterns: z.array(z.string()),
+  bestPractices: z.array(z.string()),
+  gapsAndOpportunities: z.array(z.string()),
+  marketPositioning: z.string(),
+  overallRecommendations: z.array(z.string()),
+}) satisfies z.ZodType<CrossBrandSummary>;
+
+const CompetitorReportResultSchema = z.object({
+  perAdAnalyses: z.array(CompetitorAdAnalysisSchema),
+  crossBrandSummary: CrossBrandSummarySchema,
+});
 
 const MAX_ADS = 50;
 
@@ -120,7 +167,7 @@ export async function generateCompetitorReport(
 
   let parsed: CompetitorReportResult;
   try {
-    parsed = JSON.parse(content) as CompetitorReportResult;
+    parsed = CompetitorReportResultSchema.parse(JSON.parse(content));
   } catch {
     throw new Error("AI returned malformed JSON for competitor report — please retry");
   }
