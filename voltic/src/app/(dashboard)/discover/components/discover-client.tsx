@@ -338,6 +338,8 @@ export default function DiscoverClient() {
       const result = await saveDiscoverRunAction({
         brandName: query.trim(),
         ads: rawAds,
+        pageId: selectedPageId,
+        country,
       });
       if (result.success) {
         setRunSaved(true);
@@ -385,7 +387,7 @@ export default function DiscoverClient() {
   const handleSaveAsCompetitor = async (ad: DiscoverAd) => {
     setSavingCompetitorAdId(ad.id);
     try {
-      const result = await saveAdAsCompetitorAction({ ad });
+      const result = await saveAdAsCompetitorAction({ ad, pageId: selectedPageId, country });
       if (result.success) {
         setSavedCompetitorAdIds((prev) => new Set(prev).add(ad.id));
         track("discover_ad_saved_as_competitor", { ad_id: ad.id, brand: ad.pageName });

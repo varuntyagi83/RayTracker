@@ -51,10 +51,16 @@ export async function saveToBoard(input: { boardId: string; ad: DiscoverAd }) {
 export async function saveDiscoverRunAction(input: {
   brandName: string;
   ads: DiscoverAd[];
+  pageId?: string;
+  country?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
-  return await saveCompetitorScrapeRun(workspace.id, input.brandName, input.ads);
+  const country = input.country || "ALL";
+  const metaAdsLibraryUrl = input.pageId
+    ? `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&view_all_page_id=${input.pageId}&search_type=page_id`
+    : `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(input.brandName)}&search_type=keyword_unordered`;
+  return await saveCompetitorScrapeRun(workspace.id, input.brandName, input.ads, metaAdsLibraryUrl);
 }
 
 export async function createBoardFromDiscoverAction(input: {
@@ -71,10 +77,16 @@ export async function createBoardFromDiscoverAction(input: {
 
 export async function saveAdAsCompetitorAction(input: {
   ad: DiscoverAd;
+  pageId?: string;
+  country?: string;
 }): Promise<{ success: boolean; error?: string }> {
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
-  return await saveCompetitorScrapeRun(workspace.id, input.ad.pageName, [input.ad]);
+  const country = input.country || "ALL";
+  const metaAdsLibraryUrl = input.pageId
+    ? `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&view_all_page_id=${input.pageId}&search_type=page_id`
+    : `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${encodeURIComponent(input.ad.pageName)}&search_type=keyword_unordered`;
+  return await saveCompetitorScrapeRun(workspace.id, input.ad.pageName, [input.ad], metaAdsLibraryUrl);
 }
 
 export async function clearDiscoverCache() {

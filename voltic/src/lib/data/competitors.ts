@@ -55,7 +55,8 @@ export async function listCompetitorBrands(
 export async function saveCompetitorScrapeRun(
   workspaceId: string,
   brandName: string,
-  ads: DiscoverAd[]
+  ads: DiscoverAd[],
+  metaAdsLibraryUrl?: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createAdminClient();
 
@@ -76,6 +77,7 @@ export async function saveCompetitorScrapeRun(
       .update({
         last_scraped_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        ...(metaAdsLibraryUrl ? { meta_ads_library_url: metaAdsLibraryUrl } : {}),
       })
       .eq("id", brandId);
   } else {
@@ -85,6 +87,7 @@ export async function saveCompetitorScrapeRun(
         workspace_id: workspaceId,
         name: brandName,
         last_scraped_at: new Date().toISOString(),
+        ...(metaAdsLibraryUrl ? { meta_ads_library_url: metaAdsLibraryUrl } : {}),
       })
       .select("id")
       .single();
