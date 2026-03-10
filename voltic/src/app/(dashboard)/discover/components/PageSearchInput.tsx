@@ -94,7 +94,8 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
     setOpen(false);
     setPages([]);
     setFallbackMode(false);
-  }, []);
+    onSearch(page.name, page.page_id);
+  }, [onSearch]);
 
   const clearSelection = useCallback(() => {
     setSelectedPage(null);
