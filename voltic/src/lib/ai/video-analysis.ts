@@ -283,7 +283,7 @@ async function callGeminiVideoAnalysis(
     throw new Error("GOOGLE_GENERATIVE_AI_API_KEY environment variable is not set");
   }
 
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
   const requestBody = {
     contents: [

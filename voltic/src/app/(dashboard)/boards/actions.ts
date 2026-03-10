@@ -355,15 +355,16 @@ export async function generateVariationsAction(
             brandGuidelines
           );
         } else {
-          // Competitor-based: generate a new image via DALL-E
-          const dalleUrl = await generateVariationImage(
+          // Competitor-based: generate a new image via Gemini
+          imageUrl = await generateVariationImage(
             savedAd,
             asset,
             strategy,
+            workspace.id,
+            variationId,
             brandGuidelines,
             creativeOptions
           );
-          imageUrl = dalleUrl;
         }
       }
 

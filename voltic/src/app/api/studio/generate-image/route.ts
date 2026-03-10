@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import OpenAI from "openai";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { aiLimiter } from "@/lib/utils/rate-limit";
@@ -40,36 +39,49 @@ export async function POST(req: NextRequest) {
 
   const { prompt, messageId, conversationId, size, quality, brandGuidelineId } = parsed.data;
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY is not configured" },
+      { error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" },
       { status: 500 }
     );
   }
 
   try {
-    // Generate image with GPT Image
-    const openai = new OpenAI({ apiKey });
-    const response = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt,
-      size,
-      quality,
-      output_format: "png",
+    // Generate image with Gemini
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent`;
+    const geminiResponse = await fetch(geminiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+      }),
+      signal: AbortSignal.timeout(120_000),
     });
 
-    const b64 = response.data?.[0]?.b64_json;
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text().catch(() => "");
+      return NextResponse.json(
+        { error: `Gemini image generation failed: ${errText.slice(0, 200)}` },
+        { status: 500 }
+      );
+    }
+
+    const geminiJson = await geminiResponse.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data: string } }> } }>;
+    };
+    const b64 = geminiJson.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
     if (!b64) {
       return NextResponse.json(
-        { error: "No image returned from GPT Image" },
+        { error: "No image returned from Gemini" },
         { status: 500 }
       );
     }
 
     // Decode base64 and upload to Supabase Storage
     const imageBuffer = Buffer.from(b64, "base64");
-    const storagePath = `${workspace.id}/studio/generated/${Date.now()}-gpt-image.png`;
+    const storagePath = `${workspace.id}/studio/generated/${Date.now()}-gemini-image.png`;
 
     const supabase = createAdminClient();
     const { error: uploadError } = await supabase.storage

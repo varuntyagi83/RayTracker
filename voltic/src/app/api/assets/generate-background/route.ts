@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
-import { getOpenAIClient } from "@/lib/ai/openai";
 import { getBrandGuidelineById } from "@/lib/data/brand-guidelines-entities";
 import { uploadAssetImage, createAsset } from "@/lib/data/assets";
 import { aiLimiter } from "@/lib/utils/rate-limit";
@@ -71,18 +70,40 @@ export async function POST(request: Request) {
       `No text or words in the image. ` +
       (prompt ? `Additional direction: ${sanitizeForPrompt(prompt, 500)}` : "");
 
-    const openai = getOpenAIClient();
+    const geminiApiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!geminiApiKey) {
+      return NextResponse.json(
+        { error: "GOOGLE_GENERATIVE_AI_API_KEY is not configured" },
+        { status: 500 }
+      );
+    }
 
-    const response = await openai.images.generate({
-      model: "gpt-image-1",
-      prompt: basePrompt,
-      size: "1024x1024",
-      quality: "high",
-      output_format: "png",
-    });
+    const geminiResponse = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": geminiApiKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: basePrompt }] }],
+          generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+        }),
+        signal: AbortSignal.timeout(120_000),
+      }
+    );
 
-    const imageData = response.data?.[0];
-    if (!imageData?.b64_json) {
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text().catch(() => "");
+      return NextResponse.json(
+        { error: `Image generation failed: ${errText.slice(0, 200)}` },
+        { status: 500 }
+      );
+    }
+
+    const geminiJson = await geminiResponse.json() as {
+      candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data: string } }> } }>;
+    };
+    const b64 = geminiJson.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data)?.inlineData?.data;
+    if (!b64) {
       return NextResponse.json(
         { error: "Failed to generate image" },
         { status: 500 }
@@ -90,7 +111,7 @@ export async function POST(request: Request) {
     }
 
     // Upload to storage
-    const buffer = Buffer.from(imageData.b64_json, "base64");
+    const buffer = Buffer.from(b64, "base64");
     const fileName = `bg-${Date.now()}.png`;
     const upload = await uploadAssetImage(workspace.id, fileName, buffer, "image/png");
     if (upload.error || !upload.url) {

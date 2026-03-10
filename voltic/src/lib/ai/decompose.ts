@@ -240,8 +240,8 @@ const STORAGE_BUCKET = "brand-assets";
 
 /**
  * Generates a clean product image by removing marketing overlay text.
- * Tries gpt-image-1 (mask-based inpainting) first, falls back to Gemini
- * (conversational editing) if OpenAI fails.
+ * Tries Gemini (gemini-3.1-flash-image-preview) first, falls back to
+ * gpt-image-1 (mask-based inpainting) if Gemini fails.
  *
  * Returns a permanent Supabase Storage URL.
  */
@@ -334,7 +334,7 @@ CRITICAL: Do NOT alter the product, product packaging text, background, props, c
 
   const RETRYABLE = new Set([429, 500, 503]);
   // Key passed as header — not in URL — to avoid logging in server/Vercel access logs (C-8)
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent`;
   const geminiBody = JSON.stringify({
     contents: [
       {

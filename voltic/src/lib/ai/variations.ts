@@ -13,7 +13,7 @@ import {
   BACKGROUND_STYLE_LABELS,
   ASPECT_RATIO_LABELS,
 } from "@/types/variations";
-import { getDalleSize } from "./image-resize";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { SavedAd } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 
@@ -287,12 +287,18 @@ export function buildAssetImagePrompt(
     .join(" ");
 }
 
-// ─── Image Generation (DALL-E 3) ────────────────────────────────────────────
+// ─── Image Generation (Gemini) ───────────────────────────────────────────────
+
+const GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+const VARIATION_STORAGE_BUCKET = "brand-assets";
 
 export async function generateVariationImage(
   ad: Pick<SavedAd, "brandName" | "format"> | null,
   asset: Pick<Asset, "name" | "description">,
   strategy: VariationStrategy,
+  workspaceId: string,
+  variationId: string,
   brandGuidelines?: BrandGuidelines,
   creativeOptions?: CreativeOptions
 ): Promise<string> {
@@ -300,24 +306,55 @@ export async function generateVariationImage(
     throw new Error("text_only strategy does not generate images");
   }
 
-  const client = getOpenAIClient();
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (!apiKey) throw new Error("GOOGLE_GENERATIVE_AI_API_KEY is not set");
 
   const prompt = ad
     ? buildImagePrompt(ad, asset, strategy, brandGuidelines)
     : buildAssetImagePrompt(asset, strategy, creativeOptions, brandGuidelines);
 
-  const response = await client.images.generate({
-    model: "dall-e-3",
-    prompt,
-    n: 1,
-    size: getDalleSize(creativeOptions?.aspectRatio),
-    quality: "standard",
+  const geminiUrl = `${GEMINI_API_BASE}/${GEMINI_IMAGE_MODEL}:generateContent`;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
   });
 
-  const url = response.data?.[0]?.url;
-  if (!url) throw new Error("No image URL returned from DALL-E");
+  const response = await fetch(geminiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+    body,
+    signal: AbortSignal.timeout(120_000),
+  });
 
-  return url;
+  if (!response.ok) {
+    const err = await response.text().catch(() => "");
+    throw new Error(`Gemini image generation failed (${response.status}): ${err.slice(0, 200)}`);
+  }
+
+  const json = await response.json() as {
+    candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data: string; mimeType: string } }> } }>;
+  };
+
+  const imagePart = json.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+  if (!imagePart?.inlineData?.data) {
+    throw new Error("No image returned from Gemini");
+  }
+
+  const imageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
+  const storagePath = `${workspaceId}/variations/${variationId}-gemini.png`;
+
+  const supabase = createAdminClient();
+  const { error: uploadError } = await supabase.storage
+    .from(VARIATION_STORAGE_BUCKET)
+    .upload(storagePath, imageBuffer, { contentType: "image/png" });
+
+  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+  const { data: { publicUrl } } = supabase.storage
+    .from(VARIATION_STORAGE_BUCKET)
+    .getPublicUrl(storagePath);
+
+  return publicUrl;
 }
 
 // ─── Asset-Based Image Editing (Gemini Nano Banana Pro) ──────────────────

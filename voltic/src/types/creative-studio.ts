@@ -30,8 +30,8 @@ export const LLM_MODELS: LLMModelOption[] = [
   },
   {
     provider: "google",
-    model: "gemini-2.0-flash",
-    label: "Gemini 2.0 Flash",
+    model: "gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
     description: "Google fast model",
     supportsVision: true,
     creditCost: 2,
