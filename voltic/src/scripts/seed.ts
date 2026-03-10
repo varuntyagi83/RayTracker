@@ -264,7 +264,7 @@ async function seed() {
   console.log(`   Created ${adAccounts!.length} ad accounts`);
 
   // 3. Campaigns (50)
-  console.log("3. Creating 50 campaigns...");
+  console.log("3. Upserting 50 campaigns...");
   const campaignRows = CAMPAIGN_DEFINITIONS.map((def, i) => ({
     workspace_id: workspaceId,
     ad_account_id: adAccounts![i % adAccounts!.length].id,
@@ -278,13 +278,23 @@ async function seed() {
 
   const { data: campaignData, error: campErr } = await supabase
     .from("campaigns")
-    .insert(campaignRows)
+    .upsert(campaignRows, { onConflict: "meta_campaign_id" })
     .select("id, name");
-  if (campErr) throw new Error(`Failed to create campaigns: ${campErr.message}`);
-  console.log(`   Created ${campaignData!.length} campaigns`);
+  if (campErr) throw new Error(`Failed to upsert campaigns: ${campErr.message}`);
+  console.log(`   Upserted ${campaignData!.length} campaigns`);
 
-  // 4. Campaign Metrics (30 days per campaign)
-  console.log("4. Creating campaign metrics (30 days × 50 campaigns)...");
+  // 4. Campaign Metrics (30 days per campaign) — always fresh dates
+  console.log("4. Refreshing campaign metrics (30 days × 50 campaigns)...");
+  const campaignIds = campaignData!.map((c) => c.id);
+  // Delete stale metrics before reinserting with today-relative dates
+  for (let i = 0; i < campaignIds.length; i += 100) {
+    const batch = campaignIds.slice(i, i + 100);
+    const { error: delCmErr } = await supabase
+      .from("campaign_metrics")
+      .delete()
+      .in("campaign_id", batch);
+    if (delCmErr) throw new Error(`Failed to delete stale campaign metrics: ${delCmErr.message}`);
+  }
   const metricRows: Array<Record<string, unknown>> = [];
   for (const campaign of campaignData!) {
     for (let day = 0; day < 30; day++) {
@@ -329,7 +339,7 @@ async function seed() {
   console.log(`   Created ${metricRows.length} campaign metric rows`);
 
   // 5. Creatives (20)
-  console.log("5. Creating 20 creatives...");
+  console.log("5. Upserting 20 creatives...");
   const creativeRows = Array.from({ length: 20 }, (_, i) => ({
     workspace_id: workspaceId,
     campaign_id: campaignData![i % campaignData!.length].id,
@@ -346,13 +356,23 @@ async function seed() {
 
   const { data: creativeData, error: crErr } = await supabase
     .from("creatives")
-    .insert(creativeRows)
+    .upsert(creativeRows, { onConflict: "meta_creative_id" })
     .select("id");
-  if (crErr) throw new Error(`Failed to create creatives: ${crErr.message}`);
-  console.log(`   Created ${creativeData!.length} creatives`);
+  if (crErr) throw new Error(`Failed to upsert creatives: ${crErr.message}`);
+  console.log(`   Upserted ${creativeData!.length} creatives`);
 
-  // 6. Creative Metrics (30 days per creative)
-  console.log("6. Creating creative metrics (30 days × 20 creatives)...");
+  // 6. Creative Metrics (30 days per creative) — always fresh dates
+  console.log("6. Refreshing creative metrics (30 days × 20 creatives)...");
+  const creativeIds = creativeData!.map((c) => c.id);
+  // Delete stale metrics before reinserting
+  for (let i = 0; i < creativeIds.length; i += 100) {
+    const batch = creativeIds.slice(i, i + 100);
+    const { error: delCreErr } = await supabase
+      .from("creative_metrics")
+      .delete()
+      .in("creative_id", batch);
+    if (delCreErr) throw new Error(`Failed to delete stale creative metrics: ${delCreErr.message}`);
+  }
   const creativeMetricRows: Array<Record<string, unknown>> = [];
   for (const creative of creativeData!) {
     for (let day = 0; day < 30; day++) {

@@ -37,10 +37,12 @@ export default async function HomePage() {
   const copy = results[3].status === "fulfilled" ? results[3].value : [];
   const landingPages = results[4].status === "fulfilled" ? results[4].value : [];
 
-  // Demo fallback: only show placeholder data when no ad accounts are connected.
-  // Previously checked revenue/spend === 0, which incorrectly showed demo data
-  // to real users with connected accounts but no recent ad spend.
-  const isDemoMode = kpis.adAccountCount === 0;
+  // Demo fallback: show placeholder data when no real spend data exists.
+  // Covers two cases: (1) no ad accounts connected yet, (2) seed data with
+  // stale metrics where all last-7-day values are zero.
+  const noRecentSpend =
+    kpis.last7Days.spend === 0 && kpis.last7Days.revenue === 0;
+  const isDemoMode = kpis.adAccountCount === 0 || noRecentSpend;
   const displayKPIs = isDemoMode
     ? {
         adAccountCount: kpis.adAccountCount,
