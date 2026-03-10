@@ -1,6 +1,6 @@
 # Voltic — Development Progress
 
-> Last updated: 2026-03-10 (Phase 23: MCP Server complete)
+> Last updated: 2026-03-10 (Phase 24: Video Ad Analysis complete)
 
 ---
 
@@ -15,6 +15,23 @@ The Ad Decomposition and Creative Builder features received bug fixes. The codeb
 ---
 
 ## Recent Changes (Session: Mar 10, 2026)
+
+### Phase 24: Video Ad Analysis ✅
+
+Competitor video analysis pipeline with Gemini Flash 2.0 and GPT-4o, hooks matrix generation, and full UI wizard.
+
+**Files created/modified:**
+- `src/lib/ai/video-analysis.ts` — analyzeVideoAd() with Gemini Flash 2.0 (native video, base64 inline) and GPT-4o paths; credit costs: Gemini quick=2/detailed=5, GPT-4o quick=5/detailed=10
+- `src/lib/ai/hooks-generator.ts` — generateHooksMatrix() producing HookEntry[], CreativeBrief[], CompetitiveInsights; 10 credits
+- `supabase/migrations/011_video_analysis.sql` — video_analyses + hooks_matrix_runs tables with full RLS and CHECK constraints
+- `src/lib/data/video-analysis.ts` — 8 typed DB functions (createVideoAnalysis, updateVideoAnalysis, getVideoAnalysesByBrand, getVideoAnalysisById, getDownloadedVideosByBrand, getVideoBrands, createHooksMatrixRun, getHooksMatrixRuns)
+- `src/app/api/mcp/tools.ts` — Added 3 MCP tools: analyze_video_ad, analyze_competitor_videos_batch, generate_hooks_matrix
+- `src/lib/analytics/events.ts` — Added 6 video analysis events + mcp_key_toggled
+- `src/app/(dashboard)/competitors/video-analysis/` — Full UI: multi-step wizard (Select → Configure → Analyzing → Generate → Results), export to CSV/JSON/MD
+
+**Commit:** `bc88732`
+
+---
 
 ### Phase 23: MCP Server ✅
 
