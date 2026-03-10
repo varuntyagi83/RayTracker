@@ -11,7 +11,7 @@ Voltic is a SaaS platform that unifies Meta (Facebook/Instagram) advertising ana
 - **Auth:** Supabase Auth (email/password + Google OAuth)
 - **File Storage:** Supabase Storage (product images, ad media, variation outputs)
 - **Integrations:** Meta Marketing API v21.0, Meta Ads Library, Slack Web API
-- **AI:** OpenAI GPT-4o (text), DALL-E 3 or Stable Diffusion (images)
+- **AI:** OpenAI GPT-4o (text generation), gemini-3.1-flash-image-preview (image generation), gemini-2.5-flash (video analysis)
 - **Analytics:** PostHog (client + server, group analytics by workspace)
 - **Charts:** Recharts
 - **Testing:** Vitest (unit) + Playwright (E2E)
@@ -108,6 +108,18 @@ src/
 
 ## Build Plan Reference
 The full 20-phase build plan is documented in `VOLTIC_BUILD_PLAN.md`. Each phase is designed to be executed in a single Claude Code session following the Ralph Loop protocol. Read `PROGRESS.md` to determine which phase to execute next.
+
+## AI Model Usage Rules
+
+These rules are ABSOLUTE. Never deviate from them.
+
+| Task | Model | Notes |
+|------|-------|-------|
+| Text generation | `gpt-4o` | Ad copy, hooks, taglines, headlines, body text, CTAs, creative briefs, variation text, ad insights, comparisons, competitor reports, brand guidelines, any copywriting or text analysis |
+| Image generation | `gemini-3.1-flash-image-preview` | Product shots, angled shots, background generation, composites, reformatting, any image creation or editing. NEVER use DALL-E or GPT-4o for images |
+| Video analysis | `gemini-2.5-flash` | Competitor video ad analysis, hook extraction, narrative breakdown, text overlay extraction, scroll-stop scoring. GPT-4o Vision with frame extraction is a premium fallback only |
+
+**Summary:** Text/copy → GPT-4o | Images → gemini-3.1-flash-image-preview | Video → gemini-2.5-flash
 
 ## IMPORTANT RULES
 1. **NEVER skip TypeScript types** — every function, every component, every API response
