@@ -159,6 +159,7 @@ export async function downloadAndStoreMedia(params: {
 
   const response = await fetch(mediaUrl, {
     signal: AbortSignal.timeout(timeoutMs),
+    redirect: "error",
   });
 
   if (!response.ok) {

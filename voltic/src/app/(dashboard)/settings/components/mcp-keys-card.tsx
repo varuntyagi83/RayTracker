@@ -196,6 +196,7 @@ function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDialogProps
   const [submitting, setSubmitting] = useState(false);
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null);
   const [keyCopied, setKeyCopied] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
 
   const reset = () => {
     setStep("form");
@@ -206,6 +207,7 @@ function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDialogProps
     setSubmitting(false);
     setCreatedKey(null);
     setKeyCopied(false);
+    setConfirmed(false);
   };
 
   const handleOpenChange = (val: boolean) => {
@@ -283,6 +285,7 @@ function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDialogProps
                   id="key-name"
                   placeholder="e.g. Claude Cowork"
                   value={name}
+                  maxLength={100}
                   onChange={(e) => setName(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleSubmit();
@@ -392,10 +395,21 @@ function CreateKeyDialog({ open, onOpenChange, onCreated }: CreateKeyDialogProps
                   This key will not be shown again. Store it securely before closing this dialog.
                 </span>
               </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="key-saved-confirm"
+                  checked={confirmed}
+                  onCheckedChange={(v) => setConfirmed(Boolean(v))}
+                />
+                <label htmlFor="key-saved-confirm" className="text-sm cursor-pointer">
+                  I have saved this key in a secure location
+                </label>
+              </div>
             </div>
 
             <div className="flex justify-end pt-2">
-              <Button onClick={handleDone}>Done</Button>
+              <Button onClick={handleDone} disabled={!confirmed}>Done</Button>
             </div>
           </>
         )}
