@@ -9,18 +9,10 @@ import type { MetaPage } from "@/lib/meta/page-search";
 interface PageSearchInputProps {
   disabled?: boolean;
   onSearch: (query: string, pageId?: string) => void;
+  triggerRef?: React.MutableRefObject<(() => void) | null>;
 }
 
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-  return debounced;
-}
-
-export default function PageSearchInput({ disabled, onSearch }: PageSearchInputProps) {
+export default function PageSearchInput({ disabled, onSearch, triggerRef }: PageSearchInputProps) {
   const [inputValue, setInputValue] = useState("");
   const [pages, setPages] = useState<MetaPage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -33,50 +25,6 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const debouncedInput = useDebounce(inputValue, 300);
-
-  // Fetch page suggestions when input changes
-  useEffect(() => {
-    if (selectedPage) return; // already selected, don't re-fetch
-    if (debouncedInput.trim().length < 2) {
-      setPages([]);
-      setOpen(false);
-      return;
-    }
-
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setLoading(true);
-    setFallbackMode(false);
-
-    fetch(
-      `/api/meta/page-search?query=${encodeURIComponent(debouncedInput.trim())}`,
-      { signal: controller.signal }
-    )
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`API error ${res.status}`);
-        return res.json() as Promise<{ pages: MetaPage[] }>;
-      })
-      .then((data) => {
-        const results = data.pages ?? [];
-        setPages(results);
-        setOpen(results.length > 0 || debouncedInput.trim().length >= 2);
-        setHighlightIndex(-1);
-        if (results.length === 0) setFallbackMode(true);
-      })
-      .catch((err) => {
-        if ((err as Error).name !== "AbortError") {
-          setFallbackMode(true);
-          setOpen(false);
-        }
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, [debouncedInput, selectedPage]);
-
   // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -87,6 +35,66 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  // Expose trigger to parent via ref so the Search button can initiate lookup
+  const fetchPages = useCallback(async (query: string) => {
+    const q = query.trim();
+    if (!q) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setFallbackMode(false);
+    setPages([]);
+
+    try {
+      const res = await fetch(
+        `/api/meta/page-search?query=${encodeURIComponent(q)}`,
+        { signal: controller.signal }
+      );
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      const data = await res.json() as { pages: MetaPage[] };
+      const results = data.pages ?? [];
+
+      if (results.length === 0) {
+        // No page matches — fall back to keyword search immediately
+        setFallbackMode(true);
+        onSearch(q, undefined);
+      } else if (results.length === 1) {
+        // Exactly one match — auto-select and search
+        setSelectedPage(results[0]);
+        setInputValue(results[0].name);
+        onSearch(results[0].name, results[0].page_id);
+      } else {
+        // Multiple matches — show dropdown for user to pick
+        setPages(results);
+        setOpen(true);
+        setHighlightIndex(-1);
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        setFallbackMode(true);
+        onSearch(q, undefined);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [onSearch]);
+
+  // Wire up triggerRef so parent Search button can call fetchPages
+  useEffect(() => {
+    if (triggerRef) {
+      triggerRef.current = () => {
+        if (selectedPage) {
+          onSearch(selectedPage.name, selectedPage.page_id);
+        } else {
+          fetchPages(inputValue);
+        }
+      };
+    }
+  }, [triggerRef, fetchPages, inputValue, selectedPage, onSearch]);
 
   const selectPage = useCallback((page: MetaPage) => {
     setSelectedPage(page);
@@ -107,32 +115,37 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!open || pages.length === 0) {
-      if (e.key === "Enter") triggerSearch();
+    if (e.key === "Escape") {
+      setOpen(false);
       return;
     }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlightIndex((i) => Math.min(i + 1, pages.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlightIndex((i) => Math.max(i - 1, -1));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (highlightIndex >= 0 && pages[highlightIndex]) {
-        selectPage(pages[highlightIndex]);
-      } else {
-        triggerSearch();
+    if (open && pages.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightIndex((i) => Math.min(i + 1, pages.length - 1));
+        return;
       }
-    } else if (e.key === "Escape") {
-      setOpen(false);
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightIndex((i) => Math.max(i - 1, -1));
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (highlightIndex >= 0 && pages[highlightIndex]) {
+          selectPage(pages[highlightIndex]);
+        }
+        return;
+      }
     }
-  };
-
-  const triggerSearch = () => {
-    const q = selectedPage?.name ?? inputValue.trim();
-    if (!q) return;
-    onSearch(q, selectedPage?.page_id);
+    if (e.key === "Enter" && !open) {
+      e.preventDefault();
+      if (selectedPage) {
+        onSearch(selectedPage.name, selectedPage.page_id);
+      } else {
+        fetchPages(inputValue);
+      }
+    }
   };
 
   const isVerified = (page: MetaPage) =>
@@ -155,6 +168,7 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
           onChange={(e) => {
             setInputValue(e.target.value);
             if (selectedPage) setSelectedPage(null);
+            if (open) setOpen(false);
           }}
           onKeyDown={handleKeyDown}
           onFocus={() => {
@@ -214,7 +228,7 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
         </p>
       )}
 
-      {/* Dropdown */}
+      {/* Dropdown — shown after manual trigger when multiple pages match */}
       {open && pages.length > 0 && !selectedPage && (
         <div className="absolute z-50 top-full mt-1 w-full rounded-md border bg-popover shadow-md overflow-hidden">
           <ul role="listbox" className="max-h-64 overflow-y-auto py-1">
@@ -271,13 +285,6 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
                 </span>
               </li>
             ))}
-
-            {/* Empty state */}
-            {pages.length === 0 && !loading && (
-              <li className="px-3 py-4 text-center text-sm text-muted-foreground">
-                No matching pages found. Try a different name.
-              </li>
-            )}
           </ul>
         </div>
       )}

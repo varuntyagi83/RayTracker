@@ -152,6 +152,9 @@ export default function DiscoverClient() {
   // Decompose state
   const [decomposeAd, setDecomposeAd] = useState<DiscoverAd | null>(null);
 
+  // Ref to trigger page lookup from PageSearchInput
+  const pageSearchTriggerRef = useRef<(() => void) | null>(null);
+
   // Derive displayed ads from raw data + client-side filters
   const displayedAds = useMemo(() => {
     let ads = [...rawAds];
@@ -411,13 +414,17 @@ export default function DiscoverClient() {
       <div className="flex gap-3 flex-wrap items-start">
         <PageSearchInput
           disabled={loading}
+          triggerRef={pageSearchTriggerRef}
           onSearch={(q, pageId) => {
             setQuery(q);
             setSelectedPageId(pageId);
             handleSearch(q, pageId);
           }}
         />
-        <Button onClick={() => handleSearch()} disabled={!query.trim() || loading}>
+        <Button
+          onClick={() => pageSearchTriggerRef.current?.()}
+          disabled={loading}
+        >
           Search
         </Button>
         {loading && (
