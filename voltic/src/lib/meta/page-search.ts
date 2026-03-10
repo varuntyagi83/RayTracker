@@ -50,7 +50,7 @@ export async function searchMetaPages(
   try {
     const params = new URLSearchParams({
       companyName: query.trim(),
-      country: country === "ALL" ? "US" : country,
+      country: country || "ALL",
       trim: "true",
     });
 
