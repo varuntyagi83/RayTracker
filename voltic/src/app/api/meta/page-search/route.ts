@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getWorkspace } from "@/lib/supabase/queries";
 import { searchMetaPages } from "@/lib/meta/page-search";
 
 export const runtime = "nodejs";
@@ -16,10 +15,8 @@ const cache = new Map<string, { pages: Awaited<ReturnType<typeof searchMetaPages
 const CACHE_TTL_MS = 5 * 60 * 1_000; // 5 minutes
 
 export async function GET(req: NextRequest) {
-  const workspace = await getWorkspace();
-  if (!workspace) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  // No auth check — this reads public Facebook page data.
+  // The SCRAPECREATORS_API_KEY stays server-side only.
 
   const { searchParams } = req.nextUrl;
   const parsed = schema.safeParse({

@@ -55,8 +55,11 @@ export default function PageSearchInput({ disabled, onSearch }: PageSearchInputP
       `/api/meta/page-search?query=${encodeURIComponent(debouncedInput.trim())}`,
       { signal: controller.signal }
     )
-      .then((res) => res.json())
-      .then((data: { pages: MetaPage[] }) => {
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`API error ${res.status}`);
+        return res.json() as Promise<{ pages: MetaPage[] }>;
+      })
+      .then((data) => {
         const results = data.pages ?? [];
         setPages(results);
         setOpen(results.length > 0 || debouncedInput.trim().length >= 2);
