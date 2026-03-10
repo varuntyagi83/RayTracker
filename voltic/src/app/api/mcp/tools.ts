@@ -16,7 +16,16 @@ import { generateAdInsights } from "@/lib/ai/insights";
 import { generateAdComparison } from "@/lib/ai/comparison";
 import { generateCompetitorReport } from "@/lib/ai/competitor-report";
 import { decomposeAdImage } from "@/lib/ai/decompose";
-import { downloadAndStoreMedia } from "@/lib/media/download";
+import { downloadAndStoreMedia, downloadBatchMedia } from "@/lib/media/download";
+import { trackServer } from "@/lib/analytics/posthog-server";
+import {
+  getTopAdsReport,
+  getTopCampaignsReport,
+  getTopCreativesReport,
+  getTopLandingPagesReport,
+  getTopHeadlinesReport,
+  getTopCopyReport,
+} from "@/lib/data/reports";
 import type { DiscoverAd } from "@/types/discover";
 import type { CompetitorAd } from "@/types/competitors";
 
@@ -297,6 +306,71 @@ export const TOOL_LIST: McpToolDefinition[] = [
       required: ["media_url", "brand_name", "media_type"],
     },
   },
+  {
+    name: "download_competitor_ads_batch",
+    description: "Download multiple competitor ad media files in parallel batches. Stores all files in Voltic's media library and returns a summary with permanent URLs.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        brand_name: { type: "string", description: "Brand name for file naming and organisation" },
+        ads: {
+          type: "array",
+          description: "Array of ads to download. Each must have mediaUrl and mediaType.",
+          items: { type: "object" },
+        },
+        max_concurrent: { type: "number", description: "Max parallel downloads (default: 5, max: 10)" },
+      },
+      required: ["brand_name", "ads"],
+    },
+  },
+  {
+    name: "get_report",
+    description:
+      "Run a performance report for the workspace. Supports top-ads, top-campaigns, top-creatives, top-landing-pages, top-headlines, and top-copy report types. Returns paginated, sorted rows.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        report_type: {
+          type: "string",
+          enum: [
+            "top-ads",
+            "top-campaigns",
+            "top-creatives",
+            "top-landing-pages",
+            "top-headlines",
+            "top-copy",
+          ],
+          description: "The report type to run",
+        },
+        date_from: {
+          type: "string",
+          description: "Start date in YYYY-MM-DD format",
+        },
+        date_to: {
+          type: "string",
+          description: "End date in YYYY-MM-DD format",
+        },
+        sort_key: {
+          type: "string",
+          description: "Column to sort by (e.g. 'spend', 'roas', 'revenue'). Defaults to 'spend'.",
+        },
+        sort_direction: {
+          type: "string",
+          enum: ["asc", "desc"],
+          description: "Sort direction. Defaults to 'desc'.",
+        },
+        page: {
+          type: "number",
+          description: "Page number (1-based). Defaults to 1.",
+        },
+        page_size: {
+          type: "number",
+          description: "Rows per page (default: 25, max: 100).",
+        },
+      },
+      required: ["report_type", "date_from", "date_to"],
+    },
+  },
 ];
 
 // ─── Method Dispatcher ────────────────────────────────────────────────────────
@@ -306,31 +380,51 @@ export async function handleMcpMethod(
   method: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: Record<string, any>,
-  workspaceId: string
+  workspaceId: string,
+  scopes: string[] = []
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): Promise<any> {
+  // ── Scope enforcement helper ─────────────────────────────────────────────
+  const requireScope = (scope: string) => {
+    if (!scopes.includes(scope)) {
+      throw new Error(`This operation requires the '${scope}' scope`);
+    }
+  };
+
   switch (method) {
     // ── search_ads ──────────────────────────────────────────────────────────
     case "search_ads": {
+      requireScope("read");
+      if (String(params.query ?? "").length > 200) {
+        throw new Error("query must be 200 characters or fewer");
+      }
       const result = await searchAdsLibrary({
         query: String(params.query ?? ""),
         activeOnly: Boolean(params.active_only ?? false),
         format: params.format ?? "all",
         sort: "newest",
         country: params.country ?? "ALL",
-        scrapeCount: Number(params.limit ?? 20),
+        scrapeCount: Math.min(Math.max(Number(params.limit ?? 20), 1), 100),
       });
       return result;
     }
 
     // ── list_boards ─────────────────────────────────────────────────────────
     case "list_boards": {
+      requireScope("read");
       const boards = await getBoards(workspaceId);
       return { boards };
     }
 
     // ── create_board ────────────────────────────────────────────────────────
     case "create_board": {
+      requireScope("write");
+      if (String(params.name ?? "").length > 100) {
+        throw new Error("name must be 100 characters or fewer");
+      }
+      if (params.description && String(params.description).length > 500) {
+        throw new Error("description must be 500 characters or fewer");
+      }
       const result = await createBoard(
         workspaceId,
         String(params.name ?? ""),
@@ -341,29 +435,38 @@ export async function handleMcpMethod(
 
     // ── save_to_board ───────────────────────────────────────────────────────
     case "save_to_board": {
+      requireScope("write");
       if (!params.board_id) throw new Error("board_id is required");
       if (!params.ad_data) throw new Error("ad_data is required");
 
+      const ad = params.ad_data as Record<string, unknown>;
+      if (!ad.id || !ad.headline || !ad.format) {
+        throw new Error("ad_data must contain id, headline, and format fields");
+      }
+
       // Accept ad_data as a DiscoverAd-shaped object
-      const ad = params.ad_data as DiscoverAd;
-      const result = await saveAdToBoard(workspaceId, String(params.board_id), ad);
+      const discoverAd = params.ad_data as DiscoverAd;
+      const result = await saveAdToBoard(workspaceId, String(params.board_id), discoverAd);
       return result;
     }
 
     // ── list_competitors ────────────────────────────────────────────────────
     case "list_competitors": {
+      requireScope("read");
       const brands = await listCompetitorBrands(workspaceId);
       return { brands };
     }
 
     // ── get_dashboard_kpis ──────────────────────────────────────────────────
     case "get_dashboard_kpis": {
+      requireScope("read");
       const kpis = await getWorkspaceKPIs(workspaceId);
       return kpis;
     }
 
     // ── decompose_ad ────────────────────────────────────────────────────────
     case "decompose_ad": {
+      requireScope("ai");
       if (!params.image_url) throw new Error("image_url is required");
       const result = await decomposeAdImage(String(params.image_url));
       return result;
@@ -371,8 +474,14 @@ export async function handleMcpMethod(
 
     // ── generate_variations ─────────────────────────────────────────────────
     case "generate_variations": {
+      requireScope("ai");
       if (!params.asset_name) throw new Error("asset_name is required");
       if (!params.strategy) throw new Error("strategy is required");
+
+      const VALID_CHANNELS = ["facebook", "instagram", "tiktok", "linkedin", "google"];
+      if (params.channel && !VALID_CHANNELS.includes(String(params.channel))) {
+        throw new Error(`Invalid channel. Must be one of: ${VALID_CHANNELS.join(", ")}`);
+      }
 
       // Build the asset object expected by generateVariationText
       const asset = {
@@ -410,9 +519,19 @@ export async function handleMcpMethod(
 
     // ── analyze_ad ──────────────────────────────────────────────────────────
     case "analyze_ad": {
+      requireScope("ai");
       if (!params.brand_name) throw new Error("brand_name is required");
       if (!params.format) throw new Error("format is required");
       if (!params.platforms) throw new Error("platforms is required");
+      if (String(params.brand_name).length > 100) {
+        throw new Error("brand_name must be 100 characters or fewer");
+      }
+      if (params.headline && String(params.headline).length > 500) {
+        throw new Error("headline must be 500 characters or fewer");
+      }
+      if (params.body_text && String(params.body_text).length > 5000) {
+        throw new Error("body_text must be 5000 characters or fewer");
+      }
 
       const result = await generateAdInsights({
         brandName: String(params.brand_name),
@@ -429,11 +548,23 @@ export async function handleMcpMethod(
 
     // ── compare_ads ─────────────────────────────────────────────────────────
     case "compare_ads": {
+      requireScope("ai");
       if (!params.ads || !Array.isArray(params.ads)) {
         throw new Error("ads must be an array of 2–4 ad objects");
       }
       if (params.ads.length < 2 || params.ads.length > 4) {
         throw new Error("compare_ads requires 2 to 4 ads");
+      }
+
+      const requiredAdFields = ["id", "headline", "platforms", "mediaType"] as const;
+      for (let i = 0; i < params.ads.length; i++) {
+        const ad = params.ads[i] as Record<string, unknown>;
+        for (const field of requiredAdFields) {
+          const alt = field === "mediaType" ? "media_type" : field;
+          if (!ad[field] && !ad[alt]) {
+            throw new Error(`ads[${i}] is missing required field: ${field}`);
+          }
+        }
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -458,11 +589,16 @@ export async function handleMcpMethod(
 
     // ── generate_competitor_report ──────────────────────────────────────────
     case "generate_competitor_report": {
+      requireScope("ai");
       if (!params.ads || !Array.isArray(params.ads)) {
         throw new Error("ads must be an array of competitor ad objects");
       }
       if (!params.brand_names || !Array.isArray(params.brand_names)) {
         throw new Error("brand_names must be an array of strings");
+      }
+
+      if ((params.ads as unknown[]).length > 50) {
+        throw new Error("Maximum 50 ads allowed per competitor report");
       }
 
       // Map loose input to the CompetitorAd shape expected by generateCompetitorReport
@@ -495,9 +631,14 @@ export async function handleMcpMethod(
 
     // ── download_ad_media ───────────────────────────────────────────────────
     case "download_ad_media": {
+      requireScope("write");
       if (!params.media_url) throw new Error("media_url is required");
       if (!params.brand_name) throw new Error("brand_name is required");
       if (!params.media_type) throw new Error("media_type is required");
+
+      if (String(params.media_url).length > 2048) {
+        throw new Error("media_url exceeds 2048 characters");
+      }
 
       const mediaType = String(params.media_type) as "image" | "video";
       if (mediaType !== "image" && mediaType !== "video") {
@@ -511,7 +652,113 @@ export async function handleMcpMethod(
         mediaType,
         adIndex: params.ad_index !== undefined ? Number(params.ad_index) : 0,
       });
+
+      trackServer("mcp_media_downloaded", workspaceId, {
+        workspace_id: workspaceId,
+        brand: String(params.brand_name),
+        media_type: mediaType,
+        file_size: result.file_size,
+      });
+
       return result;
+    }
+
+    // ── download_competitor_ads_batch ───────────────────────────────────────
+    case "download_competitor_ads_batch": {
+      requireScope("write");
+      if (!params.brand_name) throw new Error("brand_name is required");
+      if (!params.ads || !Array.isArray(params.ads)) throw new Error("ads must be an array");
+      if ((params.ads as unknown[]).length > 100) throw new Error("Maximum 100 ads per batch");
+
+      const result = await downloadBatchMedia({
+        workspaceId,
+        brandName: String(params.brand_name),
+        ads: (params.ads as Array<Record<string, unknown>>).map((ad) => ({
+          mediaUrl: String(ad.mediaUrl ?? ad.media_url ?? ""),
+          mediaType: String(ad.mediaType ?? ad.media_type ?? "image"),
+          title: ad.title ? String(ad.title) : undefined,
+        })),
+        maxConcurrent: params.max_concurrent ? Math.min(Number(params.max_concurrent), 10) : 5,
+      });
+
+      trackServer("mcp_batch_download_completed", workspaceId, {
+        workspace_id: workspaceId,
+        brand: String(params.brand_name),
+        total: result.total,
+        downloaded: result.downloaded,
+        failed: result.failed,
+        total_size_mb: result.files.reduce((sum, f) => sum + f.size, 0) / (1024 * 1024),
+      });
+
+      return result;
+    }
+
+    // ── get_report ──────────────────────────────────────────────────────────
+    case "get_report": {
+      requireScope("read");
+      if (!params.report_type) throw new Error("report_type is required");
+      if (!params.date_from) throw new Error("date_from is required");
+      if (!params.date_to) throw new Error("date_to is required");
+
+      // Validate date format and range (M-P23-3)
+      const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+      if (!DATE_RE.test(String(params.date_from))) {
+        throw new Error("date_from must be in YYYY-MM-DD format");
+      }
+      if (!DATE_RE.test(String(params.date_to))) {
+        throw new Error("date_to must be in YYYY-MM-DD format");
+      }
+      if (String(params.date_from) > String(params.date_to)) {
+        throw new Error("date_from must be on or before date_to");
+      }
+
+      // Validate sort_key against allowlist (H-P23-1)
+      const VALID_SORT_KEYS = [
+        "spend", "revenue", "roas", "impressions", "clicks",
+        "ctr", "conversions", "cpc", "frequency", "reach",
+      ] as const;
+      type ValidSortKey = typeof VALID_SORT_KEYS[number];
+      const rawSortKey = params.sort_key ? String(params.sort_key) : "spend";
+      if (!VALID_SORT_KEYS.includes(rawSortKey as ValidSortKey)) {
+        throw new Error(
+          `Invalid sort_key '${rawSortKey}'. Must be one of: ${VALID_SORT_KEYS.join(", ")}`
+        );
+      }
+
+      const reportParams = {
+        workspaceId,
+        dateRange: {
+          from: String(params.date_from),
+          to: String(params.date_to),
+        },
+        sort: {
+          key: rawSortKey,
+          direction: (params.sort_direction === "asc" ? "asc" : "desc") as "asc" | "desc",
+        },
+        page: params.page ? Math.max(1, Number(params.page)) : 1,
+        pageSize: params.page_size
+          ? Math.min(Math.max(Number(params.page_size), 1), 100)
+          : 25,
+      };
+
+      switch (String(params.report_type)) {
+        case "top-ads":
+          return await getTopAdsReport(reportParams);
+        case "top-campaigns":
+          return await getTopCampaignsReport(reportParams);
+        case "top-creatives":
+          return await getTopCreativesReport(reportParams);
+        case "top-landing-pages":
+          return await getTopLandingPagesReport(reportParams);
+        case "top-headlines":
+          return await getTopHeadlinesReport(reportParams);
+        case "top-copy":
+          return await getTopCopyReport(reportParams);
+        default:
+          throw new Error(
+            `Invalid report_type. Must be one of: top-ads, top-campaigns, top-creatives, top-landing-pages, top-headlines, top-copy`
+          );
+      }
     }
 
     // ── Unknown ─────────────────────────────────────────────────────────────

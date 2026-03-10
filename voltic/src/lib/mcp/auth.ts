@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -33,13 +33,15 @@ export async function resolveWorkspaceFromApiKey(apiKey: string): Promise<{
     .from("mcp_api_keys")
     .update({ last_used_at: new Date().toISOString() })
     .eq("key_hash", keyHash)
-    .then(() => {});
+    .then(() => {})
+    .catch((err: unknown) => {
+      console.error("[mcp-auth] Failed to update last_used_at:", err);
+    });
 
   return { workspaceId: data.workspace_id, scopes: data.scopes ?? [] };
 }
 
 export function generateApiKey(): string {
-  const { randomBytes } = require("crypto");
   const raw = randomBytes(32).toString("hex");
   return `vlt_sk_${raw}`;
 }

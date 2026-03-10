@@ -21,6 +21,14 @@ import { apiLimiter } from "@/lib/utils/rate-limit";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { TOOL_LIST, handleMcpMethod } from "./tools";
 
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_APP_URL ?? "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Authorization, Content-Type",
+};
+
 // ─── Auth Helper ──────────────────────────────────────────────────────────────
 
 async function authenticate(req: NextRequest): Promise<
@@ -35,7 +43,7 @@ async function authenticate(req: NextRequest): Promise<
   if (!apiKey) {
     return NextResponse.json(
       { error: "Unauthorized", message: "Missing Authorization: Bearer <key> header" },
-      { status: 401 }
+      { status: 401, headers: CORS_HEADERS }
     );
   }
 
@@ -43,7 +51,7 @@ async function authenticate(req: NextRequest): Promise<
   if (!workspace) {
     return NextResponse.json(
       { error: "Unauthorized", message: "Invalid or expired API key" },
-      { status: 401 }
+      { status: 401, headers: CORS_HEADERS }
     );
   }
 
@@ -56,16 +64,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const authResult = await authenticate(req);
   if (authResult instanceof NextResponse) return authResult;
 
-  return NextResponse.json({
-    jsonrpc: "2.0",
-    result: {
-      name: "voltic",
-      version: "1.0.0",
-      description:
-        "Voltic MCP Server — access ad intelligence, creative generation, and media management",
-      tools: TOOL_LIST,
+  return NextResponse.json(
+    {
+      jsonrpc: "2.0",
+      result: {
+        name: "voltic",
+        version: "1.0.0",
+        description:
+          "Voltic MCP Server — access ad intelligence, creative generation, and media management",
+        tools: TOOL_LIST,
+      },
     },
-  });
+    { headers: CORS_HEADERS }
+  );
 }
 
 // ─── POST — JSON-RPC Tool Call ────────────────────────────────────────────────
@@ -78,7 +89,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // C-2: Guard against non-string or blank workspaceId before rate limiter
   if (typeof workspaceId !== "string" || !workspaceId.trim()) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: CORS_HEADERS }
+    );
   }
 
   // 2. Rate limiting — 60 calls per minute per workspace
@@ -90,7 +104,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         id: null,
         error: { code: -32429, message: "Rate limit exceeded. Try again in a moment." },
       },
-      { status: 429 }
+      { status: 429, headers: CORS_HEADERS }
     );
   }
 
@@ -105,7 +119,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         id: null,
         error: { code: -32700, message: "Parse error: request body is not valid JSON" },
       },
-      { status: 400 }
+      { status: 400, headers: CORS_HEADERS }
     );
   }
 
@@ -119,7 +133,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         id: id ?? null,
         error: { code: -32600, message: "Invalid Request: 'method' must be a non-empty string" },
       },
-      { status: 400 }
+      { status: 400, headers: CORS_HEADERS }
     );
   }
 
@@ -138,18 +152,22 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       status: "success",
     });
 
-    return NextResponse.json({
-      jsonrpc: "2.0",
-      id: id ?? null,
-      result,
-    });
+    return NextResponse.json(
+      {
+        jsonrpc: "2.0",
+        id: id ?? null,
+        result,
+      },
+      { headers: CORS_HEADERS }
+    );
   } catch (err) {
     const isKnownError = err instanceof Error && (
       err.message.startsWith("Unknown method:") ||
       err.message.includes(" is required") ||
       err.message.includes("must be ") ||
       err.message.includes("Invalid ") ||
-      err.message.includes("Maximum ")
+      err.message.includes("Maximum ") ||
+      err.message.includes("requires the '")
     );
     const message = isKnownError && err instanceof Error
       ? err.message
@@ -173,7 +191,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           id: id ?? null,
           error: { code: -32601, message: `Method not found: ${method}` },
         },
-        { status: 404 }
+        { status: 404, headers: CORS_HEADERS }
       );
     }
 
@@ -183,7 +201,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         id: id ?? null,
         error: { code: -32000, message },
       },
-      { status: 500 }
+      { status: 500, headers: CORS_HEADERS }
     );
   }
 }
@@ -193,9 +211,7 @@ export async function OPTIONS(): Promise<NextResponse> {
   return new NextResponse(null, {
     status: 204,
     headers: {
-      "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      ...CORS_HEADERS,
       "Access-Control-Max-Age": "86400",
     },
   });

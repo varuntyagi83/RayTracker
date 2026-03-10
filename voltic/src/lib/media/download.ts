@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,7 +61,22 @@ function isPublicUrl(rawUrl: string): boolean {
   const hostname = parsed.hostname.toLowerCase();
 
   // Block localhost variants
-  if (hostname === "localhost" || hostname === "::1") return false;
+  if (hostname === "localhost") return false;
+
+  // Block IPv6 private/link-local ranges
+  if (hostname.startsWith("[") || hostname.includes(":")) {
+    // Strip surrounding brackets for IPv6 literal URLs
+    const ipv6 = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+    // Loopback
+    if (ipv6 === "::1" || ipv6 === "0:0:0:0:0:0:0:1") return false;
+    // Unique Local Address fc00::/7 (starts with fc or fd)
+    if (ipv6.startsWith("fc") || ipv6.startsWith("fd")) return false;
+    // Link-local fe80::/10 (starts with fe8, fe9, fea, feb)
+    if (ipv6.startsWith("fe8") || ipv6.startsWith("fe9") ||
+        ipv6.startsWith("fea") || ipv6.startsWith("feb")) return false;
+    // Unspecified / loopback short forms
+    if (ipv6 === "::" || ipv6 === "0::") return false;
+  }
 
   // Block by hostname patterns for common internal names
   if (hostname.endsWith(".local") || hostname.endsWith(".internal")) {
@@ -168,11 +183,17 @@ export async function downloadAndStoreMedia(params: {
 
   const buffer = await response.arrayBuffer();
 
-  // Cap video at 100 MB
+  // Cap file sizes: 25 MB for images, 100 MB for videos
+  const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
   const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+  if (mediaType === "image" && buffer.byteLength > MAX_IMAGE_BYTES) {
+    throw new Error(
+      `Image exceeds 25 MB limit (got ${(buffer.byteLength / (1024 * 1024)).toFixed(1)} MB)`
+    );
+  }
   if (mediaType === "video" && buffer.byteLength > MAX_VIDEO_BYTES) {
     throw new Error(
-      `Video exceeds 100 MB limit (got ${buffer.byteLength} bytes)`
+      `Video exceeds 100 MB limit (got ${(buffer.byteLength / (1024 * 1024)).toFixed(1)} MB)`
     );
   }
 
@@ -212,6 +233,12 @@ export async function downloadAndStoreMedia(params: {
   });
 
   if (insertError) {
+    // Roll back the R2 upload to avoid orphaned files
+    try {
+      await r2.send(new DeleteObjectCommand({ Bucket: bucketName, Key: storagePath }));
+    } catch (deleteErr) {
+      console.error("[download] Failed to delete orphaned R2 object:", deleteErr);
+    }
     throw new Error(`DB insert failed: ${(insertError as { message: string }).message}`);
   }
 

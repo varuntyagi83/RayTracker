@@ -332,6 +332,9 @@ export async function toggleMcpApiKeyAction(
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
 
+  const user = await getUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+
   const parsed = toggleMcpApiKeySchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
@@ -344,5 +347,12 @@ export async function toggleMcpApiKeyAction(
     .eq("workspace_id", workspace.id);
 
   if (error) return { success: false, error: error.message };
+
+  trackServer("mcp_key_toggled", user.id, {
+    workspace_id: workspace.id,
+    key_id: parsed.data.keyId,
+    is_active: parsed.data.isActive,
+  });
+
   return { success: true };
 }
