@@ -19,6 +19,7 @@ export interface DiscoverAd {
 
 export interface DiscoverSearchParams {
   query: string;
+  pageId?: string; // Resolved Facebook page_id — when set, uses view_all_page_id URL instead of keyword search
   activeOnly: boolean;
   format: "all" | "image" | "video" | "carousel";
   sort: "newest" | "oldest" | "impressions";

@@ -22,7 +22,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  Search,
   ExternalLink,
   Plus,
   Image as ImageIcon,
@@ -58,6 +57,7 @@ import { useComparisonStore } from "@/lib/stores/comparison-store";
 import { ComparisonTray } from "./comparison-tray";
 import { ComparisonResultDialog } from "./comparison-result-dialog";
 import DecompositionModal from "@/components/shared/decomposition-modal";
+import PageSearchInput from "./PageSearchInput";
 import type {
   DiscoverAd,
   DiscoverSearchParams,
@@ -105,6 +105,7 @@ function FormatIcon({ format }: { format: string }) {
 export default function DiscoverClient() {
   // Search / scrape config (only applied when user clicks Search)
   const [query, setQuery] = useState("");
+  const [selectedPageId, setSelectedPageId] = useState<string | undefined>(undefined);
   const [country, setCountry] = useState("ALL");
   const [scrapeCount, setScrapeCount] = useState(10);
 
@@ -230,9 +231,10 @@ export default function DiscoverClient() {
     }
   }, []);
 
-  // Search function — only runs when user clicks Search
-  const handleSearch = useCallback(async () => {
-    if (!query.trim()) return;
+  // Search function — called by PageSearchInput with resolved query + optional pageId
+  const handleSearch = useCallback(async (searchQuery?: string, pageId?: string) => {
+    const q = (searchQuery ?? query).trim();
+    if (!q) return;
     const currentId = ++scrapeIdRef.current;
     setLoading(true);
     setHasSearched(true);
@@ -242,7 +244,8 @@ export default function DiscoverClient() {
     setExpandedInsightId(null);
 
     const result = await fetchDiscoverAds({
-      query: query.trim(),
+      query: q,
+      pageId: pageId ?? selectedPageId,
       activeOnly: false, // don't filter server-side, we do it client-side
       format: "all",     // don't filter server-side, we do it client-side
       sort: "newest",    // don't sort server-side, we do it client-side
@@ -256,14 +259,14 @@ export default function DiscoverClient() {
     setRawAds(result.ads);
     setLoading(false);
     track("discover_search_executed", {
-      query: query.trim(),
+      query: q,
       result_count: result.ads.length,
     });
 
     // Pre-load insights for these ads
     const adIds = result.ads.map((a) => a.id);
     loadExistingInsights(adIds);
-  }, [query, country, scrapeCount, loadExistingInsights]);
+  }, [query, selectedPageId, country, scrapeCount, loadExistingInsights]);
 
   // Stop scraper — aborts Apify run and discards results
   const handleStop = useCallback(async () => {
@@ -405,18 +408,16 @@ export default function DiscoverClient() {
       </div>
 
       {/* Search Bar */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[250px]">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search brand name (e.g. Nike, Glossier)..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            className="pl-8"
-          />
-        </div>
-        <Button onClick={handleSearch} disabled={!query.trim() || loading}>
+      <div className="flex gap-3 flex-wrap items-start">
+        <PageSearchInput
+          disabled={loading}
+          onSearch={(q, pageId) => {
+            setQuery(q);
+            setSelectedPageId(pageId);
+            handleSearch(q, pageId);
+          }}
+        />
+        <Button onClick={() => handleSearch()} disabled={!query.trim() || loading}>
           Search
         </Button>
         {loading && (

@@ -12,7 +12,7 @@ import type {
 export async function searchAdsLibrary(
   params: DiscoverSearchParams
 ): Promise<DiscoverSearchResult> {
-  const { query, activeOnly, format, sort, country, scrapeCount } = params;
+  const { query, pageId, activeOnly, format, sort, country, scrapeCount } = params;
 
   if (!query.trim()) {
     return { ads: [], totalCount: 0 };
@@ -24,6 +24,7 @@ export async function searchAdsLibrary(
   // Fetch from scraper — count controlled by user
   const result = await scrapeAdsLibrary({
     brandName: query,
+    pageId,
     topN: scrapeCount,
     country: country || "ALL",
     mediaType: scraperMediaType,

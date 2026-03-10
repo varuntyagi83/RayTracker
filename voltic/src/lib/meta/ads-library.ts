@@ -30,6 +30,7 @@ export interface AdsLibraryAd {
 
 export interface AdsLibraryScrapeParams {
   brandName: string;
+  pageId?: string; // When set, uses view_all_page_id URL (more reliable than keyword search)
   adsLibraryUrl?: string;
   topN: number;
   country: string; // ISO 2-letter code or "ALL"
@@ -113,7 +114,7 @@ export async function scrapeAdsLibrary(
   }
 
   try {
-    const searchUrl = buildAdsLibraryUrl(params.brandName, params.country, mediaType);
+    const searchUrl = buildAdsLibraryUrl(params.brandName, params.country, mediaType, params.pageId);
 
     // 1. Start actor run (async)
     console.log("[ads-library] Starting Apify run for:", params.brandName, "count:", requestedCount);
@@ -244,10 +245,14 @@ function sleep(ms: number): Promise<void> {
 function buildAdsLibraryUrl(
   brandName: string,
   country: string = "ALL",
-  mediaType: string = "all"
+  mediaType: string = "all",
+  pageId?: string
 ): string {
-  const encoded = encodeURIComponent(brandName);
   const mediaParam = mediaType !== "all" ? `&media_type=${mediaType}` : "";
+  if (pageId) {
+    return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}${mediaParam}&view_all_page_id=${pageId}&search_type=page_id`;
+  }
+  const encoded = encodeURIComponent(brandName);
   return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}${mediaParam}&q=${encoded}&search_type=keyword_unordered`;
 }
 
