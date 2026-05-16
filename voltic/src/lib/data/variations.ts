@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { variations, savedAds, assets } from "@/db/schema";
+import { eq, and, desc, lt } from "drizzle-orm";
 import type {
   Variation,
   VariationStrategy,
@@ -12,16 +14,13 @@ export async function getVariationsForAd(
   workspaceId: string,
   savedAdId: string
 ): Promise<Variation[]> {
-  const supabase = createAdminClient();
+  const rows = await db
+    .select()
+    .from(variations)
+    .where(and(eq(variations.workspaceId, workspaceId), eq(variations.savedAdId, savedAdId)))
+    .orderBy(desc(variations.createdAt));
 
-  const { data } = await supabase
-    .from("variations")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("saved_ad_id", savedAdId)
-    .order("created_at", { ascending: false });
-
-  return (data ?? []).map(mapRow);
+  return rows.map(mapRow);
 }
 
 // ─── Get Single Variation ───────────────────────────────────────────────────
@@ -30,16 +29,13 @@ export async function getVariation(
   workspaceId: string,
   variationId: string
 ): Promise<Variation | null> {
-  const supabase = createAdminClient();
+  const [row] = await db
+    .select()
+    .from(variations)
+    .where(and(eq(variations.id, variationId), eq(variations.workspaceId, workspaceId)))
+    .limit(1);
 
-  const { data } = await supabase
-    .from("variations")
-    .select("*")
-    .eq("id", variationId)
-    .eq("workspace_id", workspaceId)
-    .single();
-
-  return data ? mapRow(data) : null;
+  return row ? mapRow(row) : null;
 }
 
 // ─── Create Variation Record ────────────────────────────────────────────────
@@ -53,25 +49,25 @@ export async function createVariation(
   savedAdId?: string,
   creativeOptions?: CreativeOptions
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const [inserted] = await db
+      .insert(variations)
+      .values({
+        workspaceId,
+        savedAdId: savedAdId ?? null,
+        assetId,
+        source,
+        strategy,
+        creativeOptions: creativeOptions ?? null,
+        creditsUsed,
+        status: "pending",
+      })
+      .returning({ id: variations.id });
 
-  const { data, error } = await supabase
-    .from("variations")
-    .insert({
-      workspace_id: workspaceId,
-      saved_ad_id: savedAdId ?? null,
-      asset_id: assetId,
-      source,
-      strategy,
-      creative_options: creativeOptions ?? null,
-      credits_used: creditsUsed,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Update Variation with Generated Content ────────────────────────────────
@@ -85,23 +81,23 @@ export async function completeVariation(
     generatedImageUrl?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const updated = await db
+      .update(variations)
+      .set({
+        generatedHeadline: content.generatedHeadline ?? null,
+        generatedBody: content.generatedBody ?? null,
+        generatedImageUrl: content.generatedImageUrl ?? null,
+        status: "completed",
+      })
+      .where(and(eq(variations.id, variationId), eq(variations.workspaceId, workspaceId)))
+      .returning({ id: variations.id });
 
-  const { data: updated, error } = await supabase
-    .from("variations")
-    .update({
-      generated_headline: content.generatedHeadline ?? null,
-      generated_body: content.generatedBody ?? null,
-      generated_image_url: content.generatedImageUrl ?? null,
-      status: "completed",
-    })
-    .eq("id", variationId)
-    .eq("workspace_id", workspaceId)
-    .select("id");
-
-  if (error) return { success: false, error: error.message };
-  if (!updated?.length) return { success: false, error: "Variation not found" };
-  return { success: true };
+    if (!updated.length) return { success: false, error: "Variation not found" };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Mark Variation as Failed ───────────────────────────────────────────────
@@ -110,12 +106,10 @@ export async function failVariation(
   workspaceId: string,
   variationId: string
 ): Promise<void> {
-  const supabase = createAdminClient();
-  await supabase
-    .from("variations")
-    .update({ status: "failed" })
-    .eq("id", variationId)
-    .eq("workspace_id", workspaceId);
+  await db
+    .update(variations)
+    .set({ status: "failed" })
+    .where(and(eq(variations.id, variationId), eq(variations.workspaceId, workspaceId)));
 }
 
 // ─── Delete Variation ───────────────────────────────────────────────────────
@@ -124,16 +118,15 @@ export async function deleteVariation(
   workspaceId: string,
   variationId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    await db
+      .delete(variations)
+      .where(and(eq(variations.id, variationId), eq(variations.workspaceId, workspaceId)));
 
-  const { error } = await supabase
-    .from("variations")
-    .delete()
-    .eq("id", variationId)
-    .eq("workspace_id", workspaceId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Get All Variations for Workspace ──────────────────────────────────────
@@ -150,49 +143,76 @@ export async function getAllVariations(
   limit: number = 20,
   cursor?: string // ISO timestamp — fetch variations created before this time
 ): Promise<VariationWithContext[]> {
-  const supabase = createAdminClient();
-
-  let query = supabase
-    .from("variations")
-    .select(
-      "*, saved_ads(brand_name, image_url), assets!inner(name, image_url)"
-    )
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  const conditions = [eq(variations.workspaceId, workspaceId)];
 
   if (cursor) {
-    query = query.lt("created_at", cursor);
+    conditions.push(lt(variations.createdAt, new Date(cursor)));
   }
 
-  const { data } = await query;
+  const rows = await db
+    .select({
+      // variation columns
+      id: variations.id,
+      savedAdId: variations.savedAdId,
+      assetId: variations.assetId,
+      source: variations.source,
+      strategy: variations.strategy,
+      creativeOptions: variations.creativeOptions,
+      generatedImageUrl: variations.generatedImageUrl,
+      generatedHeadline: variations.generatedHeadline,
+      generatedBody: variations.generatedBody,
+      creditsUsed: variations.creditsUsed,
+      status: variations.status,
+      createdAt: variations.createdAt,
+      // joined context from saved_ads (optional)
+      adBrandName: savedAds.brandName,
+      adImageUrl: savedAds.imageUrl,
+      // joined context from assets (required — inner join equivalent via notNull filter)
+      assetName: assets.name,
+      assetImageUrl: assets.imageUrl,
+    })
+    .from(variations)
+    .leftJoin(savedAds, eq(variations.savedAdId, savedAds.id))
+    .innerJoin(assets, eq(variations.assetId, assets.id))
+    .where(and(...conditions))
+    .orderBy(desc(variations.createdAt))
+    .limit(limit);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data ?? []).map((row: any) => ({
-    ...mapRow(row),
-    adBrandName: row.saved_ads?.brand_name ?? null,
-    adImageUrl: row.saved_ads?.image_url ?? null,
-    assetName: row.assets?.name ?? null,
-    assetImageUrl: row.assets?.image_url ?? null,
+  return rows.map((row) => ({
+    id: row.id,
+    savedAdId: row.savedAdId ?? null,
+    assetId: row.assetId,
+    source: row.source as VariationSource,
+    strategy: row.strategy as VariationStrategy,
+    creativeOptions: row.creativeOptions as CreativeOptions | null,
+    generatedImageUrl: row.generatedImageUrl,
+    generatedHeadline: row.generatedHeadline,
+    generatedBody: row.generatedBody,
+    creditsUsed: row.creditsUsed,
+    status: row.status as "pending" | "completed" | "failed",
+    createdAt: row.createdAt.toISOString(),
+    adBrandName: row.adBrandName ?? null,
+    adImageUrl: row.adImageUrl ?? null,
+    assetName: row.assetName ?? null,
+    assetImageUrl: row.assetImageUrl ?? null,
   }));
 }
 
 // ─── Map DB row ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: any): Variation {
+function mapRow(row: typeof variations.$inferSelect): Variation {
   return {
     id: row.id,
-    savedAdId: row.saved_ad_id ?? null,
-    assetId: row.asset_id,
-    source: row.source ?? "competitor",
+    savedAdId: row.savedAdId ?? null,
+    assetId: row.assetId,
+    source: row.source as VariationSource,
     strategy: row.strategy as VariationStrategy,
-    creativeOptions: row.creative_options ?? null,
-    generatedImageUrl: row.generated_image_url,
-    generatedHeadline: row.generated_headline,
-    generatedBody: row.generated_body,
-    creditsUsed: row.credits_used,
-    status: row.status,
-    createdAt: row.created_at,
+    creativeOptions: row.creativeOptions as CreativeOptions | null,
+    generatedImageUrl: row.generatedImageUrl,
+    generatedHeadline: row.generatedHeadline,
+    generatedBody: row.generatedBody,
+    creditsUsed: row.creditsUsed,
+    status: row.status as "pending" | "completed" | "failed",
+    createdAt: row.createdAt.toISOString(),
   };
 }

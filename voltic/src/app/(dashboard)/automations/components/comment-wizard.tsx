@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -312,21 +313,21 @@ function StepCommentBasics({
   onUpdateConfig: (p: Partial<CommentDigestConfig>) => void;
   onTogglePage: (page: FacebookPageRef) => void;
 }) {
+  const { userId } = useAuth();
   const [availablePages, setAvailablePages] = useState<FacebookPageRef[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
 
   useEffect(() => {
     async function loadPages() {
       try {
+        if (!userId) return;
         const supabase = createBrowserClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
 
         // Get workspace
         const { data: member } = await supabase
           .from("workspace_members")
           .select("workspace_id")
-          .eq("user_id", user.id)
+          .eq("user_id", userId)
           .single();
 
         if (!member) return;
@@ -355,7 +356,7 @@ function StepCommentBasics({
       }
     }
     loadPages();
-  }, []);
+  }, [userId]);
 
   const selectedCount = state.config.pages.length;
   const totalCount = availablePages.length;

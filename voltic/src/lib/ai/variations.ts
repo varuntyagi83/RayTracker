@@ -13,7 +13,7 @@ import {
   BACKGROUND_STYLE_LABELS,
   ASPECT_RATIO_LABELS,
 } from "@/types/variations";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadBrandAsset } from "@/lib/storage/brand-assets";
 import type { SavedAd } from "@/types/boards";
 import type { Asset } from "@/types/assets";
 
@@ -291,7 +291,6 @@ export function buildAssetImagePrompt(
 
 const GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-const VARIATION_STORAGE_BUCKET = "brand-assets";
 
 export async function generateVariationImage(
   ad: Pick<SavedAd, "brandName" | "format"> | null,
@@ -342,19 +341,7 @@ export async function generateVariationImage(
 
   const imageBuffer = Buffer.from(imagePart.inlineData.data, "base64");
   const storagePath = `${workspaceId}/variations/${variationId}-gemini.png`;
-
-  const supabase = createAdminClient();
-  const { error: uploadError } = await supabase.storage
-    .from(VARIATION_STORAGE_BUCKET)
-    .upload(storagePath, imageBuffer, { contentType: "image/png" });
-
-  if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
-
-  const { data: { publicUrl } } = supabase.storage
-    .from(VARIATION_STORAGE_BUCKET)
-    .getPublicUrl(storagePath);
-
-  return publicUrl;
+  return uploadBrandAsset(storagePath, imageBuffer, "image/png");
 }
 
 // ─── Asset-Based Image Editing (Gemini Nano Banana Pro) ──────────────────

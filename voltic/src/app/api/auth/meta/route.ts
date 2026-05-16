@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import crypto from "crypto";
 
@@ -10,12 +10,9 @@ import crypto from "crypto";
  * Uses server route to avoid exposing META_APP_ID as a NEXT_PUBLIC_ env var.
  */
 export async function GET(request: NextRequest) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -23,7 +20,7 @@ export async function GET(request: NextRequest) {
   const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!member) {

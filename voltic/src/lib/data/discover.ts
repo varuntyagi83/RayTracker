@@ -1,5 +1,7 @@
 import { scrapeAdsLibrary } from "@/lib/meta/ads-library";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { boards, savedAds } from "@/db/schema";
+import { eq, asc } from "drizzle-orm";
 import type {
   DiscoverAd,
   DiscoverSearchParams,
@@ -95,14 +97,13 @@ export async function searchAdsLibrary(
 export async function getWorkspaceBoards(
   workspaceId: string
 ): Promise<BoardOption[]> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("boards")
-    .select("id, name")
-    .eq("workspace_id", workspaceId)
-    .order("name");
+  const rows = await db
+    .select({ id: boards.id, name: boards.name })
+    .from(boards)
+    .where(eq(boards.workspaceId, workspaceId))
+    .orderBy(asc(boards.name));
 
-  return (data ?? []).map((b) => ({ id: b.id, name: b.name }));
+  return rows.map((b) => ({ id: b.id, name: b.name }));
 }
 
 export async function saveAdToBoard(
@@ -110,26 +111,26 @@ export async function saveAdToBoard(
   boardId: string,
   ad: DiscoverAd
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    await db.insert(savedAds).values({
+      boardId,
+      workspaceId,
+      source: "discover",
+      metaLibraryId: ad.id,
+      brandName: ad.pageName,
+      headline: ad.headline,
+      body: ad.bodyText,
+      format: ad.mediaType,
+      imageUrl: ad.mediaThumbnailUrl,
+      landingPageUrl: ad.linkUrl,
+      platforms: ad.platforms,
+      startDate: ad.startDate || null,
+      runtimeDays: ad.runtimeDays,
+    });
 
-  const { error } = await supabase.from("saved_ads").insert({
-    board_id: boardId,
-    workspace_id: workspaceId,
-    source: "discover",
-    meta_library_id: ad.id,
-    brand_name: ad.pageName,
-    headline: ad.headline,
-    body: ad.bodyText,
-    format: ad.mediaType,
-    image_url: ad.mediaThumbnailUrl,
-    landing_page_url: ad.linkUrl,
-    platforms: ad.platforms,
-    start_date: ad.startDate || null,
-    runtime_days: ad.runtimeDays,
-  });
-
-  if (error) {
-    return { success: false, error: error.message };
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
   }
-  return { success: true };
 }

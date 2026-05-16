@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
-import { createAdminClient } from "@/lib/supabase/admin";
 import {
   getBrandGuidelines,
   updateBrandGuidelines,
@@ -13,6 +12,9 @@ import type { BrandGuidelines, BrandGuidelineFile } from "@/types/variations";
 import { generateApiKey, hashApiKey } from "@/lib/mcp/auth";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { getUser } from "@/lib/supabase/queries";
+import { db } from "@/lib/db";
+import { workspaces, mcpApiKeys } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 
 // ─── Workspace Timezone ─────────────────────────────────────────────────────
 
@@ -45,13 +47,16 @@ export async function updateWorkspaceTimezoneAction(
     return { success: false, error: "Invalid timezone" };
   }
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("workspaces")
-    .update({ timezone: parsed.data.timezone })
-    .eq("id", workspace.id);
+  try {
+    await db
+      .update(workspaces)
+      .set({ timezone: parsed.data.timezone })
+      .where(eq(workspaces.id, workspace.id));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Update failed";
+    return { success: false, error: message };
+  }
 
-  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
@@ -64,13 +69,16 @@ export async function disconnectMetaAction(): Promise<{
   const workspace = await getWorkspace();
   if (!workspace) return { success: false, error: "No workspace" };
 
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("workspaces")
-    .update({ meta_access_token: null })
-    .eq("id", workspace.id);
+  try {
+    await db
+      .update(workspaces)
+      .set({ metaAccessToken: null })
+      .where(eq(workspaces.id, workspace.id));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Update failed";
+    return { success: false, error: message };
+  }
 
-  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
@@ -209,36 +217,38 @@ export async function createMcpApiKeyAction(
   const rawKey = generateApiKey();
   const keyHash = hashApiKey(rawKey);
 
-  const supabase = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("mcp_api_keys")
-    .insert({
-      workspace_id: workspace.id,
-      key_hash: keyHash,
-      name: parsed.data.name,
-      scopes: parsed.data.scopes,
-      is_active: true,
-    })
-    .select("id, name, scopes, created_at")
-    .single();
-
-  if (error) return { error: error.message };
+  let inserted: typeof mcpApiKeys.$inferSelect;
+  try {
+    const rows = await db
+      .insert(mcpApiKeys)
+      .values({
+        workspaceId: workspace.id,
+        keyHash,
+        name: parsed.data.name,
+        scopes: parsed.data.scopes,
+        isActive: true,
+      })
+      .returning();
+    inserted = rows[0];
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Insert failed";
+    return { error: message };
+  }
 
   trackServer("mcp_key_created", user.id, {
     workspace_id: workspace.id,
-    key_id: data.id,
-    name: data.name,
-    scopes: data.scopes,
+    key_id: inserted.id,
+    name: inserted.name,
+    scopes: inserted.scopes,
   });
 
   return {
     data: {
-      id: data.id,
+      id: inserted.id,
       rawKey,
-      name: data.name,
-      scopes: data.scopes,
-      createdAt: data.created_at,
+      name: inserted.name,
+      scopes: inserted.scopes,
+      createdAt: inserted.createdAt.toISOString(),
     },
   };
 }
@@ -252,33 +262,27 @@ export async function listMcpApiKeysAction(): Promise<{
   const workspace = await getWorkspace();
   if (!workspace) return { error: "No workspace" };
 
-  const supabase = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
-    .from("mcp_api_keys")
-    .select("id, name, scopes, last_used_at, expires_at, is_active, created_at")
-    .eq("workspace_id", workspace.id)
-    .order("created_at", { ascending: false });
-
-  if (error) return { error: error.message };
+  let rows: (typeof mcpApiKeys.$inferSelect)[];
+  try {
+    rows = await db
+      .select()
+      .from(mcpApiKeys)
+      .where(eq(mcpApiKeys.workspaceId, workspace.id))
+      .orderBy(desc(mcpApiKeys.createdAt));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Query failed";
+    return { error: message };
+  }
 
   return {
-    data: (data ?? []).map((row: {
-      id: string;
-      name: string;
-      scopes: string[];
-      last_used_at: string | null;
-      expires_at: string | null;
-      is_active: boolean;
-      created_at: string;
-    }) => ({
+    data: rows.map((row) => ({
       id: row.id,
       name: row.name,
       scopes: row.scopes ?? [],
-      lastUsedAt: row.last_used_at,
-      expiresAt: row.expires_at,
-      isActive: row.is_active,
-      createdAt: row.created_at,
+      lastUsedAt: row.lastUsedAt ? row.lastUsedAt.toISOString() : null,
+      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+      isActive: row.isActive,
+      createdAt: row.createdAt.toISOString(),
     })),
   };
 }
@@ -301,15 +305,19 @@ export async function deleteMcpApiKeyAction(
   const parsed = deleteMcpApiKeySchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const supabase = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("mcp_api_keys")
-    .delete()
-    .eq("id", parsed.data.keyId)
-    .eq("workspace_id", workspace.id);
-
-  if (error) return { success: false, error: error.message };
+  try {
+    await db
+      .delete(mcpApiKeys)
+      .where(
+        and(
+          eq(mcpApiKeys.id, parsed.data.keyId),
+          eq(mcpApiKeys.workspaceId, workspace.id)
+        )
+      );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Delete failed";
+    return { success: false, error: message };
+  }
 
   trackServer("mcp_key_deleted", user.id, {
     workspace_id: workspace.id,
@@ -338,15 +346,20 @@ export async function toggleMcpApiKeyAction(
   const parsed = toggleMcpApiKeySchema.safeParse(input);
   if (!parsed.success) return { success: false, error: parsed.error.issues[0].message };
 
-  const supabase = createAdminClient();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("mcp_api_keys")
-    .update({ is_active: parsed.data.isActive })
-    .eq("id", parsed.data.keyId)
-    .eq("workspace_id", workspace.id);
-
-  if (error) return { success: false, error: error.message };
+  try {
+    await db
+      .update(mcpApiKeys)
+      .set({ isActive: parsed.data.isActive })
+      .where(
+        and(
+          eq(mcpApiKeys.id, parsed.data.keyId),
+          eq(mcpApiKeys.workspaceId, workspace.id)
+        )
+      );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Update failed";
+    return { success: false, error: message };
+  }
 
   trackServer("mcp_key_toggled", user.id, {
     workspace_id: workspace.id,

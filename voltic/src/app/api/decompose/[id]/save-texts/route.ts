@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ExtractedText, TextType } from "@/types/decomposition";
 
@@ -25,12 +25,9 @@ export async function GET(
   const { id } = await params;
 
   // 1. Authenticate
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -40,7 +37,7 @@ export async function GET(
   const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!member) {

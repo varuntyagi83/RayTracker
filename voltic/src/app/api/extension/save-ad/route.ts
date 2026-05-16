@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { z } from "zod";
 import { validateExtensionToken } from "@/lib/extension/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { boards, savedAds } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { authLimiter } from "@/lib/utils/rate-limit";
 
@@ -61,15 +63,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const supabase = createAdminClient();
-
   // Verify board belongs to this workspace
-  const { data: board } = await supabase
-    .from("boards")
-    .select("id")
-    .eq("id", body.boardId)
-    .eq("workspace_id", auth.workspaceId)
-    .single();
+  const [board] = await db
+    .select({ id: boards.id })
+    .from(boards)
+    .where(and(eq(boards.id, body.boardId), eq(boards.workspaceId, auth.workspaceId)))
+    .limit(1);
 
   if (!board) {
     return NextResponse.json(
@@ -80,14 +79,18 @@ export async function POST(req: NextRequest) {
 
   // Duplicate check: skip if same meta_library_id already in this board
   if (body.ad.metaLibraryId) {
-    const { data: existing } = await supabase
-      .from("saved_ads")
-      .select("id")
-      .eq("board_id", body.boardId)
-      .eq("meta_library_id", body.ad.metaLibraryId)
+    const existing = await db
+      .select({ id: savedAds.id })
+      .from(savedAds)
+      .where(
+        and(
+          eq(savedAds.boardId, body.boardId),
+          eq(savedAds.metaLibraryId, body.ad.metaLibraryId)
+        )
+      )
       .limit(1);
 
-    if (existing && existing.length > 0) {
+    if (existing.length > 0) {
       trackServer("extension_ad_saved", auth.userId ?? "unknown", {
         workspace_id: auth.workspaceId,
         board_id: body.boardId,
@@ -102,23 +105,23 @@ export async function POST(req: NextRequest) {
   }
 
   // Insert the ad
-  const { error } = await supabase.from("saved_ads").insert({
-    board_id: body.boardId,
-    workspace_id: auth.workspaceId,
-    source: "extension",
-    meta_library_id: body.ad.metaLibraryId ?? null,
-    brand_name: body.ad.brandName ?? null,
-    headline: body.ad.headline ?? null,
-    body: body.ad.body ?? null,
-    format: body.ad.format,
-    image_url: body.ad.imageUrl ?? null,
-    landing_page_url: body.ad.landingPageUrl ?? null,
-    platforms: body.ad.platforms ?? null,
-    start_date: body.ad.startDate ?? null,
-    runtime_days: body.ad.runtimeDays ?? null,
-  });
-
-  if (error) {
+  try {
+    await db.insert(savedAds).values({
+      boardId: body.boardId,
+      workspaceId: auth.workspaceId,
+      source: "extension",
+      metaLibraryId: body.ad.metaLibraryId ?? null,
+      brandName: body.ad.brandName ?? null,
+      headline: body.ad.headline ?? null,
+      body: body.ad.body ?? null,
+      format: body.ad.format,
+      imageUrl: body.ad.imageUrl ?? null,
+      landingPageUrl: body.ad.landingPageUrl ?? null,
+      platforms: body.ad.platforms ?? null,
+      startDate: body.ad.startDate ?? null,
+      runtimeDays: body.ad.runtimeDays ?? null,
+    });
+  } catch {
     return NextResponse.json(
       { error: "Failed to save ad" },
       { status: 500 }

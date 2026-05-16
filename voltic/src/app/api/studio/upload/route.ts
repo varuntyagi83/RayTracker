@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWorkspace } from "@/lib/supabase/queries";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadBrandAsset } from "@/lib/storage/brand-assets";
 
 export const runtime = "nodejs";
 
@@ -67,7 +67,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const supabase = createAdminClient();
   const uploaded: { url: string; name: string; type: string; size: number }[] =
     [];
 
@@ -108,20 +107,7 @@ export async function POST(req: NextRequest) {
     const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
     const storagePath = `${workspace.id}/studio/${Date.now()}-${safeFileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from("brand-assets")
-      .upload(storagePath, buffer, { contentType: file.type });
-
-    if (uploadError) {
-      return NextResponse.json(
-        { error: `Upload failed: ${uploadError.message}` },
-        { status: 500 }
-      );
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("brand-assets").getPublicUrl(storagePath);
+    const publicUrl = await uploadBrandAsset(storagePath, buffer, file.type);
 
     uploaded.push({
       url: publicUrl,

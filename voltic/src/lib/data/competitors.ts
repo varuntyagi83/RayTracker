@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { competitorBrands, competitorAds, competitorReports } from "@/db/schema";
+import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import type { DiscoverAd } from "@/types/discover";
 import type {
   CompetitorBrand,
@@ -13,40 +15,41 @@ import type {
 export async function listCompetitorBrands(
   workspaceId: string
 ): Promise<CompetitorBrand[]> {
-  const supabase = createAdminClient();
+  const brands = await db
+    .select()
+    .from(competitorBrands)
+    .where(eq(competitorBrands.workspaceId, workspaceId))
+    .orderBy(desc(competitorBrands.lastScrapedAt));
 
-  const { data: brands } = await supabase
-    .from("competitor_brands")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("last_scraped_at", { ascending: false, nullsFirst: false });
-
-  if (!brands || brands.length === 0) return [];
+  if (brands.length === 0) return [];
 
   // Get ad counts per brand
   const brandIds = brands.map((b) => b.id);
-  const { data: adCounts } = await supabase
-    .from("competitor_ads")
-    .select("competitor_brand_id")
-    .eq("workspace_id", workspaceId)
-    .in("competitor_brand_id", brandIds);
+  const adCountRows = await db
+    .select({ competitorBrandId: competitorAds.competitorBrandId })
+    .from(competitorAds)
+    .where(
+      and(
+        eq(competitorAds.workspaceId, workspaceId),
+        inArray(competitorAds.competitorBrandId, brandIds)
+      )
+    );
 
   const countMap: Record<string, number> = {};
-  for (const row of adCounts ?? []) {
-    countMap[row.competitor_brand_id] =
-      (countMap[row.competitor_brand_id] ?? 0) + 1;
+  for (const row of adCountRows) {
+    countMap[row.competitorBrandId] = (countMap[row.competitorBrandId] ?? 0) + 1;
   }
 
   return brands.map((b) => ({
     id: b.id,
-    workspaceId: b.workspace_id,
+    workspaceId: b.workspaceId,
     name: b.name,
-    metaAdsLibraryUrl: b.meta_ads_library_url,
+    metaAdsLibraryUrl: b.metaAdsLibraryUrl,
     description: b.description,
-    lastScrapedAt: b.last_scraped_at,
+    lastScrapedAt: b.lastScrapedAt ? b.lastScrapedAt.toISOString() : null,
     adCount: countMap[b.id] ?? 0,
-    createdAt: b.created_at,
-    updatedAt: b.updated_at,
+    createdAt: b.createdAt.toISOString(),
+    updatedAt: b.updatedAt.toISOString(),
   }));
 }
 
@@ -58,72 +61,85 @@ export async function saveCompetitorScrapeRun(
   ads: DiscoverAd[],
   metaAdsLibraryUrl?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
-  // 1. Upsert competitor brand
-  const { data: existingBrand } = await supabase
-    .from("competitor_brands")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("name", brandName)
-    .single();
+  // 1. Find or create competitor brand
+  const [existingBrand] = await db
+    .select({ id: competitorBrands.id })
+    .from(competitorBrands)
+    .where(and(eq(competitorBrands.workspaceId, workspaceId), eq(competitorBrands.name, brandName)))
+    .limit(1);
 
   let brandId: string;
 
   if (existingBrand) {
     brandId = existingBrand.id;
-    await supabase
-      .from("competitor_brands")
-      .update({
-        last_scraped_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        ...(metaAdsLibraryUrl ? { meta_ads_library_url: metaAdsLibraryUrl } : {}),
+    await db
+      .update(competitorBrands)
+      .set({
+        lastScrapedAt: new Date(),
+        updatedAt: new Date(),
+        ...(metaAdsLibraryUrl ? { metaAdsLibraryUrl } : {}),
       })
-      .eq("id", brandId);
+      .where(eq(competitorBrands.id, brandId));
   } else {
-    const { data: newBrand, error: insertErr } = await supabase
-      .from("competitor_brands")
-      .insert({
-        workspace_id: workspaceId,
+    const [newBrand] = await db
+      .insert(competitorBrands)
+      .values({
+        workspaceId,
         name: brandName,
-        last_scraped_at: new Date().toISOString(),
-        ...(metaAdsLibraryUrl ? { meta_ads_library_url: metaAdsLibraryUrl } : {}),
+        lastScrapedAt: new Date(),
+        ...(metaAdsLibraryUrl ? { metaAdsLibraryUrl } : {}),
       })
-      .select("id")
-      .single();
+      .returning({ id: competitorBrands.id });
 
-    if (insertErr || !newBrand) {
-      return { success: false, error: insertErr?.message ?? "Failed to create brand" };
+    if (!newBrand) {
+      return { success: false, error: "Failed to create brand" };
     }
     brandId = newBrand.id;
   }
 
-  // 2. Batch upsert all ads in one roundtrip instead of N sequential calls
-  const scrapedAt = new Date().toISOString();
+  // 2. Batch upsert all ads in one roundtrip
+  const scrapedAt = new Date();
   const rows = ads.map((ad) => ({
-    competitor_brand_id: brandId,
-    workspace_id: workspaceId,
-    meta_library_id: ad.id,
+    competitorBrandId: brandId,
+    workspaceId,
+    metaLibraryId: ad.id,
     headline: ad.headline || null,
-    body_text: ad.bodyText || null,
+    bodyText: ad.bodyText || null,
     format: ad.mediaType,
-    media_type: ad.mediaType,
-    image_url: ad.mediaThumbnailUrl || null,
-    landing_page_url: ad.linkUrl || null,
+    mediaType: ad.mediaType,
+    imageUrl: ad.mediaThumbnailUrl || null,
+    landingPageUrl: ad.linkUrl || null,
     platforms: ad.platforms,
-    start_date: ad.startDate || null,
-    runtime_days: ad.runtimeDays,
-    is_active: ad.isActive,
-    ads_library_url: ad.adsLibraryUrl,
-    scraped_at: scrapedAt,
+    startDate: ad.startDate || null,
+    runtimeDays: ad.runtimeDays,
+    isActive: ad.isActive,
+    adsLibraryUrl: ad.adsLibraryUrl,
+    scrapedAt,
   }));
 
-  const { error: upsertErr } = await supabase
-    .from("competitor_ads")
-    .upsert(rows, { onConflict: "workspace_id,meta_library_id" });
-
-  if (upsertErr) {
-    return { success: false, error: upsertErr.message };
+  try {
+    await db
+      .insert(competitorAds)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [competitorAds.workspaceId, competitorAds.metaLibraryId],
+        set: {
+          headline: sql`excluded.headline`,
+          bodyText: sql`excluded.body_text`,
+          format: sql`excluded.format`,
+          mediaType: sql`excluded.media_type`,
+          imageUrl: sql`excluded.image_url`,
+          landingPageUrl: sql`excluded.landing_page_url`,
+          platforms: sql`excluded.platforms`,
+          startDate: sql`excluded.start_date`,
+          runtimeDays: sql`excluded.runtime_days`,
+          isActive: sql`excluded.is_active`,
+          adsLibraryUrl: sql`excluded.ads_library_url`,
+          scrapedAt: sql`excluded.scraped_at`,
+        },
+      });
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Upsert failed" };
   }
 
   return { success: true };
@@ -135,26 +151,33 @@ export async function deleteCompetitorBrands(
   workspaceId: string,
   brandIds: string[]
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    // Delete brands (competitor_ads cascade via FK)
+    await db
+      .delete(competitorBrands)
+      .where(
+        and(
+          eq(competitorBrands.workspaceId, workspaceId),
+          inArray(competitorBrands.id, brandIds)
+        )
+      );
 
-  // Delete brands (competitor_ads cascade via FK)
-  const { error } = await supabase
-    .from("competitor_brands")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .in("id", brandIds);
+    // Delete reports that reference any of the deleted brand IDs.
+    // Drizzle has no native array-overlap operator, so use a raw SQL fragment
+    // with the Postgres && (overlaps) operator on the text[] column.
+    await db
+      .delete(competitorReports)
+      .where(
+        and(
+          eq(competitorReports.workspaceId, workspaceId),
+          sql`${competitorReports.competitorBrandIds} && ${brandIds}::text[]`
+        )
+      );
 
-  if (error) return { success: false, error: error.message };
-
-  // Also delete reports that reference these brands using Postgres array overlap
-  // (cs = "contains" — finds rows where competitor_brand_ids overlaps brandIds)
-  await supabase
-    .from("competitor_reports")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .overlaps("competitor_brand_ids", brandIds);
-
-  return { success: true };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Delete failed" };
+  }
 }
 
 // ─── Get Ads for Brands ──────────────────────────────────────────────────
@@ -163,16 +186,18 @@ export async function getCompetitorAdsForBrands(
   workspaceId: string,
   brandIds: string[]
 ): Promise<CompetitorAd[]> {
-  const supabase = createAdminClient();
+  const rows = await db
+    .select()
+    .from(competitorAds)
+    .where(
+      and(
+        eq(competitorAds.workspaceId, workspaceId),
+        inArray(competitorAds.competitorBrandId, brandIds)
+      )
+    )
+    .orderBy(desc(competitorAds.scrapedAt));
 
-  const { data } = await supabase
-    .from("competitor_ads")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .in("competitor_brand_id", brandIds)
-    .order("scraped_at", { ascending: false });
-
-  return (data ?? []).map(mapCompetitorAd);
+  return rows.map(mapCompetitorAd);
 }
 
 // ─── Reports ──────────────────────────────────────────────────────────────
@@ -190,117 +215,109 @@ export async function saveCompetitorReport(
     creditsUsed: number;
   }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
-
-  const { data, error } = await supabase
-    .from("competitor_reports")
-    .insert({
-      workspace_id: workspaceId,
+  const [inserted] = await db
+    .insert(competitorReports)
+    .values({
+      workspaceId,
       title: report.title,
-      competitor_brand_ids: report.competitorBrandIds,
-      competitor_brand_names: report.competitorBrandNames,
-      ad_count: report.adCount,
-      per_ad_analyses: report.perAdAnalyses,
-      cross_brand_summary: report.crossBrandSummary,
+      competitorBrandIds: report.competitorBrandIds,
+      competitorBrandNames: report.competitorBrandNames,
+      adCount: report.adCount,
+      perAdAnalyses: report.perAdAnalyses,
+      crossBrandSummary: report.crossBrandSummary,
       model: report.model,
-      credits_used: report.creditsUsed,
+      creditsUsed: report.creditsUsed,
     })
-    .select("id")
-    .single();
+    .returning({ id: competitorReports.id });
 
-  if (error || !data) {
-    return { success: false, error: error?.message ?? "Failed to save report" };
+  if (!inserted) {
+    return { success: false, error: "Failed to save report" };
   }
 
-  return { success: true, id: data.id };
+  return { success: true, id: inserted.id };
 }
 
 export async function listCompetitorReports(
   workspaceId: string
 ): Promise<CompetitorReport[]> {
-  const supabase = createAdminClient();
+  const rows = await db
+    .select()
+    .from(competitorReports)
+    .where(eq(competitorReports.workspaceId, workspaceId))
+    .orderBy(desc(competitorReports.createdAt));
 
-  const { data } = await supabase
-    .from("competitor_reports")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false });
-
-  return (data ?? []).map(mapCompetitorReport);
+  return rows.map(mapCompetitorReport);
 }
 
 export async function getCompetitorReport(
   workspaceId: string,
   reportId: string
 ): Promise<CompetitorReport | null> {
-  const supabase = createAdminClient();
+  const [row] = await db
+    .select()
+    .from(competitorReports)
+    .where(and(eq(competitorReports.workspaceId, workspaceId), eq(competitorReports.id, reportId)))
+    .limit(1);
 
-  const { data } = await supabase
-    .from("competitor_reports")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("id", reportId)
-    .single();
-
-  if (!data) return null;
-  return mapCompetitorReport(data);
+  if (!row) return null;
+  return mapCompetitorReport(row);
 }
 
 export async function deleteCompetitorReport(
   workspaceId: string,
   reportId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    await db
+      .delete(competitorReports)
+      .where(and(eq(competitorReports.workspaceId, workspaceId), eq(competitorReports.id, reportId)));
 
-  const { error } = await supabase
-    .from("competitor_reports")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("id", reportId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : "Delete failed" };
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapCompetitorAd(row: any): CompetitorAd {
+type CompetitorAdRow = typeof competitorAds.$inferSelect;
+type CompetitorReportRow = typeof competitorReports.$inferSelect;
+
+function mapCompetitorAd(row: CompetitorAdRow): CompetitorAd {
   return {
     id: row.id,
-    competitorBrandId: row.competitor_brand_id,
-    workspaceId: row.workspace_id,
-    metaLibraryId: row.meta_library_id,
+    competitorBrandId: row.competitorBrandId,
+    workspaceId: row.workspaceId,
+    metaLibraryId: row.metaLibraryId,
     headline: row.headline,
-    bodyText: row.body_text,
+    bodyText: row.bodyText,
     format: row.format,
-    mediaType: row.media_type,
-    imageUrl: row.image_url,
-    videoUrl: row.video_url,
-    landingPageUrl: row.landing_page_url,
+    mediaType: row.mediaType,
+    imageUrl: row.imageUrl,
+    videoUrl: row.videoUrl,
+    landingPageUrl: row.landingPageUrl,
     platforms: row.platforms ?? [],
-    startDate: row.start_date,
-    runtimeDays: row.runtime_days,
-    isActive: row.is_active,
-    adsLibraryUrl: row.ads_library_url,
-    scrapedAt: row.scraped_at,
-    createdAt: row.created_at,
+    startDate: row.startDate,
+    runtimeDays: row.runtimeDays,
+    isActive: row.isActive,
+    adsLibraryUrl: row.adsLibraryUrl,
+    scrapedAt: row.scrapedAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapCompetitorReport(row: any): CompetitorReport {
+function mapCompetitorReport(row: CompetitorReportRow): CompetitorReport {
   return {
     id: row.id,
-    workspaceId: row.workspace_id,
+    workspaceId: row.workspaceId,
     title: row.title,
-    competitorBrandIds: row.competitor_brand_ids ?? [],
-    competitorBrandNames: row.competitor_brand_names ?? [],
-    adCount: row.ad_count,
-    perAdAnalyses: (row.per_ad_analyses ?? []) as CompetitorAdAnalysis[],
-    crossBrandSummary: (row.cross_brand_summary ?? {}) as CrossBrandSummary,
+    competitorBrandIds: row.competitorBrandIds ?? [],
+    competitorBrandNames: row.competitorBrandNames ?? [],
+    adCount: row.adCount,
+    perAdAnalyses: (row.perAdAnalyses ?? []) as CompetitorAdAnalysis[],
+    crossBrandSummary: (row.crossBrandSummary ?? {}) as CrossBrandSummary,
     model: row.model,
-    creditsUsed: row.credits_used,
-    createdAt: row.created_at,
+    creditsUsed: row.creditsUsed,
+    createdAt: row.createdAt.toISOString(),
   };
 }

@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { adComparisons } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import type { ComparisonResult, AdComparisonRecord } from "@/types/discover";
 
 export const COMPARISON_CREDIT_COST = 3;
@@ -9,51 +11,55 @@ export async function saveComparison(
   brandNames: string[],
   result: ComparisonResult
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const [inserted] = await db
+      .insert(adComparisons)
+      .values({
+        workspaceId,
+        adIds,
+        brandNames,
+        result,
+        model: "gpt-4o",
+        creditsUsed: COMPARISON_CREDIT_COST,
+      })
+      .returning({ id: adComparisons.id });
 
-  const { data, error } = await supabase
-    .from("ad_comparisons")
-    .insert({
-      workspace_id: workspaceId,
-      ad_ids: adIds,
-      brand_names: brandNames,
-      result: result,
-      model: "gpt-4o",
-      credits_used: COMPARISON_CREDIT_COST,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function getComparison(
   workspaceId: string,
   comparisonId: string
 ): Promise<AdComparisonRecord | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("ad_comparisons")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("id", comparisonId)
-    .single();
+  const [row] = await db
+    .select()
+    .from(adComparisons)
+    .where(
+      and(
+        eq(adComparisons.workspaceId, workspaceId),
+        eq(adComparisons.id, comparisonId)
+      )
+    )
+    .limit(1);
 
-  if (error || !data) return null;
-  return mapRow(data);
+  if (!row) return null;
+  return mapRow(row);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: any): AdComparisonRecord {
+type AdComparisonRow = typeof adComparisons.$inferSelect;
+
+function mapRow(row: AdComparisonRow): AdComparisonRecord {
   return {
     id: row.id,
-    workspaceId: row.workspace_id,
-    adIds: row.ad_ids,
-    brandNames: row.brand_names,
+    workspaceId: row.workspaceId,
+    adIds: row.adIds as string[],
+    brandNames: row.brandNames as string[],
     result: row.result as ComparisonResult,
     model: row.model,
-    creditsUsed: row.credits_used,
-    createdAt: row.created_at,
+    creditsUsed: row.creditsUsed,
+    createdAt: row.createdAt.toISOString(),
   };
 }

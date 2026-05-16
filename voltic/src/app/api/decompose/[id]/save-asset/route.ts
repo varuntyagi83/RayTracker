@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createAsset } from "@/lib/data/assets";
 import { trackServer } from "@/lib/analytics/posthog-server";
@@ -11,12 +11,9 @@ export async function POST(
   const { id } = await params;
 
   // 1. Authenticate
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,7 +23,7 @@ export async function POST(
   const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!member) {
@@ -92,7 +89,7 @@ export async function POST(
     );
   }
 
-  trackServer("decomposition_saved_as_asset", user.id, {
+  trackServer("decomposition_saved_as_asset", userId, {
     decomposition_id: id,
     asset_id: result.id!,
     has_clean_image: !!decomposition.clean_image_url,

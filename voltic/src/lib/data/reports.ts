@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { campaigns, campaignMetrics, creatives, creativeMetrics } from "@/db/schema";
+import { eq, and, gte, lte, isNotNull } from "drizzle-orm";
 import type {
   ReportParams,
   ReportResult,
@@ -49,43 +51,62 @@ function paginate<T>(rows: T[], page: number, pageSize: number): ReportResult<T>
 export async function getTopAdsReport(
   params: ReportParams
 ): Promise<ReportResult<TopAdRow>> {
-  const supabase = createAdminClient();
+  const creativeRows = await db
+    .select({
+      id: creatives.id,
+      name: creatives.name,
+      headline: creatives.headline,
+      format: creatives.format,
+    })
+    .from(creatives)
+    .where(eq(creatives.workspaceId, params.workspaceId));
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "id, name, headline, format, creative_metrics(spend, revenue, roas, impressions, clicks, ctr, purchases, date)"
-    )
-    .eq("workspace_id", params.workspaceId);
+  if (creativeRows.length === 0) return paginate([], params.page, params.pageSize);
 
-  if (!creatives) return paginate([], params.page, params.pageSize);
+  // Fetch all metrics for the date range in one query
+  const metricRows = await db
+    .select({
+      creativeId: creativeMetrics.creativeId,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+      purchases: creativeMetrics.purchases,
+    })
+    .from(creativeMetrics)
+    .where(
+      and(
+        gte(creativeMetrics.date, params.dateRange.from),
+        lte(creativeMetrics.date, params.dateRange.to)
+      )
+    );
 
-  const rows: TopAdRow[] = creatives.map((c) => {
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string; revenue: string; roas: string;
-        impressions: number; clicks: number; ctr: string; purchases: number; date: string;
-      }>
-    ).filter((m) => m.date >= params.dateRange.from && m.date <= params.dateRange.to);
+  // Aggregate metrics per creative
+  const metricsMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number; purchases: number }>();
+  for (const m of metricRows) {
+    const existing = metricsMap.get(m.creativeId) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
+    existing.spend += Number(m.spend);
+    existing.revenue += Number(m.revenue);
+    existing.impressions += m.impressions;
+    existing.clicks += m.clicks;
+    existing.purchases += m.purchases;
+    metricsMap.set(m.creativeId, existing);
+  }
 
-    const spend = metrics.reduce((s, m) => s + Number(m.spend), 0);
-    const revenue = metrics.reduce((s, m) => s + Number(m.revenue), 0);
-    const impressions = metrics.reduce((s, m) => s + m.impressions, 0);
-    const clicks = metrics.reduce((s, m) => s + m.clicks, 0);
-    const purchases = metrics.reduce((s, m) => s + m.purchases, 0);
-
+  const rows: TopAdRow[] = creativeRows.map((c) => {
+    const agg = metricsMap.get(c.id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
     return {
       id: c.id,
       name: c.name,
       headline: c.headline,
       format: c.format,
-      spend,
-      revenue,
-      roas: spend > 0 ? revenue / spend : 0,
-      impressions,
-      clicks,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-      purchases,
+      spend: agg.spend,
+      revenue: agg.revenue,
+      roas: agg.spend > 0 ? agg.revenue / agg.spend : 0,
+      impressions: agg.impressions,
+      clicks: agg.clicks,
+      ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : 0,
+      purchases: agg.purchases,
     };
   });
 
@@ -98,43 +119,60 @@ export async function getTopAdsReport(
 export async function getTopCampaignsReport(
   params: ReportParams
 ): Promise<ReportResult<TopCampaignRow>> {
-  const supabase = createAdminClient();
+  const campaignRows = await db
+    .select({
+      id: campaigns.id,
+      name: campaigns.name,
+      status: campaigns.status,
+      objective: campaigns.objective,
+    })
+    .from(campaigns)
+    .where(eq(campaigns.workspaceId, params.workspaceId));
 
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select(
-      "id, name, status, objective, campaign_metrics(spend, revenue, roas, impressions, clicks, ctr, purchases, date)"
-    )
-    .eq("workspace_id", params.workspaceId);
+  if (campaignRows.length === 0) return paginate([], params.page, params.pageSize);
 
-  if (!campaigns) return paginate([], params.page, params.pageSize);
+  const metricRows = await db
+    .select({
+      campaignId: campaignMetrics.campaignId,
+      spend: campaignMetrics.spend,
+      revenue: campaignMetrics.revenue,
+      impressions: campaignMetrics.impressions,
+      clicks: campaignMetrics.clicks,
+      purchases: campaignMetrics.purchases,
+    })
+    .from(campaignMetrics)
+    .where(
+      and(
+        gte(campaignMetrics.date, params.dateRange.from),
+        lte(campaignMetrics.date, params.dateRange.to)
+      )
+    );
 
-  const rows: TopCampaignRow[] = campaigns.map((c) => {
-    const metrics = (
-      c.campaign_metrics as Array<{
-        spend: string; revenue: string; roas: string;
-        impressions: number; clicks: number; ctr: string; purchases: number; date: string;
-      }>
-    ).filter((m) => m.date >= params.dateRange.from && m.date <= params.dateRange.to);
+  const metricsMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number; purchases: number }>();
+  for (const m of metricRows) {
+    const existing = metricsMap.get(m.campaignId) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
+    existing.spend += Number(m.spend);
+    existing.revenue += Number(m.revenue);
+    existing.impressions += m.impressions;
+    existing.clicks += m.clicks;
+    existing.purchases += m.purchases;
+    metricsMap.set(m.campaignId, existing);
+  }
 
-    const spend = metrics.reduce((s, m) => s + Number(m.spend), 0);
-    const revenue = metrics.reduce((s, m) => s + Number(m.revenue), 0);
-    const impressions = metrics.reduce((s, m) => s + m.impressions, 0);
-    const clicks = metrics.reduce((s, m) => s + m.clicks, 0);
-    const purchases = metrics.reduce((s, m) => s + m.purchases, 0);
-
+  const rows: TopCampaignRow[] = campaignRows.map((c) => {
+    const agg = metricsMap.get(c.id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
     return {
       id: c.id,
       name: c.name,
       status: c.status,
       objective: c.objective,
-      spend,
-      revenue,
-      roas: spend > 0 ? revenue / spend : 0,
-      impressions,
-      clicks,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-      purchases,
+      spend: agg.spend,
+      revenue: agg.revenue,
+      roas: agg.spend > 0 ? agg.revenue / agg.spend : 0,
+      impressions: agg.impressions,
+      clicks: agg.clicks,
+      ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : 0,
+      purchases: agg.purchases,
     };
   });
 
@@ -147,41 +185,57 @@ export async function getTopCampaignsReport(
 export async function getTopCreativesReport(
   params: ReportParams
 ): Promise<ReportResult<TopCreativeRow>> {
-  const supabase = createAdminClient();
+  const creativeRows = await db
+    .select({
+      id: creatives.id,
+      name: creatives.name,
+      format: creatives.format,
+      imageUrl: creatives.imageUrl,
+    })
+    .from(creatives)
+    .where(eq(creatives.workspaceId, params.workspaceId));
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "id, name, format, image_url, creative_metrics(spend, revenue, roas, impressions, clicks, ctr, date)"
-    )
-    .eq("workspace_id", params.workspaceId);
+  if (creativeRows.length === 0) return paginate([], params.page, params.pageSize);
 
-  if (!creatives) return paginate([], params.page, params.pageSize);
+  const metricRows = await db
+    .select({
+      creativeId: creativeMetrics.creativeId,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+    })
+    .from(creativeMetrics)
+    .where(
+      and(
+        gte(creativeMetrics.date, params.dateRange.from),
+        lte(creativeMetrics.date, params.dateRange.to)
+      )
+    );
 
-  const rows: TopCreativeRow[] = creatives.map((c) => {
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string; revenue: string; roas: string;
-        impressions: number; clicks: number; ctr: string; date: string;
-      }>
-    ).filter((m) => m.date >= params.dateRange.from && m.date <= params.dateRange.to);
+  const metricsMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number }>();
+  for (const m of metricRows) {
+    const existing = metricsMap.get(m.creativeId) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0 };
+    existing.spend += Number(m.spend);
+    existing.revenue += Number(m.revenue);
+    existing.impressions += m.impressions;
+    existing.clicks += m.clicks;
+    metricsMap.set(m.creativeId, existing);
+  }
 
-    const spend = metrics.reduce((s, m) => s + Number(m.spend), 0);
-    const revenue = metrics.reduce((s, m) => s + Number(m.revenue), 0);
-    const impressions = metrics.reduce((s, m) => s + m.impressions, 0);
-    const clicks = metrics.reduce((s, m) => s + m.clicks, 0);
-
+  const rows: TopCreativeRow[] = creativeRows.map((c) => {
+    const agg = metricsMap.get(c.id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0 };
     return {
       id: c.id,
       name: c.name,
       format: c.format,
-      imageUrl: c.image_url,
-      spend,
-      revenue,
-      roas: spend > 0 ? revenue / spend : 0,
-      impressions,
-      clicks,
-      ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+      imageUrl: c.imageUrl,
+      spend: agg.spend,
+      revenue: agg.revenue,
+      roas: agg.spend > 0 ? agg.revenue / agg.spend : 0,
+      impressions: agg.impressions,
+      clicks: agg.clicks,
+      ctr: agg.impressions > 0 ? (agg.clicks / agg.impressions) * 100 : 0,
     };
   });
 
@@ -194,36 +248,55 @@ export async function getTopCreativesReport(
 export async function getTopLandingPagesReport(
   params: ReportParams
 ): Promise<ReportResult<TopLandingPageRow>> {
-  const supabase = createAdminClient();
+  const creativeRows = await db
+    .select({
+      id: creatives.id,
+      landingPageUrl: creatives.landingPageUrl,
+    })
+    .from(creatives)
+    .where(and(eq(creatives.workspaceId, params.workspaceId), isNotNull(creatives.landingPageUrl)));
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "landing_page_url, creative_metrics(spend, revenue, roas, impressions, clicks, ctr, date)"
-    )
-    .eq("workspace_id", params.workspaceId)
-    .not("landing_page_url", "is", null);
+  if (creativeRows.length === 0) return paginate([], params.page, params.pageSize);
 
-  if (!creatives) return paginate([], params.page, params.pageSize);
+  const creativeIds = creativeRows.map((c) => c.id);
+
+  const metricRows = await db
+    .select({
+      creativeId: creativeMetrics.creativeId,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+    })
+    .from(creativeMetrics)
+    .where(
+      and(
+        gte(creativeMetrics.date, params.dateRange.from),
+        lte(creativeMetrics.date, params.dateRange.to)
+      )
+    );
+
+  // Index metrics by creative id for fast lookup
+  const metricsIndex = new Map<string, Array<{ spend: number; revenue: number; impressions: number; clicks: number }>>();
+  for (const m of metricRows) {
+    if (!creativeIds.includes(m.creativeId)) continue;
+    const arr = metricsIndex.get(m.creativeId) ?? [];
+    arr.push({ spend: Number(m.spend), revenue: Number(m.revenue), impressions: m.impressions, clicks: m.clicks });
+    metricsIndex.set(m.creativeId, arr);
+  }
 
   const lpMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number }>();
-
-  for (const c of creatives) {
-    if (!c.landing_page_url) continue;
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string; revenue: string; impressions: number; clicks: number; date: string;
-      }>
-    ).filter((m) => m.date >= params.dateRange.from && m.date <= params.dateRange.to);
-
-    const existing = lpMap.get(c.landing_page_url) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0 };
+  for (const c of creativeRows) {
+    if (!c.landingPageUrl) continue;
+    const metrics = metricsIndex.get(c.id) ?? [];
+    const existing = lpMap.get(c.landingPageUrl) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0 };
     for (const m of metrics) {
-      existing.spend += Number(m.spend);
-      existing.revenue += Number(m.revenue);
+      existing.spend += m.spend;
+      existing.revenue += m.revenue;
       existing.impressions += m.impressions;
       existing.clicks += m.clicks;
     }
-    lpMap.set(c.landing_page_url, existing);
+    lpMap.set(c.landingPageUrl, existing);
   }
 
   const rows: TopLandingPageRow[] = Array.from(lpMap.entries()).map(
@@ -247,33 +320,51 @@ export async function getTopLandingPagesReport(
 export async function getTopHeadlinesReport(
   params: ReportParams
 ): Promise<ReportResult<TopHeadlineRow>> {
-  const supabase = createAdminClient();
+  const creativeRows = await db
+    .select({
+      id: creatives.id,
+      headline: creatives.headline,
+    })
+    .from(creatives)
+    .where(and(eq(creatives.workspaceId, params.workspaceId), isNotNull(creatives.headline)));
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "headline, creative_metrics(spend, revenue, impressions, clicks, date)"
-    )
-    .eq("workspace_id", params.workspaceId)
-    .not("headline", "is", null);
+  if (creativeRows.length === 0) return paginate([], params.page, params.pageSize);
 
-  if (!creatives) return paginate([], params.page, params.pageSize);
+  const creativeIds = creativeRows.map((c) => c.id);
+
+  const metricRows = await db
+    .select({
+      creativeId: creativeMetrics.creativeId,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+    })
+    .from(creativeMetrics)
+    .where(
+      and(
+        gte(creativeMetrics.date, params.dateRange.from),
+        lte(creativeMetrics.date, params.dateRange.to)
+      )
+    );
+
+  const metricsIndex = new Map<string, Array<{ spend: number; revenue: number; impressions: number; clicks: number }>>();
+  for (const m of metricRows) {
+    if (!creativeIds.includes(m.creativeId)) continue;
+    const arr = metricsIndex.get(m.creativeId) ?? [];
+    arr.push({ spend: Number(m.spend), revenue: Number(m.revenue), impressions: m.impressions, clicks: m.clicks });
+    metricsIndex.set(m.creativeId, arr);
+  }
 
   const headlineMap = new Map<string, { count: number; spend: number; revenue: number; impressions: number; clicks: number }>();
-
-  for (const c of creatives) {
+  for (const c of creativeRows) {
     if (!c.headline) continue;
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string; revenue: string; impressions: number; clicks: number; date: string;
-      }>
-    ).filter((m) => m.date >= params.dateRange.from && m.date <= params.dateRange.to);
-
+    const metrics = metricsIndex.get(c.id) ?? [];
     const existing = headlineMap.get(c.headline) ?? { count: 0, spend: 0, revenue: 0, impressions: 0, clicks: 0 };
     existing.count += 1;
     for (const m of metrics) {
-      existing.spend += Number(m.spend);
-      existing.revenue += Number(m.revenue);
+      existing.spend += m.spend;
+      existing.revenue += m.revenue;
       existing.impressions += m.impressions;
       existing.clicks += m.clicks;
     }
@@ -302,33 +393,51 @@ export async function getTopHeadlinesReport(
 export async function getTopCopyReport(
   params: ReportParams
 ): Promise<ReportResult<TopCopyRow>> {
-  const supabase = createAdminClient();
+  const creativeRows = await db
+    .select({
+      id: creatives.id,
+      body: creatives.body,
+    })
+    .from(creatives)
+    .where(and(eq(creatives.workspaceId, params.workspaceId), isNotNull(creatives.body)));
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "body, creative_metrics(spend, revenue, impressions, clicks, date)"
-    )
-    .eq("workspace_id", params.workspaceId)
-    .not("body", "is", null);
+  if (creativeRows.length === 0) return paginate([], params.page, params.pageSize);
 
-  if (!creatives) return paginate([], params.page, params.pageSize);
+  const creativeIds = creativeRows.map((c) => c.id);
+
+  const metricRows = await db
+    .select({
+      creativeId: creativeMetrics.creativeId,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+    })
+    .from(creativeMetrics)
+    .where(
+      and(
+        gte(creativeMetrics.date, params.dateRange.from),
+        lte(creativeMetrics.date, params.dateRange.to)
+      )
+    );
+
+  const metricsIndex = new Map<string, Array<{ spend: number; revenue: number; impressions: number; clicks: number }>>();
+  for (const m of metricRows) {
+    if (!creativeIds.includes(m.creativeId)) continue;
+    const arr = metricsIndex.get(m.creativeId) ?? [];
+    arr.push({ spend: Number(m.spend), revenue: Number(m.revenue), impressions: m.impressions, clicks: m.clicks });
+    metricsIndex.set(m.creativeId, arr);
+  }
 
   const bodyMap = new Map<string, { count: number; spend: number; revenue: number; impressions: number; clicks: number }>();
-
-  for (const c of creatives) {
+  for (const c of creativeRows) {
     if (!c.body) continue;
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string; revenue: string; impressions: number; clicks: number; date: string;
-      }>
-    ).filter((m) => m.date >= params.dateRange.from && m.date <= params.dateRange.to);
-
+    const metrics = metricsIndex.get(c.id) ?? [];
     const existing = bodyMap.get(c.body) ?? { count: 0, spend: 0, revenue: 0, impressions: 0, clicks: 0 };
     existing.count += 1;
     for (const m of metrics) {
-      existing.spend += Number(m.spend);
-      existing.revenue += Number(m.revenue);
+      existing.spend += m.spend;
+      existing.revenue += m.revenue;
       existing.impressions += m.impressions;
       existing.clicks += m.clicks;
     }

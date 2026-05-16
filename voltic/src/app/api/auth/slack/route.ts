@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 
 const SLACK_SCOPES = [
   "chat:write",
@@ -19,12 +19,9 @@ const SLACK_SCOPES = [
  */
 export async function GET(request: NextRequest) {
   // Must be authenticated to initiate OAuth
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

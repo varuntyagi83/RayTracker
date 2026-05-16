@@ -1,7 +1,12 @@
-import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import {
+  generatedAds,
+  brandGuidelinesTable,
+  assets,
+} from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { uploadBrandAsset, deleteBrandAsset } from "@/lib/storage/brand-assets";
 import type { GeneratedAd, TextPosition } from "@/types/ads";
-
-const STORAGE_BUCKET = "brand-assets";
 
 // ─── List Generated Ads ────────────────────────────────────────────────────
 
@@ -9,47 +14,62 @@ export async function getGeneratedAds(
   workspaceId: string,
   filters?: { brandGuidelineId?: string }
 ): Promise<GeneratedAd[]> {
-  const supabase = createAdminClient();
+  const whereCondition = filters?.brandGuidelineId
+    ? and(
+        eq(generatedAds.workspaceId, workspaceId),
+        eq(generatedAds.brandGuidelineId, filters.brandGuidelineId)
+      )
+    : eq(generatedAds.workspaceId, workspaceId);
 
-  let query = supabase
-    .from("generated_ads")
-    .select(
-      "*, brand_guidelines(name), assets!generated_ads_background_asset_id_fkey(name)"
+  const rows = await db
+    .select({
+      id: generatedAds.id,
+      workspaceId: generatedAds.workspaceId,
+      brandGuidelineId: generatedAds.brandGuidelineId,
+      brandGuidelineName: brandGuidelinesTable.name,
+      backgroundAssetId: generatedAds.backgroundAssetId,
+      backgroundAssetName: assets.name,
+      textVariant: generatedAds.textVariant,
+      fontFamily: generatedAds.fontFamily,
+      fontSize: generatedAds.fontSize,
+      textColor: generatedAds.textColor,
+      textPosition: generatedAds.textPosition,
+      imageUrl: generatedAds.imageUrl,
+      storagePath: generatedAds.storagePath,
+      width: generatedAds.width,
+      height: generatedAds.height,
+      status: generatedAds.status,
+      createdAt: generatedAds.createdAt,
+      updatedAt: generatedAds.updatedAt,
+    })
+    .from(generatedAds)
+    .leftJoin(
+      brandGuidelinesTable,
+      eq(generatedAds.brandGuidelineId, brandGuidelinesTable.id)
     )
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false });
+    .leftJoin(assets, eq(generatedAds.backgroundAssetId, assets.id))
+    .where(whereCondition)
+    .orderBy(desc(generatedAds.createdAt));
 
-  if (filters?.brandGuidelineId) {
-    query = query.eq("brand_guideline_id", filters.brandGuidelineId);
-  }
-
-  const { data } = await query;
-
-  return (data ?? []).map((row: Record<string, unknown>) => ({
-    id: row.id as string,
-    workspaceId: row.workspace_id as string,
-    brandGuidelineId: row.brand_guideline_id as string,
-    brandGuidelineName:
-      (row.brand_guidelines as Record<string, unknown> | null)?.name as
-        | string
-        | undefined,
-    backgroundAssetId: row.background_asset_id as string,
-    backgroundAssetName:
-      (row.assets as Record<string, unknown> | null)?.name as
-        | string
-        | undefined,
-    textVariant: row.text_variant as string,
-    fontFamily: row.font_family as string,
-    fontSize: row.font_size as number,
-    textColor: row.text_color as string,
-    textPosition: row.text_position as TextPosition,
-    imageUrl: row.image_url as string,
-    storagePath: row.storage_path as string,
-    width: row.width as number | null,
-    height: row.height as number | null,
-    status: row.status as string,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+  return rows.map((row) => ({
+    id: row.id,
+    workspaceId: row.workspaceId,
+    brandGuidelineId: row.brandGuidelineId,
+    brandGuidelineName: row.brandGuidelineName ?? undefined,
+    backgroundAssetId: row.backgroundAssetId,
+    backgroundAssetName: row.backgroundAssetName ?? undefined,
+    textVariant: row.textVariant,
+    fontFamily: row.fontFamily,
+    fontSize: row.fontSize,
+    textColor: row.textColor,
+    textPosition: row.textPosition as TextPosition,
+    imageUrl: row.imageUrl,
+    storagePath: row.storagePath,
+    width: row.width ?? null,
+    height: row.height ?? null,
+    status: row.status,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt as string),
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : (row.updatedAt as string),
   }));
 }
 
@@ -59,45 +79,57 @@ export async function getGeneratedAd(
   workspaceId: string,
   adId: string
 ): Promise<GeneratedAd | null> {
-  const supabase = createAdminClient();
-
-  const { data } = await supabase
-    .from("generated_ads")
-    .select(
-      "*, brand_guidelines(name), assets!generated_ads_background_asset_id_fkey(name)"
+  const [row] = await db
+    .select({
+      id: generatedAds.id,
+      workspaceId: generatedAds.workspaceId,
+      brandGuidelineId: generatedAds.brandGuidelineId,
+      brandGuidelineName: brandGuidelinesTable.name,
+      backgroundAssetId: generatedAds.backgroundAssetId,
+      backgroundAssetName: assets.name,
+      textVariant: generatedAds.textVariant,
+      fontFamily: generatedAds.fontFamily,
+      fontSize: generatedAds.fontSize,
+      textColor: generatedAds.textColor,
+      textPosition: generatedAds.textPosition,
+      imageUrl: generatedAds.imageUrl,
+      storagePath: generatedAds.storagePath,
+      width: generatedAds.width,
+      height: generatedAds.height,
+      status: generatedAds.status,
+      createdAt: generatedAds.createdAt,
+      updatedAt: generatedAds.updatedAt,
+    })
+    .from(generatedAds)
+    .leftJoin(
+      brandGuidelinesTable,
+      eq(generatedAds.brandGuidelineId, brandGuidelinesTable.id)
     )
-    .eq("workspace_id", workspaceId)
-    .eq("id", adId)
-    .single();
+    .leftJoin(assets, eq(generatedAds.backgroundAssetId, assets.id))
+    .where(and(eq(generatedAds.workspaceId, workspaceId), eq(generatedAds.id, adId)))
+    .limit(1);
 
-  if (!data) return null;
+  if (!row) return null;
 
-  const row = data as Record<string, unknown>;
   return {
-    id: row.id as string,
-    workspaceId: row.workspace_id as string,
-    brandGuidelineId: row.brand_guideline_id as string,
-    brandGuidelineName:
-      (row.brand_guidelines as Record<string, unknown> | null)?.name as
-        | string
-        | undefined,
-    backgroundAssetId: row.background_asset_id as string,
-    backgroundAssetName:
-      (row.assets as Record<string, unknown> | null)?.name as
-        | string
-        | undefined,
-    textVariant: row.text_variant as string,
-    fontFamily: row.font_family as string,
-    fontSize: row.font_size as number,
-    textColor: row.text_color as string,
-    textPosition: row.text_position as TextPosition,
-    imageUrl: row.image_url as string,
-    storagePath: row.storage_path as string,
-    width: row.width as number | null,
-    height: row.height as number | null,
-    status: row.status as string,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: row.id,
+    workspaceId: row.workspaceId,
+    brandGuidelineId: row.brandGuidelineId,
+    brandGuidelineName: row.brandGuidelineName ?? undefined,
+    backgroundAssetId: row.backgroundAssetId,
+    backgroundAssetName: row.backgroundAssetName ?? undefined,
+    textVariant: row.textVariant,
+    fontFamily: row.fontFamily,
+    fontSize: row.fontSize,
+    textColor: row.textColor,
+    textPosition: row.textPosition as TextPosition,
+    imageUrl: row.imageUrl,
+    storagePath: row.storagePath,
+    width: row.width ?? null,
+    height: row.height ?? null,
+    status: row.status,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt as string),
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : (row.updatedAt as string),
   };
 }
 
@@ -120,30 +152,31 @@ export async function createGeneratedAd(
     status?: string;
   }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const [inserted] = await db
+      .insert(generatedAds)
+      .values({
+        workspaceId,
+        brandGuidelineId: ad.brandGuidelineId,
+        backgroundAssetId: ad.backgroundAssetId,
+        textVariant: ad.textVariant,
+        fontFamily: ad.fontFamily,
+        fontSize: ad.fontSize,
+        textColor: ad.textColor,
+        textPosition: ad.textPosition,
+        imageUrl: ad.imageUrl,
+        storagePath: ad.storagePath,
+        width: ad.width ?? null,
+        height: ad.height ?? null,
+        status: ad.status ?? "approved",
+      })
+      .returning({ id: generatedAds.id });
 
-  const { data, error } = await supabase
-    .from("generated_ads")
-    .insert({
-      workspace_id: workspaceId,
-      brand_guideline_id: ad.brandGuidelineId,
-      background_asset_id: ad.backgroundAssetId,
-      text_variant: ad.textVariant,
-      font_family: ad.fontFamily,
-      font_size: ad.fontSize,
-      text_color: ad.textColor,
-      text_position: ad.textPosition,
-      image_url: ad.imageUrl,
-      storage_path: ad.storagePath,
-      width: ad.width ?? null,
-      height: ad.height ?? null,
-      status: ad.status ?? "approved",
-    })
-    .select("id")
-    .single();
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
 }
 
 // ─── Batch Create Generated Ads ────────────────────────────────────────────
@@ -165,31 +198,33 @@ export async function createGeneratedAdsBatch(
     status?: string;
   }>
 ): Promise<{ success: boolean; ids?: string[]; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const values = ads.map((ad) => ({
+      workspaceId,
+      brandGuidelineId: ad.brandGuidelineId,
+      backgroundAssetId: ad.backgroundAssetId,
+      textVariant: ad.textVariant,
+      fontFamily: ad.fontFamily,
+      fontSize: ad.fontSize,
+      textColor: ad.textColor,
+      textPosition: ad.textPosition,
+      imageUrl: ad.imageUrl,
+      storagePath: ad.storagePath,
+      width: ad.width ?? null,
+      height: ad.height ?? null,
+      status: ad.status ?? "approved",
+    }));
 
-  const rows = ads.map((ad) => ({
-    workspace_id: workspaceId,
-    brand_guideline_id: ad.brandGuidelineId,
-    background_asset_id: ad.backgroundAssetId,
-    text_variant: ad.textVariant,
-    font_family: ad.fontFamily,
-    font_size: ad.fontSize,
-    text_color: ad.textColor,
-    text_position: ad.textPosition,
-    image_url: ad.imageUrl,
-    storage_path: ad.storagePath,
-    width: ad.width ?? null,
-    height: ad.height ?? null,
-    status: ad.status ?? "approved",
-  }));
+    const inserted = await db
+      .insert(generatedAds)
+      .values(values)
+      .returning({ id: generatedAds.id });
 
-  const { data, error } = await supabase
-    .from("generated_ads")
-    .insert(rows)
-    .select("id");
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, ids: data.map((d) => d.id) };
+    return { success: true, ids: inserted.map((r) => r.id) };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
 }
 
 // ─── Delete Generated Ad ───────────────────────────────────────────────────
@@ -198,22 +233,21 @@ export async function deleteGeneratedAd(
   workspaceId: string,
   adId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
   // Get the ad first for storage cleanup
   const ad = await getGeneratedAd(workspaceId, adId);
 
-  const { error } = await supabase
-    .from("generated_ads")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("id", adId);
-
-  if (error) return { success: false, error: error.message };
+  try {
+    await db
+      .delete(generatedAds)
+      .where(and(eq(generatedAds.workspaceId, workspaceId), eq(generatedAds.id, adId)));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
 
   // Clean up storage
   if (ad?.storagePath) {
-    await supabase.storage.from(STORAGE_BUCKET).remove([ad.storagePath]);
+    await deleteBrandAsset(ad.storagePath).catch(() => {});
   }
 
   return { success: true };
@@ -226,22 +260,12 @@ export async function uploadAdImage(
   buffer: Buffer,
   fileName: string
 ): Promise<{ url: string; path: string } | { error: string }> {
-  await ensureStorageBucket();
-  const supabase = createAdminClient();
   const storagePath = `${workspaceId}/ads/${Date.now()}-${fileName}`;
 
-  const { error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, buffer, {
-      contentType: "image/png",
-      upsert: false,
-    });
-
-  if (error) return { error: error.message };
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
-
-  return { url: publicUrl, path: storagePath };
+  try {
+    const url = await uploadBrandAsset(storagePath, buffer, "image/png");
+    return { url, path: storagePath };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Upload failed" };
+  }
 }

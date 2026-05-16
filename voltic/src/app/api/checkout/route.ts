@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { auth } from "@clerk/nextjs/server";
 import { getStripe } from "@/lib/stripe/client";
 import { CREDIT_PACKAGES } from "@/types/credits";
 import { apiLimiter } from "@/lib/utils/rate-limit";
+import { db } from "@/lib/db";
+import { workspaceMembers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 const checkoutSchema = z.object({
   packageId: z.enum(["starter", "pro", "enterprise"]),
@@ -19,28 +21,25 @@ const checkoutSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   // 1. Auth check
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   // Rate limit
-  const rl = await apiLimiter.check(user.id, 10);
+  const rl = await apiLimiter.check(userId, 10);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   // 2. Get workspace
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const member = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
   if (!member) {
     return NextResponse.json({ error: "No workspace" }, { status: 403 });
@@ -81,8 +80,8 @@ export async function POST(request: NextRequest) {
       },
     ],
     metadata: {
-      workspace_id: member.workspace_id,
-      user_id: user.id,
+      workspace_id: member.workspaceId,
+      user_id: userId,
       package_id: pkg.id,
       credits: String(pkg.credits),
     },

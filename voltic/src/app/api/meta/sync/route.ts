@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/lib/db";
+import {
+  workspaceMembers,
+  workspaces,
+  adAccounts,
+  campaigns,
+  campaignMetrics,
+} from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { apiLimiter } from "@/lib/utils/rate-limit";
 import { decryptToken } from "@/lib/utils/token-crypto";
@@ -16,60 +24,55 @@ const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
  */
 export async function POST() {
   // 1. Authenticate
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-
   // 2. Get workspace
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const [member] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
 
   if (!member) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
   }
 
   // Rate limit: 3 syncs per minute per workspace (each sync fans out to many Meta API calls)
-  const rl = await apiLimiter.check(member.workspace_id, 3);
+  const rl = await apiLimiter.check(member.workspaceId, 3);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many sync requests — please wait before syncing again" }, { status: 429 });
   }
 
-  const workspaceId = member.workspace_id;
+  const workspaceId = member.workspaceId;
 
   // 3. Get Meta access token
-  const { data: workspace } = await admin
-    .from("workspaces")
-    .select("meta_access_token")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ metaAccessToken: workspaces.metaAccessToken })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
-  if (!workspace?.meta_access_token) {
+  if (!workspace?.metaAccessToken) {
     return NextResponse.json({ error: "Meta not connected" }, { status: 400 });
   }
 
   // Decrypt token (handles both encrypted and legacy plaintext — M-27)
-  const accessToken = decryptToken(workspace.meta_access_token);
+  const accessToken = decryptToken(workspace.metaAccessToken);
   if (!accessToken) {
     return NextResponse.json({ error: "Meta token could not be read — please reconnect" }, { status: 500 });
   }
 
   // 4. Get all ad accounts for this workspace
-  const { data: adAccounts } = await admin
-    .from("ad_accounts")
-    .select("id, meta_account_id")
-    .eq("workspace_id", workspaceId);
+  const adAccountRows = await db
+    .select({ id: adAccounts.id, metaAccountId: adAccounts.metaAccountId })
+    .from(adAccounts)
+    .where(eq(adAccounts.workspaceId, workspaceId));
 
-  if (!adAccounts || adAccounts.length === 0) {
+  if (adAccountRows.length === 0) {
     return NextResponse.json(
       { error: "No ad accounts found. Try reconnecting Meta." },
       { status: 400 }
@@ -80,41 +83,40 @@ export async function POST() {
   let totalCampaigns = 0;
   const errors: string[] = [];
 
-  for (const account of adAccounts) {
+  for (const account of adAccountRows) {
     try {
       const count = await syncCampaignsForAccount(
-        admin,
         workspaceId,
         account.id,
-        account.meta_account_id,
+        account.metaAccountId,
         accessToken
       );
       totalCampaigns += count;
 
-      trackServer("meta_campaigns_synced", user.id, {
+      trackServer("meta_campaigns_synced", userId, {
         workspace_id: workspaceId,
         ad_account_id: account.id,
         campaign_count: count,
       });
 
       // Update last_synced_at
-      await admin
-        .from("ad_accounts")
-        .update({ last_synced_at: new Date().toISOString() })
-        .eq("id", account.id);
+      await db
+        .update(adAccounts)
+        .set({ lastSyncedAt: new Date() })
+        .where(eq(adAccounts.id, account.id));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(
-        `[meta-sync] Campaign sync failed for ${account.meta_account_id}:`,
+        `[meta-sync] Campaign sync failed for ${account.metaAccountId}:`,
         msg
       );
-      errors.push(`${account.meta_account_id}: ${msg}`);
+      errors.push(`${account.metaAccountId}: ${msg}`);
     }
   }
 
   return NextResponse.json({
     success: true,
-    synced_accounts: adAccounts.length,
+    synced_accounts: adAccountRows.length,
     synced_campaigns: totalCampaigns,
     errors: errors.length > 0 ? errors : undefined,
   });
@@ -123,7 +125,6 @@ export async function POST() {
 // ─── Campaign Sync ──────────────────────────────────────────────────────────
 
 async function syncCampaignsForAccount(
-  admin: ReturnType<typeof createAdminClient>,
   workspaceId: string,
   adAccountDbId: string,
   metaAccountId: string,
@@ -141,7 +142,7 @@ async function syncCampaignsForAccount(
 
   if (campaignsData.error) throw new Error(campaignsData.error.message);
 
-  const campaigns: Array<{
+  const metaCampaigns: Array<{
     id: string;
     name: string;
     status: string;
@@ -150,45 +151,48 @@ async function syncCampaignsForAccount(
     lifetime_budget?: string;
   }> = campaignsData.data || [];
 
-  for (const campaign of campaigns) {
+  for (const campaign of metaCampaigns) {
     // Check if campaign already exists
-    const { data: existingCampaign } = await admin
-      .from("campaigns")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("meta_campaign_id", campaign.id)
-      .single();
+    const [existingCampaign] = await db
+      .select({ id: campaigns.id })
+      .from(campaigns)
+      .where(
+        and(
+          eq(campaigns.workspaceId, workspaceId),
+          eq(campaigns.metaCampaignId, campaign.id)
+        )
+      )
+      .limit(1);
 
     let campaignDbId: string;
 
     if (existingCampaign) {
       campaignDbId = existingCampaign.id;
-      await admin
-        .from("campaigns")
-        .update({
+      await db
+        .update(campaigns)
+        .set({
           name: campaign.name,
           status: campaign.status?.toLowerCase() || "unknown",
           objective: campaign.objective || null,
-          daily_budget: parseBudgetCents(campaign.daily_budget),
-          lifetime_budget: parseBudgetCents(campaign.lifetime_budget),
-          updated_at: new Date().toISOString(),
+          dailyBudget: parseBudgetCents(campaign.daily_budget),
+          lifetimeBudget: parseBudgetCents(campaign.lifetime_budget),
+          updatedAt: new Date(),
         })
-        .eq("id", existingCampaign.id);
+        .where(eq(campaigns.id, existingCampaign.id));
     } else {
-      const { data: inserted } = await admin
-        .from("campaigns")
-        .insert({
-          workspace_id: workspaceId,
-          ad_account_id: adAccountDbId,
-          meta_campaign_id: campaign.id,
+      const [inserted] = await db
+        .insert(campaigns)
+        .values({
+          workspaceId,
+          adAccountId: adAccountDbId,
+          metaCampaignId: campaign.id,
           name: campaign.name,
           status: campaign.status?.toLowerCase() || "unknown",
           objective: campaign.objective || null,
-          daily_budget: parseBudgetCents(campaign.daily_budget),
-          lifetime_budget: parseBudgetCents(campaign.lifetime_budget),
+          dailyBudget: parseBudgetCents(campaign.daily_budget),
+          lifetimeBudget: parseBudgetCents(campaign.lifetime_budget),
         })
-        .select("id")
-        .single();
+        .returning({ id: campaigns.id });
 
       if (!inserted) continue;
       campaignDbId = inserted.id;
@@ -196,7 +200,7 @@ async function syncCampaignsForAccount(
 
     // Fetch insights for last 7 days
     try {
-      await syncCampaignMetrics(admin, campaignDbId, campaign.id, accessToken);
+      await syncCampaignMetrics(campaignDbId, campaign.id, accessToken);
     } catch (err) {
       console.error(
         `[meta-sync] Metrics sync failed for campaign ${campaign.id}:`,
@@ -205,13 +209,12 @@ async function syncCampaignsForAccount(
     }
   }
 
-  return campaigns.length;
+  return metaCampaigns.length;
 }
 
 // ─── Metrics Sync ───────────────────────────────────────────────────────────
 
 async function syncCampaignMetrics(
-  admin: ReturnType<typeof createAdminClient>,
   campaignDbId: string,
   metaCampaignId: string,
   accessToken: string
@@ -243,15 +246,7 @@ async function syncCampaignMetrics(
       "landing_page_view"
     );
 
-    // Upsert metric for this campaign + date
-    const { data: existing } = await admin
-      .from("campaign_metrics")
-      .select("id")
-      .eq("campaign_id", campaignDbId)
-      .eq("date", day.date_start)
-      .single();
-
-    const metricData = {
+    const metricValues = {
       spend: spend.toFixed(2),
       revenue: revenue.toFixed(2),
       roas: roas.toFixed(4),
@@ -259,19 +254,31 @@ async function syncCampaignMetrics(
       clicks: parseInt(day.clicks || "0", 10),
       ctr: parseFloat(day.ctr || "0").toFixed(4),
       purchases,
-      landing_page_views: landingPageViews,
+      landingPageViews,
     };
 
+    // Upsert metric for this campaign + date
+    const [existing] = await db
+      .select({ id: campaignMetrics.id })
+      .from(campaignMetrics)
+      .where(
+        and(
+          eq(campaignMetrics.campaignId, campaignDbId),
+          eq(campaignMetrics.date, day.date_start)
+        )
+      )
+      .limit(1);
+
     if (existing) {
-      await admin
-        .from("campaign_metrics")
-        .update(metricData)
-        .eq("id", existing.id);
+      await db
+        .update(campaignMetrics)
+        .set(metricValues)
+        .where(eq(campaignMetrics.id, existing.id));
     } else {
-      await admin.from("campaign_metrics").insert({
-        campaign_id: campaignDbId,
+      await db.insert(campaignMetrics).values({
+        campaignId: campaignDbId,
         date: day.date_start,
-        ...metricData,
+        ...metricValues,
       });
     }
   }

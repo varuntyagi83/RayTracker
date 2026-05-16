@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { validateExtensionToken } from "@/lib/extension/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { boards } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { authLimiter } from "@/lib/utils/rate-limit";
 
 export async function GET(req: NextRequest) {
@@ -32,15 +34,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const supabase = createAdminClient();
-  const { data: boards } = await supabase
-    .from("boards")
-    .select("id, name")
-    .eq("workspace_id", auth.workspaceId)
-    .order("name")
+  const rows = await db
+    .select({ id: boards.id, name: boards.name })
+    .from(boards)
+    .where(eq(boards.workspaceId, auth.workspaceId))
+    .orderBy(boards.name)
     .limit(50);
 
   return NextResponse.json({
-    boards: (boards ?? []).map((b) => ({ id: b.id, name: b.name })),
+    boards: rows.map((b) => ({ id: b.id, name: b.name })),
   });
 }

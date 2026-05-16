@@ -1,4 +1,12 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import {
+  studioConversations,
+  studioMessages,
+  brandGuidelinesTable,
+  assets,
+  competitorReports,
+} from "@/db/schema";
+import { eq, and, desc, asc, ilike, or } from "drizzle-orm";
 import type {
   StudioConversation,
   StudioMessage,
@@ -6,66 +14,72 @@ import type {
   Mention,
   LLMProvider,
 } from "@/types/creative-studio";
-import type { BrandGuidelineEntity } from "@/types/brand-guidelines";
 
 // ─── Conversations ──────────────────────────────────────────────────────────
 
 export async function listConversations(
   workspaceId: string
 ): Promise<StudioConversation[]> {
-  const supabase = createAdminClient();
+  // Fetch conversations ordered by updated_at desc
+  const conversations = await db
+    .select()
+    .from(studioConversations)
+    .where(eq(studioConversations.workspaceId, workspaceId))
+    .orderBy(desc(studioConversations.updatedAt));
 
-  // Single query: join the latest message per conversation using Supabase's
-  // relational select. studio_messages rows are ordered by created_at DESC
-  // and we take limit(1) via the foreign-key hint. This avoids the N+1 loop
-  // that previously fired one query per conversation.
-  const { data, error } = await supabase
-    .from("studio_conversations")
-    .select("*, studio_messages(content, created_at)")
-    .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false })
-    .order("created_at", { ascending: false, referencedTable: "studio_messages" });
+  if (conversations.length === 0) return [];
 
-  if (error || !data) return [];
+  // For each conversation, fetch the latest message (N queries but avoids complex lateral join)
+  const results = await Promise.all(
+    conversations.map(async (row) => {
+      const [lastMsg] = await db
+        .select({ content: studioMessages.content, createdAt: studioMessages.createdAt })
+        .from(studioMessages)
+        .where(eq(studioMessages.conversationId, row.id))
+        .orderBy(desc(studioMessages.createdAt))
+        .limit(1);
 
-  return data.map((row) => {
-    const messages = (row.studio_messages ?? []) as Array<{ content: string; created_at: string }>;
-    const lastMsg = messages[0];
-    return {
-      id: row.id,
-      title: row.title,
-      llmProvider: row.llm_provider as LLMProvider,
-      llmModel: row.llm_model,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      lastMessage: lastMsg?.content
-        ? (lastMsg.content as string).slice(0, 100)
-        : undefined,
-    };
-  });
+      return {
+        id: row.id,
+        title: row.title,
+        llmProvider: row.llmProvider as LLMProvider,
+        llmModel: row.llmModel,
+        createdAt: row.createdAt.toISOString(),
+        updatedAt: row.updatedAt.toISOString(),
+        lastMessage: lastMsg?.content
+          ? lastMsg.content.slice(0, 100)
+          : undefined,
+      };
+    })
+  );
+
+  return results;
 }
 
 export async function getConversation(
   workspaceId: string,
   id: string
 ): Promise<StudioConversation | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("studio_conversations")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("id", id)
-    .single();
+  const [row] = await db
+    .select()
+    .from(studioConversations)
+    .where(
+      and(
+        eq(studioConversations.workspaceId, workspaceId),
+        eq(studioConversations.id, id)
+      )
+    )
+    .limit(1);
 
-  if (error || !data) return null;
+  if (!row) return null;
 
   return {
-    id: data.id,
-    title: data.title,
-    llmProvider: data.llm_provider as LLMProvider,
-    llmModel: data.llm_model,
-    createdAt: data.created_at,
-    updatedAt: data.updated_at,
+    id: row.id,
+    title: row.title,
+    llmProvider: row.llmProvider as LLMProvider,
+    llmModel: row.llmModel,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -73,20 +87,21 @@ export async function createConversation(
   workspaceId: string,
   params: { title?: string; llmProvider: LLMProvider; llmModel: string }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("studio_conversations")
-    .insert({
-      workspace_id: workspaceId,
-      title: params.title ?? "New Conversation",
-      llm_provider: params.llmProvider,
-      llm_model: params.llmModel,
-    })
-    .select("id")
-    .single();
+  try {
+    const [inserted] = await db
+      .insert(studioConversations)
+      .values({
+        workspaceId,
+        title: params.title ?? "New Conversation",
+        llmProvider: params.llmProvider,
+        llmModel: params.llmModel,
+      })
+      .returning({ id: studioConversations.id });
 
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function updateConversation(
@@ -94,38 +109,46 @@ export async function updateConversation(
   id: string,
   updates: Partial<{ title: string; llmProvider: LLMProvider; llmModel: string }>
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-  const updateData: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+  const updateData: Partial<typeof studioConversations.$inferInsert> & { updatedAt: Date } = {
+    updatedAt: new Date(),
   };
   if (updates.title !== undefined) updateData.title = updates.title;
-  if (updates.llmProvider !== undefined)
-    updateData.llm_provider = updates.llmProvider;
-  if (updates.llmModel !== undefined) updateData.llm_model = updates.llmModel;
+  if (updates.llmProvider !== undefined) updateData.llmProvider = updates.llmProvider;
+  if (updates.llmModel !== undefined) updateData.llmModel = updates.llmModel;
 
-  const { error } = await supabase
-    .from("studio_conversations")
-    .update(updateData)
-    .eq("workspace_id", workspaceId)
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+  try {
+    await db
+      .update(studioConversations)
+      .set(updateData)
+      .where(
+        and(
+          eq(studioConversations.workspaceId, workspaceId),
+          eq(studioConversations.id, id)
+        )
+      );
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 export async function deleteConversation(
   workspaceId: string,
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-  const { error } = await supabase
-    .from("studio_conversations")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+  try {
+    await db
+      .delete(studioConversations)
+      .where(
+        and(
+          eq(studioConversations.workspaceId, workspaceId),
+          eq(studioConversations.id, id)
+        )
+      );
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Messages ───────────────────────────────────────────────────────────────
@@ -134,26 +157,27 @@ export async function getMessages(
   workspaceId: string,
   conversationId: string
 ): Promise<StudioMessage[]> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("studio_messages")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+  const rows = await db
+    .select()
+    .from(studioMessages)
+    .where(
+      and(
+        eq(studioMessages.workspaceId, workspaceId),
+        eq(studioMessages.conversationId, conversationId)
+      )
+    )
+    .orderBy(asc(studioMessages.createdAt));
 
-  if (error || !data) return [];
-
-  return data.map((row) => ({
+  return rows.map((row) => ({
     id: row.id,
-    conversationId: row.conversation_id,
+    conversationId: row.conversationId,
     role: row.role as "user" | "assistant",
     content: row.content,
     mentions: (row.mentions as Mention[]) ?? [],
-    resolvedContext: row.resolved_context as Record<string, unknown> | null,
+    resolvedContext: row.resolvedContext as Record<string, unknown> | null,
     attachments: (row.attachments as StudioMessage["attachments"]) ?? [],
-    creditsUsed: row.credits_used,
-    createdAt: row.created_at,
+    creditsUsed: row.creditsUsed,
+    createdAt: row.createdAt.toISOString(),
   }));
 }
 
@@ -169,31 +193,31 @@ export async function createMessage(
     creditsUsed?: number;
   }
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("studio_messages")
-    .insert({
-      workspace_id: workspaceId,
-      conversation_id: message.conversationId,
-      role: message.role,
-      content: message.content,
-      mentions: message.mentions ?? [],
-      resolved_context: message.resolvedContext ?? null,
-      attachments: message.attachments ?? [],
-      credits_used: message.creditsUsed ?? 0,
-    })
-    .select("id")
-    .single();
+  try {
+    const [inserted] = await db
+      .insert(studioMessages)
+      .values({
+        workspaceId,
+        conversationId: message.conversationId,
+        role: message.role,
+        content: message.content,
+        mentions: message.mentions ?? [],
+        resolvedContext: message.resolvedContext ?? null,
+        attachments: message.attachments ?? [],
+        creditsUsed: message.creditsUsed ?? 0,
+      })
+      .returning({ id: studioMessages.id });
 
-  if (error) return { success: false, error: error.message };
+    // Update conversation updated_at
+    await db
+      .update(studioConversations)
+      .set({ updatedAt: new Date() })
+      .where(eq(studioConversations.id, message.conversationId));
 
-  // Update conversation updated_at
-  await supabase
-    .from("studio_conversations")
-    .update({ updated_at: new Date().toISOString() })
-    .eq("id", message.conversationId);
-
-  return { success: true, id: data.id };
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Mentionable Items (for @mention autocomplete) ──────────────────────────
@@ -202,28 +226,47 @@ export async function getMentionableItems(
   workspaceId: string,
   query: string
 ): Promise<MentionableItem[]> {
-  const supabase = createAdminClient();
   const items: MentionableItem[] = [];
   const searchQuery = `%${query}%`;
 
   // Search brand guidelines by name and slug in parallel
-  const [{ data: byName }, { data: bySlug }] = await Promise.all([
-    supabase
-      .from("brand_guidelines")
-      .select("id, name, slug, brand_name, logo_url")
-      .eq("workspace_id", workspaceId)
-      .ilike("name", searchQuery)
+  const [byName, bySlug] = await Promise.all([
+    db
+      .select({
+        id: brandGuidelinesTable.id,
+        name: brandGuidelinesTable.name,
+        slug: brandGuidelinesTable.slug,
+        brandName: brandGuidelinesTable.brandName,
+        logoUrl: brandGuidelinesTable.logoUrl,
+      })
+      .from(brandGuidelinesTable)
+      .where(
+        and(
+          eq(brandGuidelinesTable.workspaceId, workspaceId),
+          ilike(brandGuidelinesTable.name, searchQuery)
+        )
+      )
       .limit(5),
-    supabase
-      .from("brand_guidelines")
-      .select("id, name, slug, brand_name, logo_url")
-      .eq("workspace_id", workspaceId)
-      .ilike("slug", searchQuery)
+    db
+      .select({
+        id: brandGuidelinesTable.id,
+        name: brandGuidelinesTable.name,
+        slug: brandGuidelinesTable.slug,
+        brandName: brandGuidelinesTable.brandName,
+        logoUrl: brandGuidelinesTable.logoUrl,
+      })
+      .from(brandGuidelinesTable)
+      .where(
+        and(
+          eq(brandGuidelinesTable.workspaceId, workspaceId),
+          ilike(brandGuidelinesTable.slug, searchQuery)
+        )
+      )
       .limit(5),
   ]);
 
   const seenIds = new Set<string>();
-  for (const g of [...(byName ?? []), ...(bySlug ?? [])]) {
+  for (const g of [...byName, ...bySlug]) {
     if (seenIds.has(g.id)) continue;
     seenIds.add(g.id);
     items.push({
@@ -231,60 +274,74 @@ export async function getMentionableItems(
       type: "brand_guidelines",
       name: g.name,
       slug: g.slug,
-      description: g.brand_name ?? undefined,
-      imageUrl: g.logo_url ?? undefined,
+      description: g.brandName ?? undefined,
+      imageUrl: g.logoUrl ?? undefined,
     });
   }
 
   // Search assets
-  const { data: assets } = await supabase
-    .from("assets")
-    .select("id, name, description, image_url")
-    .eq("workspace_id", workspaceId)
-    .ilike("name", searchQuery)
+  const assetRows = await db
+    .select({
+      id: assets.id,
+      name: assets.name,
+      description: assets.description,
+      imageUrl: assets.imageUrl,
+    })
+    .from(assets)
+    .where(
+      and(
+        eq(assets.workspaceId, workspaceId),
+        ilike(assets.name, searchQuery)
+      )
+    )
     .limit(5);
 
-  if (assets) {
-    for (const a of assets) {
-      const slug = a.name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "");
-      items.push({
-        id: a.id,
-        type: "asset",
-        name: a.name,
-        slug,
-        description: a.description ?? undefined,
-        imageUrl: a.image_url ?? undefined,
-      });
-    }
+  for (const a of assetRows) {
+    const slug = a.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+    items.push({
+      id: a.id,
+      type: "asset",
+      name: a.name,
+      slug,
+      description: a.description ?? undefined,
+      imageUrl: a.imageUrl ?? undefined,
+    });
   }
 
   // Search competitor reports
-  const { data: reports } = await supabase
-    .from("competitor_reports")
-    .select("id, title, ad_count, competitor_brand_names")
-    .eq("workspace_id", workspaceId)
-    .ilike("title", searchQuery)
-    .order("created_at", { ascending: false })
+  const reportRows = await db
+    .select({
+      id: competitorReports.id,
+      title: competitorReports.title,
+      adCount: competitorReports.adCount,
+      competitorBrandNames: competitorReports.competitorBrandNames,
+    })
+    .from(competitorReports)
+    .where(
+      and(
+        eq(competitorReports.workspaceId, workspaceId),
+        ilike(competitorReports.title, searchQuery)
+      )
+    )
+    .orderBy(desc(competitorReports.createdAt))
     .limit(5);
 
-  if (reports) {
-    for (const r of reports) {
-      const brandNames = r.competitor_brand_names as string[];
-      const slug = (r.title as string)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "_")
-        .replace(/^_|_$/g, "");
-      items.push({
-        id: r.id,
-        type: "competitor_report",
-        name: r.title,
-        slug,
-        description: `${r.ad_count} ads · ${brandNames.join(", ")}`,
-      });
-    }
+  for (const r of reportRows) {
+    const brandNames = r.competitorBrandNames as string[];
+    const slug = r.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_|_$/g, "");
+    items.push({
+      id: r.id,
+      type: "competitor_report",
+      name: r.title,
+      slug,
+      description: `${r.adCount} ads · ${brandNames.join(", ")}`,
+    });
   }
 
   return items;
@@ -296,68 +353,78 @@ export async function resolveMentions(
   workspaceId: string,
   mentions: Mention[]
 ): Promise<Record<string, unknown>> {
-  const supabase = createAdminClient();
-
   // Resolve all mentions in parallel instead of sequentially
   const entries = await Promise.all(
     mentions.map(async (mention): Promise<[string, unknown] | null> => {
       if (mention.type === "brand_guidelines") {
-        const { data } = await supabase
-          .from("brand_guidelines")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .eq("id", mention.id)
-          .single();
+        const [row] = await db
+          .select()
+          .from(brandGuidelinesTable)
+          .where(
+            and(
+              eq(brandGuidelinesTable.workspaceId, workspaceId),
+              eq(brandGuidelinesTable.id, mention.id)
+            )
+          )
+          .limit(1);
 
-        if (!data) return null;
+        if (!row) return null;
         return [
           `@${mention.slug}`,
           {
             type: "brand_guidelines",
-            brandName: data.brand_name,
-            brandVoice: data.brand_voice,
-            colorPalette: data.color_palette,
-            typography: data.typography,
-            targetAudience: data.target_audience,
-            dosAndDonts: data.dos_and_donts,
+            brandName: row.brandName,
+            brandVoice: row.brandVoice,
+            colorPalette: row.colorPalette,
+            typography: row.typography,
+            targetAudience: row.targetAudience,
+            dosAndDonts: row.dosAndDonts,
           },
         ];
       } else if (mention.type === "asset") {
-        const { data } = await supabase
-          .from("assets")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .eq("id", mention.id)
-          .single();
+        const [row] = await db
+          .select()
+          .from(assets)
+          .where(
+            and(
+              eq(assets.workspaceId, workspaceId),
+              eq(assets.id, mention.id)
+            )
+          )
+          .limit(1);
 
-        if (!data) return null;
+        if (!row) return null;
         return [
           `@${mention.slug}`,
           {
             type: "asset",
-            name: data.name,
-            description: data.description,
-            imageUrl: data.image_url,
+            name: row.name,
+            description: row.description,
+            imageUrl: row.imageUrl,
           },
         ];
       } else if (mention.type === "competitor_report") {
-        const { data } = await supabase
-          .from("competitor_reports")
-          .select("*")
-          .eq("workspace_id", workspaceId)
-          .eq("id", mention.id)
-          .single();
+        const [row] = await db
+          .select()
+          .from(competitorReports)
+          .where(
+            and(
+              eq(competitorReports.workspaceId, workspaceId),
+              eq(competitorReports.id, mention.id)
+            )
+          )
+          .limit(1);
 
-        if (!data) return null;
+        if (!row) return null;
         return [
           `@${mention.slug}`,
           {
             type: "competitor_report",
-            title: data.title,
-            brandNames: data.competitor_brand_names,
-            adCount: data.ad_count,
-            perAdAnalyses: data.per_ad_analyses,
-            crossBrandSummary: data.cross_brand_summary,
+            title: row.title,
+            brandNames: row.competitorBrandNames,
+            adCount: row.adCount,
+            perAdAnalyses: row.perAdAnalyses,
+            crossBrandSummary: row.crossBrandSummary,
           },
         ];
       }

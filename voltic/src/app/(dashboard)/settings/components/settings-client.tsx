@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BookOpen, ArrowRight, Check, ChevronsUpDown, Loader2, Globe, Chrome, Copy, Eye, EyeOff, AlertCircle, Unlink, RefreshCw } from "lucide-react";
@@ -24,7 +25,6 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { track } from "@/lib/analytics/events";
-import { createClient } from "@/lib/supabase/client";
 import { updateWorkspaceTimezoneAction, disconnectMetaAction } from "../actions";
 import McpKeysCard from "./mcp-keys-card";
 
@@ -82,6 +82,7 @@ function groupByRegion(options: TimezoneOption[]): Record<string, TimezoneOption
 
 export default function SettingsClient() {
   const { workspace } = useWorkspace();
+  const { getToken } = useAuth();
   const router = useRouter();
 
   const [selectedTimezone, setSelectedTimezone] = useState(workspace.timezone);
@@ -110,13 +111,12 @@ export default function SettingsClient() {
   const fetchApiToken = useCallback(async () => {
     setTokenLoading(true);
     try {
-      const supabase = createClient();
-      const { data } = await supabase.auth.getSession();
-      setApiToken(data.session?.access_token ?? null);
+      const token = await getToken();
+      setApiToken(token ?? null);
     } finally {
       setTokenLoading(false);
     }
-  }, []);
+  }, [getToken]);
 
   const copyToken = useCallback(async () => {
     if (!apiToken) return;

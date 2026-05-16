@@ -1,8 +1,6 @@
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySupabaseClient = any;
+import { db } from "@/lib/db";
+import { downloadedMedia } from "@/db/schema";
 
 // ─── R2 Client (singleton) ────────────────────────────────────────────────────
 
@@ -219,28 +217,28 @@ export async function downloadAndStoreMedia(params: {
 
   const storage_url = `${publicUrlBase}/${storagePath}`;
 
-  const admin = createAdminClient() as AnySupabaseClient;
-
-  const { error: insertError } = await admin.from("downloaded_media").insert({
-    workspace_id: workspaceId,
-    brand_name: brandName,
-    original_url: mediaUrl,
-    storage_url,
-    thumbnail_url: null,
-    media_type: mediaType,
-    file_size: buffer.byteLength,
-    filename,
-    metadata: metadata ?? {},
-  });
-
-  if (insertError) {
+  try {
+    await db.insert(downloadedMedia).values({
+      workspaceId,
+      brandName,
+      originalUrl: mediaUrl,
+      storageUrl: storage_url,
+      thumbnailUrl: null,
+      mediaType,
+      fileSize: buffer.byteLength,
+      filename,
+      metadata: metadata ?? {},
+    });
+  } catch (insertErr) {
     // Roll back the R2 upload to avoid orphaned files
     try {
       await r2.send(new DeleteObjectCommand({ Bucket: bucketName, Key: storagePath }));
     } catch (deleteErr) {
       console.error("[download] Failed to delete orphaned R2 object:", deleteErr);
     }
-    throw new Error(`DB insert failed: ${(insertError as { message: string }).message}`);
+    throw new Error(
+      `DB insert failed: ${insertErr instanceof Error ? insertErr.message : String(insertErr)}`
+    );
   }
 
   return {

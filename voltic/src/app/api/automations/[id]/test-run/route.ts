@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { auth } from "@clerk/nextjs/server";
 import { executeAutomation } from "@/lib/automations/executor";
 import { trackServer } from "@/lib/analytics/posthog-server";
+import { db } from "@/lib/db";
+import { workspaceMembers, automations } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 
 /**
  * Test Run Endpoint
@@ -19,34 +21,37 @@ export async function POST(
   const { id: automationId } = await params;
 
   // Verify auth
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   // Verify automation exists and belongs to user's workspace
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const member = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
   if (!member) {
     return NextResponse.json({ error: "No workspace" }, { status: 403 });
   }
 
-  const { data: automation } = await admin
-    .from("automations")
-    .select("workspace_id")
-    .eq("id", automationId)
-    .single();
+  const automation = await db
+    .select({ workspaceId: automations.workspaceId })
+    .from(automations)
+    .where(
+      and(
+        eq(automations.id, automationId),
+        eq(automations.workspaceId, member.workspaceId)
+      )
+    )
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
-  if (!automation || automation.workspace_id !== member.workspace_id) {
+  if (!automation) {
     return NextResponse.json(
       { error: "Automation not found" },
       { status: 404 }
@@ -56,7 +61,7 @@ export async function POST(
   // Execute as test run
   const result = await executeAutomation(automationId, true);
 
-  trackServer("automation_test_run", user.id, {
+  trackServer("automation_test_run", userId, {
     automation_id: automationId,
     success: result.success,
   });

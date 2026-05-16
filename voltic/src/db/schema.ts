@@ -44,7 +44,7 @@ export const workspaceMembers = pgTable(
     workspaceId: uuid("workspace_id")
       .notNull()
       .references(() => workspaces.id, { onDelete: "cascade" }),
-    userId: uuid("user_id").notNull(),
+    userId: text("user_id").notNull(),
     role: text("role").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -779,6 +779,70 @@ export const downloadedMedia = pgTable(
   ]
 );
 
+// Phase 24 tables — Video Analysis
+
+export const videoAnalyses = pgTable(
+  "video_analyses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    downloadedMediaId: uuid("downloaded_media_id").references(
+      () => downloadedMedia.id,
+      { onDelete: "set null" }
+    ),
+    brandName: text("brand_name").notNull(),
+    videoUrl: text("video_url").notNull(),
+    provider: text("provider").notNull(), // 'gemini' | 'gpt4o'
+    analysisDepth: text("analysis_depth").notNull(), // 'quick' | 'detailed'
+    hook: jsonb("hook"),
+    narrative: jsonb("narrative"),
+    cta: jsonb("cta"),
+    brandElements: jsonb("brand_elements"),
+    textOverlays: jsonb("text_overlays"),
+    competitiveInsight: text("competitive_insight"),
+    creditsUsed: integer("credits_used").notNull().default(0),
+    processingStatus: text("processing_status").notNull().default("pending"), // 'pending' | 'analyzing' | 'completed' | 'failed'
+    errorMessage: text("error_message"),
+    durationMs: integer("duration_ms"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_video_analyses_workspace_id").on(table.workspaceId),
+    index("idx_video_analyses_brand_name").on(table.workspaceId, table.brandName),
+    index("idx_video_analyses_status").on(table.workspaceId, table.processingStatus),
+    index("idx_video_analyses_created_at").on(table.createdAt),
+  ]
+);
+
+export const hooksMatrixRuns = pgTable(
+  "hooks_matrix_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id, { onDelete: "cascade" }),
+    competitorBrands: text("competitor_brands").array().notNull(),
+    videoAnalysisIds: uuid("video_analysis_ids").array().notNull(),
+    yourBrandName: text("your_brand_name").notNull(),
+    brandGuidelinesId: uuid("brand_guidelines_id"),
+    hookCount: integer("hook_count").notNull().default(45),
+    strategies: text("strategies").array().notNull(),
+    result: jsonb("result"),
+    creditsUsed: integer("credits_used").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("idx_hooks_matrix_runs_workspace_id").on(table.workspaceId),
+    index("idx_hooks_matrix_runs_created_at").on(table.createdAt),
+  ]
+);
+
 // ─── Relations ───────────────────────────────────────────────────────────────
 
 export const workspacesRelations = relations(workspaces, ({ many }) => ({
@@ -806,6 +870,8 @@ export const workspacesRelations = relations(workspaces, ({ many }) => ({
   generatedAds: many(generatedAds),
   mcpApiKeys: many(mcpApiKeys),
   downloadedMedia: many(downloadedMedia),
+  videoAnalyses: many(videoAnalyses),
+  hooksMatrixRuns: many(hooksMatrixRuns),
 }));
 
 export const workspaceMembersRelations = relations(
@@ -1085,3 +1151,21 @@ export const adDecompositionsRelations = relations(
     }),
   })
 );
+
+export const videoAnalysesRelations = relations(videoAnalyses, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [videoAnalyses.workspaceId],
+    references: [workspaces.id],
+  }),
+  downloadedMedia: one(downloadedMedia, {
+    fields: [videoAnalyses.downloadedMediaId],
+    references: [downloadedMedia.id],
+  }),
+}));
+
+export const hooksMatrixRunsRelations = relations(hooksMatrixRuns, ({ one }) => ({
+  workspace: one(workspaces, {
+    fields: [hooksMatrixRuns.workspaceId],
+    references: [workspaces.id],
+  }),
+}));

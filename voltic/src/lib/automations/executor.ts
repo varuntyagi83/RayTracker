@@ -9,7 +9,15 @@
  * 5. Record the run in automation_runs
  */
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import {
+  automations,
+  workspaces,
+  campaigns,
+  campaignMetrics,
+  automationRuns,
+} from "@/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { sendSlackMessage } from "@/lib/slack/client";
 import { decryptToken } from "@/lib/utils/token-crypto";
 import type {
@@ -58,39 +66,42 @@ export async function executeAutomation(
   isTestRun = false
 ): Promise<ExecutionResult> {
   const startTime = Date.now();
-  const admin = createAdminClient();
 
   // 1. Load automation
-  const { data: automation, error: loadError } = await admin
-    .from("automations")
-    .select("*")
-    .eq("id", automationId)
-    .single();
+  const [automation] = await db
+    .select()
+    .from(automations)
+    .where(eq(automations.id, automationId))
+    .limit(1);
 
-  if (loadError || !automation) {
+  if (!automation) {
     return {
       success: false,
       itemsCount: 0,
-      error: `Automation not found: ${loadError?.message ?? "unknown"}`,
+      error: `Automation not found: ${automationId}`,
       durationMs: Date.now() - startTime,
     };
   }
 
-  const auto = automation as Automation;
+  const auto = automation as unknown as Automation;
 
   // 2. Load workspace for Slack token
-  const { data: workspace } = await admin
-    .from("workspaces")
-    .select("id, slack_access_token, slack_team_name")
-    .eq("id", auto.workspace_id)
-    .single();
+  const [workspace] = await db
+    .select({
+      id: workspaces.id,
+      slackAccessToken: workspaces.slackAccessToken,
+      slackTeamName: workspaces.slackTeamName,
+    })
+    .from(workspaces)
+    .where(eq(workspaces.id, auto.workspace_id))
+    .limit(1);
 
   // Decrypt Slack token (handles encrypted and legacy plaintext — M-27)
-  const slackToken = decryptToken(workspace?.slack_access_token ?? null);
+  const slackToken = decryptToken(workspace?.slackAccessToken ?? null);
   const channel = auto.delivery?.slackChannelId ?? "";
 
   if (!slackToken) {
-    return await recordRun(admin, automationId, {
+    return await recordRun(automationId, {
       success: false,
       itemsCount: 0,
       error: "Slack not connected — please connect Slack in Settings",
@@ -99,7 +110,7 @@ export async function executeAutomation(
   }
 
   if (!channel) {
-    return await recordRun(admin, automationId, {
+    return await recordRun(automationId, {
       success: false,
       itemsCount: 0,
       error: "No Slack channel configured",
@@ -124,7 +135,7 @@ export async function executeAutomation(
 
         // Don't send an empty report — skip silently and record as success
         if (itemsCount === 0 && !isTestRun) {
-          return await recordRun(admin, automationId, {
+          return await recordRun(automationId, {
             success: true,
             itemsCount: 0,
             error: undefined,
@@ -186,13 +197,13 @@ export async function executeAutomation(
     }
 
     // 4. Update last_run_at
-    await admin
-      .from("automations")
-      .update({ last_run_at: new Date().toISOString() })
-      .eq("id", automationId);
+    await db
+      .update(automations)
+      .set({ lastRunAt: new Date() })
+      .where(eq(automations.id, automationId));
 
     // 5. Record successful run
-    return await recordRun(admin, automationId, {
+    return await recordRun(automationId, {
       success: true,
       itemsCount,
       durationMs: Date.now() - startTime,
@@ -201,7 +212,7 @@ export async function executeAutomation(
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error(`[executor] Automation ${automationId} failed:`, msg);
 
-    return await recordRun(admin, automationId, {
+    return await recordRun(automationId, {
       success: false,
       itemsCount: 0,
       error: msg,
@@ -287,24 +298,36 @@ async function buildPerformanceMessage(
     }
     default: {
       // "campaigns" — use campaign metrics from DB
-      const admin = createAdminClient();
-      const { data: campaigns } = await admin
-        .from("campaigns")
-        .select("id, name")
-        .eq("workspace_id", workspaceId)
+      const campaignRows = await db
+        .select({ id: campaigns.id, name: campaigns.name })
+        .from(campaigns)
+        .where(eq(campaigns.workspaceId, workspaceId))
         .limit(20);
 
-      if (campaigns) {
-        const campaignIds = campaigns.map((c) => c.id);
-        const { data: metrics } = await admin
-          .from("campaign_metrics")
-          .select("campaign_id, spend, revenue, roas, impressions, purchases")
-          .in("campaign_id", campaignIds)
-          .eq("date", new Date().toISOString().split("T")[0]);
+      if (campaignRows.length > 0) {
+        const campaignIds = campaignRows.map((c) => c.id);
+        const today = new Date().toISOString().split("T")[0];
+
+        const metricsRows = await db
+          .select({
+            campaignId: campaignMetrics.campaignId,
+            spend: campaignMetrics.spend,
+            revenue: campaignMetrics.revenue,
+            roas: campaignMetrics.roas,
+            impressions: campaignMetrics.impressions,
+            purchases: campaignMetrics.purchases,
+          })
+          .from(campaignMetrics)
+          .where(
+            and(
+              inArray(campaignMetrics.campaignId, campaignIds),
+              eq(campaignMetrics.date, today)
+            )
+          );
 
         const metricsMap = new Map<string, Record<string, number>>();
-        for (const m of metrics ?? []) {
-          metricsMap.set(m.campaign_id, {
+        for (const m of metricsRows) {
+          metricsMap.set(m.campaignId, {
             spend: Number(m.spend),
             revenue: Number(m.revenue),
             roas: Number(m.roas),
@@ -313,7 +336,7 @@ async function buildPerformanceMessage(
           });
         }
 
-        rows = campaigns.map((c) => ({
+        rows = campaignRows.map((c) => ({
           name: c.name,
           metrics: (metricsMap.get(c.id) ?? {}) as Partial<Record<string, number>>,
         }));
@@ -368,23 +391,21 @@ async function buildPerformanceMessage(
 // ─── Run Recording ──────────────────────────────────────────────────────────
 
 async function recordRun(
-  admin: ReturnType<typeof createAdminClient>,
   automationId: string,
   result: Omit<ExecutionResult, "runId">
 ): Promise<ExecutionResult> {
-  const { data: run } = await admin
-    .from("automation_runs")
-    .insert({
-      automation_id: automationId,
+  const [run] = await db
+    .insert(automationRuns)
+    .values({
+      automationId,
       status: result.success ? "completed" : "failed",
-      started_at: new Date(Date.now() - result.durationMs).toISOString(),
-      completed_at: new Date().toISOString(),
-      items_count: result.itemsCount,
-      error_message: result.error ?? null,
+      startedAt: new Date(Date.now() - result.durationMs),
+      completedAt: new Date(),
+      itemsCount: result.itemsCount,
+      errorMessage: result.error ?? null,
       metadata: { durationMs: result.durationMs },
     })
-    .select("id")
-    .single();
+    .returning({ id: automationRuns.id });
 
   return {
     ...result,

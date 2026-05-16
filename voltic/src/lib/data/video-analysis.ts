@@ -1,8 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { videoAnalyses, hooksMatrixRuns, downloadedMedia } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import type { VideoAnalysisResult } from "@/lib/ai/video-analysis";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySupabaseClient = any;
 
 export interface VideoAnalysisRecord {
   id: string;
@@ -49,6 +48,52 @@ export interface DownloadedVideoRecord {
   created_at: string;
 }
 
+// ─── Row mappers ─────────────────────────────────────────────────────────────
+
+type VideoAnalysisRow = typeof videoAnalyses.$inferSelect;
+type HooksMatrixRow = typeof hooksMatrixRuns.$inferSelect;
+
+function rowToVideoAnalysis(row: VideoAnalysisRow): VideoAnalysisRecord {
+  return {
+    id: row.id,
+    workspace_id: row.workspaceId,
+    downloaded_media_id: row.downloadedMediaId,
+    brand_name: row.brandName,
+    video_url: row.videoUrl,
+    provider: row.provider as 'gemini' | 'gpt4o',
+    analysis_depth: row.analysisDepth as 'quick' | 'detailed',
+    hook: (row.hook as VideoAnalysisResult['hook']) ?? null,
+    narrative: (row.narrative as VideoAnalysisResult['narrative']) ?? null,
+    cta: (row.cta as VideoAnalysisResult['cta']) ?? null,
+    brand_elements: (row.brandElements as VideoAnalysisResult['brand_elements']) ?? null,
+    text_overlays: (row.textOverlays as VideoAnalysisResult['text_overlays']) ?? null,
+    competitive_insight: row.competitiveInsight,
+    credits_used: row.creditsUsed,
+    processing_status: row.processingStatus as 'pending' | 'analyzing' | 'completed' | 'failed',
+    error_message: row.errorMessage,
+    duration_ms: row.durationMs,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+function rowToHooksMatrix(row: HooksMatrixRow): HooksMatrixRecord {
+  return {
+    id: row.id,
+    workspace_id: row.workspaceId,
+    competitor_brands: row.competitorBrands as string[],
+    video_analysis_ids: row.videoAnalysisIds as string[],
+    your_brand_name: row.yourBrandName,
+    brand_guidelines_id: row.brandGuidelinesId,
+    hook_count: row.hookCount,
+    strategies: row.strategies as string[],
+    result: row.result as import('@/lib/ai/hooks-generator').HooksMatrixResult | null,
+    credits_used: row.creditsUsed,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
+// ─── Functions ───────────────────────────────────────────────────────────────
+
 export async function createVideoAnalysis(
   workspaceId: string,
   params: {
@@ -59,24 +104,21 @@ export async function createVideoAnalysis(
     analysisDepth: 'quick' | 'detailed';
   }
 ): Promise<VideoAnalysisRecord> {
-  const supabase = createAdminClient() as AnySupabaseClient;
-
-  const { data, error } = await supabase
-    .from('video_analyses')
-    .insert({
-      workspace_id: workspaceId,
-      downloaded_media_id: params.downloadedMediaId ?? null,
-      brand_name: params.brandName,
-      video_url: params.videoUrl,
+  const [inserted] = await db
+    .insert(videoAnalyses)
+    .values({
+      workspaceId,
+      downloadedMediaId: params.downloadedMediaId ?? null,
+      brandName: params.brandName,
+      videoUrl: params.videoUrl,
       provider: params.provider,
-      analysis_depth: params.analysisDepth,
-      processing_status: 'analyzing',
+      analysisDepth: params.analysisDepth,
+      processingStatus: 'analyzing',
     })
-    .select()
-    .single();
+    .returning();
 
-  if (error) throw new Error(`Failed to create video analysis: ${error.message}`);
-  return data as VideoAnalysisRecord;
+  if (!inserted) throw new Error('Failed to create video analysis');
+  return rowToVideoAnalysis(inserted);
 }
 
 export async function updateVideoAnalysis(
@@ -90,118 +132,132 @@ export async function updateVideoAnalysis(
     errorMessage?: string;
   }
 ): Promise<void> {
-  const supabase = createAdminClient() as AnySupabaseClient;
-
-  const payload: Record<string, unknown> = {
-    processing_status: update.status,
+  const payload: Partial<typeof videoAnalyses.$inferInsert> = {
+    processingStatus: update.status,
   };
 
   if (update.result) {
     payload.hook = update.result.hook ?? null;
     payload.narrative = update.result.narrative ?? null;
     payload.cta = update.result.cta ?? null;
-    payload.brand_elements = update.result.brand_elements ?? null;
-    payload.text_overlays = update.result.text_overlays ?? null;
-    payload.competitive_insight = update.result.competitive_insight ?? null;
+    payload.brandElements = update.result.brand_elements ?? null;
+    payload.textOverlays = update.result.text_overlays ?? null;
+    payload.competitiveInsight = update.result.competitive_insight ?? null;
   }
 
   if (update.creditsUsed !== undefined) {
-    payload.credits_used = update.creditsUsed;
+    payload.creditsUsed = update.creditsUsed;
   }
 
   if (update.durationMs !== undefined) {
-    payload.duration_ms = update.durationMs;
+    payload.durationMs = update.durationMs;
   }
 
   if (update.errorMessage !== undefined) {
-    payload.error_message = update.errorMessage;
+    payload.errorMessage = update.errorMessage;
   }
 
-  const { error } = await supabase
-    .from('video_analyses')
-    .update(payload)
-    .eq('id', id)
-    .eq('workspace_id', workspaceId);
-
-  if (error) throw new Error(`Failed to update video analysis: ${error.message}`);
+  await db
+    .update(videoAnalyses)
+    .set(payload)
+    .where(
+      and(
+        eq(videoAnalyses.id, id),
+        eq(videoAnalyses.workspaceId, workspaceId)
+      )
+    );
 }
 
 export async function getVideoAnalysesByBrand(
   workspaceId: string,
   brandName: string
 ): Promise<VideoAnalysisRecord[]> {
-  const supabase = createAdminClient() as AnySupabaseClient;
+  const rows = await db
+    .select()
+    .from(videoAnalyses)
+    .where(
+      and(
+        eq(videoAnalyses.workspaceId, workspaceId),
+        eq(videoAnalyses.brandName, brandName),
+        eq(videoAnalyses.processingStatus, 'completed')
+      )
+    )
+    .orderBy(desc(videoAnalyses.createdAt));
 
-  const { data, error } = await supabase
-    .from('video_analyses')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .eq('brand_name', brandName)
-    .eq('processing_status', 'completed')
-    .order('created_at', { ascending: false });
-
-  if (error) throw new Error(`Failed to get video analyses by brand: ${error.message}`);
-  return (data ?? []) as VideoAnalysisRecord[];
+  return rows.map(rowToVideoAnalysis);
 }
 
 export async function getVideoAnalysisById(
   workspaceId: string,
   id: string
 ): Promise<VideoAnalysisRecord | null> {
-  const supabase = createAdminClient() as AnySupabaseClient;
+  const [row] = await db
+    .select()
+    .from(videoAnalyses)
+    .where(
+      and(
+        eq(videoAnalyses.id, id),
+        eq(videoAnalyses.workspaceId, workspaceId)
+      )
+    )
+    .limit(1);
 
-  const { data, error } = await supabase
-    .from('video_analyses')
-    .select('*')
-    .eq('id', id)
-    .eq('workspace_id', workspaceId)
-    .single();
-
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw new Error(`Failed to get video analysis: ${error.message}`);
-  }
-
-  return data as VideoAnalysisRecord;
+  if (!row) return null;
+  return rowToVideoAnalysis(row);
 }
 
 export async function getDownloadedVideosByBrand(
   workspaceId: string,
   brandName?: string
 ): Promise<DownloadedVideoRecord[]> {
-  const supabase = createAdminClient() as AnySupabaseClient;
-
-  let query = supabase
-    .from('downloaded_media')
-    .select('id, brand_name, storage_url, thumbnail_url, filename, file_size, created_at')
-    .eq('workspace_id', workspaceId)
-    .eq('media_type', 'video')
-    .order('created_at', { ascending: false });
+  const conditions = [
+    eq(downloadedMedia.workspaceId, workspaceId),
+    eq(downloadedMedia.mediaType, 'video'),
+  ];
 
   if (brandName) {
-    query = query.eq('brand_name', brandName);
+    conditions.push(eq(downloadedMedia.brandName, brandName));
   }
 
-  const { data, error } = await query;
+  const rows = await db
+    .select({
+      id: downloadedMedia.id,
+      brand_name: downloadedMedia.brandName,
+      storage_url: downloadedMedia.storageUrl,
+      thumbnail_url: downloadedMedia.thumbnailUrl,
+      filename: downloadedMedia.filename,
+      file_size: downloadedMedia.fileSize,
+      created_at: downloadedMedia.createdAt,
+    })
+    .from(downloadedMedia)
+    .where(and(...(conditions as [typeof conditions[0], ...typeof conditions])))
+    .orderBy(desc(downloadedMedia.createdAt));
 
-  if (error) throw new Error(`Failed to get downloaded videos: ${error.message}`);
-  return (data ?? []) as DownloadedVideoRecord[];
+  return rows.map((row) => ({
+    id: row.id,
+    brand_name: row.brand_name,
+    storage_url: row.storage_url,
+    thumbnail_url: row.thumbnail_url,
+    filename: row.filename,
+    file_size: row.file_size,
+    created_at: row.created_at.toISOString(),
+  }));
 }
 
 export async function getVideoBrands(workspaceId: string): Promise<string[]> {
-  const supabase = createAdminClient() as AnySupabaseClient;
-
-  const { data, error } = await supabase
-    .from('downloaded_media')
-    .select('brand_name')
-    .eq('workspace_id', workspaceId)
-    .eq('media_type', 'video');
-
-  if (error) throw new Error(`Failed to get video brands: ${error.message}`);
+  const rows = await db
+    .select({ brandName: downloadedMedia.brandName })
+    .from(downloadedMedia)
+    .where(
+      and(
+        eq(downloadedMedia.workspaceId, workspaceId),
+        eq(downloadedMedia.mediaType, 'video')
+      )
+    );
 
   const brands = Array.from(
-    new Set((data ?? []).map((row: { brand_name: string }) => row.brand_name))
-  ).sort() as string[];
+    new Set(rows.map((row) => row.brandName))
+  ).sort();
 
   return brands;
 }
@@ -219,41 +275,35 @@ export async function createHooksMatrixRun(
     creditsUsed: number;
   }
 ): Promise<HooksMatrixRecord> {
-  const supabase = createAdminClient() as AnySupabaseClient;
-
-  const { data, error } = await supabase
-    .from('hooks_matrix_runs')
-    .insert({
-      workspace_id: workspaceId,
-      competitor_brands: params.competitorBrands,
-      video_analysis_ids: params.videoAnalysisIds,
-      your_brand_name: params.yourBrandName,
-      brand_guidelines_id: params.brandGuidelinesId ?? null,
-      hook_count: params.hookCount,
+  const [inserted] = await db
+    .insert(hooksMatrixRuns)
+    .values({
+      workspaceId,
+      competitorBrands: params.competitorBrands,
+      videoAnalysisIds: params.videoAnalysisIds,
+      yourBrandName: params.yourBrandName,
+      brandGuidelinesId: params.brandGuidelinesId ?? null,
+      hookCount: params.hookCount,
       strategies: params.strategies,
       result: params.result,
-      credits_used: params.creditsUsed,
+      creditsUsed: params.creditsUsed,
     })
-    .select()
-    .single();
+    .returning();
 
-  if (error) throw new Error(`Failed to create hooks matrix run: ${error.message}`);
-  return data as HooksMatrixRecord;
+  if (!inserted) throw new Error('Failed to create hooks matrix run');
+  return rowToHooksMatrix(inserted);
 }
 
 export async function getHooksMatrixRuns(
   workspaceId: string,
   limit = 10
 ): Promise<HooksMatrixRecord[]> {
-  const supabase = createAdminClient() as AnySupabaseClient;
-
-  const { data, error } = await supabase
-    .from('hooks_matrix_runs')
-    .select('*')
-    .eq('workspace_id', workspaceId)
-    .order('created_at', { ascending: false })
+  const rows = await db
+    .select()
+    .from(hooksMatrixRuns)
+    .where(eq(hooksMatrixRuns.workspaceId, workspaceId))
+    .orderBy(desc(hooksMatrixRuns.createdAt))
     .limit(limit);
 
-  if (error) throw new Error(`Failed to get hooks matrix runs: ${error.message}`);
-  return (data ?? []) as HooksMatrixRecord[];
+  return rows.map(rowToHooksMatrix);
 }

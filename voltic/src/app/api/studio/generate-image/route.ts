@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { aiLimiter } from "@/lib/utils/rate-limit";
 import { createAsset } from "@/lib/data/assets";
+import { uploadBrandAsset } from "@/lib/storage/brand-assets";
+import { db } from "@/lib/db";
+import { studioMessages } from "@/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -79,33 +82,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Decode base64 and upload to Supabase Storage
+    // Decode base64 and upload to R2 storage
     const imageBuffer = Buffer.from(b64, "base64");
     const storagePath = `${workspace.id}/studio/generated/${Date.now()}-gemini-image.png`;
 
-    const supabase = createAdminClient();
-    const { error: uploadError } = await supabase.storage
-      .from("brand-assets")
-      .upload(storagePath, imageBuffer, { contentType: "image/png" });
-
-    if (uploadError) {
-      return NextResponse.json(
-        { error: `Storage upload failed: ${uploadError.message}` },
-        { status: 500 }
-      );
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("brand-assets").getPublicUrl(storagePath);
+    const publicUrl = await uploadBrandAsset(storagePath, imageBuffer, "image/png");
 
     // Append the image to the assistant message's attachments
-    const { data: existing } = await supabase
-      .from("studio_messages")
-      .select("attachments")
-      .eq("id", messageId)
-      .eq("workspace_id", workspace.id)
-      .single();
+    const existing = await db
+      .select({ attachments: studioMessages.attachments })
+      .from(studioMessages)
+      .where(
+        and(
+          eq(studioMessages.id, messageId),
+          eq(studioMessages.workspaceId, workspace.id)
+        )
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
 
     const currentAttachments = (existing?.attachments ?? []) as Array<{
       url: string;
@@ -121,39 +115,45 @@ export async function POST(req: NextRequest) {
       size: imageBuffer.length,
     };
 
-    await supabase
-      .from("studio_messages")
-      .update({ attachments: [...currentAttachments, newAttachment] })
-      .eq("id", messageId)
-      .eq("workspace_id", workspace.id);
+    await db
+      .update(studioMessages)
+      .set({ attachments: [...currentAttachments, newAttachment] })
+      .where(
+        and(
+          eq(studioMessages.id, messageId),
+          eq(studioMessages.workspaceId, workspace.id)
+        )
+      );
 
     // Also save as an asset record, linked to brand guideline if available
     let resolvedGuidelineId = brandGuidelineId;
 
     // If no explicit guideline ID, check conversation messages for brand guideline @mentions
     if (!resolvedGuidelineId) {
-      const { data: messages } = await supabase
-        .from("studio_messages")
-        .select("mentions")
-        .eq("conversation_id", conversationId)
-        .eq("workspace_id", workspace.id)
-        .order("created_at", { ascending: false })
+      const messages = await db
+        .select({ mentions: studioMessages.mentions })
+        .from(studioMessages)
+        .where(
+          and(
+            eq(studioMessages.conversationId, conversationId),
+            eq(studioMessages.workspaceId, workspace.id)
+          )
+        )
+        .orderBy(desc(studioMessages.createdAt))
         .limit(10);
 
-      if (messages) {
-        for (const msg of messages) {
-          const mentions = (msg.mentions ?? []) as Array<{
-            type: string;
-            id: string;
-            name: string;
-          }>;
-          const guidelineMention = mentions.find(
-            (m) => m.type === "brand_guidelines"
-          );
-          if (guidelineMention) {
-            resolvedGuidelineId = guidelineMention.id;
-            break;
-          }
+      for (const msg of messages) {
+        const mentions = (msg.mentions ?? []) as Array<{
+          type: string;
+          id: string;
+          name: string;
+        }>;
+        const guidelineMention = mentions.find(
+          (m) => m.type === "brand_guidelines"
+        );
+        if (guidelineMention) {
+          resolvedGuidelineId = guidelineMention.id;
+          break;
         }
       }
     }

@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { adInsights, workspaces, creditTransactions } from "@/db/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import type { AdInsightData, AdInsightRecord } from "@/types/discover";
 import type { TransactionType } from "@/types/credits";
 import { generateTransactionDescription, isUnlimitedCredits } from "@/types/credits";
@@ -11,17 +13,20 @@ export async function getExistingInsight(
   workspaceId: string,
   metaLibraryId: string
 ): Promise<AdInsightRecord | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("ad_insights")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("meta_library_id", metaLibraryId)
-    .single();
+  const [row] = await db
+    .select()
+    .from(adInsights)
+    .where(
+      and(
+        eq(adInsights.workspaceId, workspaceId),
+        eq(adInsights.metaLibraryId, metaLibraryId)
+      )
+    )
+    .limit(1);
 
-  if (error || !data) return null;
+  if (!row) return null;
 
-  return mapRow(data);
+  return mapRow(row);
 }
 
 // ─── Batch Lookup by Meta Library IDs ────────────────────────────────────
@@ -32,16 +37,19 @@ export async function getInsightsByMetaLibraryIds(
 ): Promise<Record<string, AdInsightRecord>> {
   if (metaLibraryIds.length === 0) return {};
 
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("ad_insights")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .in("meta_library_id", metaLibraryIds);
+  const rows = await db
+    .select()
+    .from(adInsights)
+    .where(
+      and(
+        eq(adInsights.workspaceId, workspaceId),
+        inArray(adInsights.metaLibraryId, metaLibraryIds)
+      )
+    );
 
   const result: Record<string, AdInsightRecord> = {};
-  for (const row of data ?? []) {
-    result[row.meta_library_id] = mapRow(row);
+  for (const row of rows) {
+    result[row.metaLibraryId] = mapRow(row);
   }
   return result;
 }
@@ -57,25 +65,38 @@ export async function saveInsight(
   format: string,
   insights: AdInsightData
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    await db
+      .insert(adInsights)
+      .values({
+        workspaceId,
+        metaLibraryId,
+        brandName,
+        headline,
+        bodyText,
+        format,
+        insights,
+        model: "gpt-4o",
+        creditsUsed: INSIGHT_CREDIT_COST,
+      })
+      .onConflictDoUpdate({
+        target: [adInsights.workspaceId, adInsights.metaLibraryId],
+        set: {
+          brandName,
+          headline,
+          bodyText,
+          format,
+          insights,
+          model: "gpt-4o",
+          creditsUsed: INSIGHT_CREDIT_COST,
+        },
+      });
 
-  const { error } = await supabase.from("ad_insights").upsert(
-    {
-      workspace_id: workspaceId,
-      meta_library_id: metaLibraryId,
-      brand_name: brandName,
-      headline: headline,
-      body_text: bodyText,
-      format: format,
-      insights: insights,
-      model: "gpt-4o",
-      credits_used: INSIGHT_CREDIT_COST,
-    },
-    { onConflict: "workspace_id,meta_library_id" }
-  );
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+    return { success: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, error: msg };
+  }
 }
 
 // ─── Credit Operations ─────────────────────────────────────────────────────
@@ -86,61 +107,62 @@ export async function checkAndDeductCredits(
   type: TransactionType = "ad_insight",
   description?: string
 ): Promise<{ success: boolean; remainingBalance: number; error?: string }> {
-  const supabase = createAdminClient();
-
   // 1. Check current balance
-  const { data: workspace, error: fetchErr } = await supabase
-    .from("workspaces")
-    .select("credit_balance")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ creditBalance: workspaces.creditBalance })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
-  if (fetchErr || !workspace) {
+  if (!workspace) {
     return { success: false, remainingBalance: 0, error: "Workspace not found" };
   }
 
   // Unlimited credits — skip deduction entirely
-  if (isUnlimitedCredits(workspace.credit_balance)) {
-    return { success: true, remainingBalance: workspace.credit_balance };
+  if (isUnlimitedCredits(workspace.creditBalance)) {
+    return { success: true, remainingBalance: workspace.creditBalance };
   }
 
-  if (workspace.credit_balance < amount) {
+  if (workspace.creditBalance < amount) {
     return {
       success: false,
-      remainingBalance: workspace.credit_balance,
-      error: `Insufficient credits. Need ${amount}, have ${workspace.credit_balance}.`,
+      remainingBalance: workspace.creditBalance,
+      error: `Insufficient credits. Need ${amount}, have ${workspace.creditBalance}.`,
     };
   }
 
-  // 2. Deduct credits with optimistic concurrency
-  // We select the updated row so we can detect 0-rows-updated (concurrent deduction).
-  // Supabase returns error:null with empty data when WHERE conditions don't match,
-  // so checking data.length guards against the silent-loss race condition.
-  const newBalance = workspace.credit_balance - amount;
-  const { data: updated, error: updateErr } = await supabase
-    .from("workspaces")
-    .update({ credit_balance: newBalance })
-    .eq("id", workspaceId)
-    .eq("credit_balance", workspace.credit_balance)
-    .select("credit_balance");
+  // 2. Deduct credits with optimistic concurrency.
+  // Drizzle returns the updated rows; 0 rows means the balance changed concurrently.
+  const newBalance = workspace.creditBalance - amount;
+  const updated = await db
+    .update(workspaces)
+    .set({ creditBalance: newBalance })
+    .where(
+      and(
+        eq(workspaces.id, workspaceId),
+        eq(workspaces.creditBalance, workspace.creditBalance)
+      )
+    )
+    .returning({ creditBalance: workspaces.creditBalance });
 
-  if (updateErr || !updated?.length) {
+  if (!updated.length) {
     return {
       success: false,
-      remainingBalance: workspace.credit_balance,
-      error: updateErr?.message ?? "Credit balance changed concurrently — please retry.",
+      remainingBalance: workspace.creditBalance,
+      error: "Credit balance changed concurrently — please retry.",
     };
   }
 
   // 3. Record transaction with correct type
   const txDescription = description ?? generateTransactionDescription(type, amount);
-  const { error: txErr } = await supabase.from("credit_transactions").insert({
-    workspace_id: workspaceId,
-    amount: -amount,
-    type,
-    description: txDescription,
-  });
-  if (txErr) {
+  try {
+    await db.insert(creditTransactions).values({
+      workspaceId,
+      amount: -amount,
+      type,
+      description: txDescription,
+    });
+  } catch (txErr) {
     // Ledger insert failed — refund balance to keep credits and audit trail in sync
     const refund = await refundCredits(workspaceId, amount);
     if (!refund.success) {
@@ -148,13 +170,13 @@ export async function checkAndDeductCredits(
         workspace_id: workspaceId,
         amount,
         type,
-        ledgerError: txErr.message,
+        ledgerError: txErr instanceof Error ? txErr.message : String(txErr),
         refundError: refund.error,
       });
     }
     return {
       success: false,
-      remainingBalance: workspace.credit_balance,
+      remainingBalance: workspace.creditBalance,
       error: "Transaction recording failed, credits restored.",
     };
   }
@@ -166,37 +188,37 @@ export async function refundCredits(
   workspaceId: string,
   amount: number
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
   // Retry up to 3 times to handle concurrent balance modifications.
-  // The previous implementation only retried on updateErr (a Supabase/network
-  // error), but Supabase returns error:null when 0 rows are updated — meaning
-  // an optimistic-lock collision was silently ignored and the refund was lost.
-  // Now we check updated.length to detect the 0-rows case and retry properly.
+  // Drizzle returns 0 rows when the optimistic-lock WHERE doesn't match,
+  // so we re-read current balance and retry on collision.
   let refunded = false;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const { data: workspace } = await supabase
-      .from("workspaces")
-      .select("credit_balance")
-      .eq("id", workspaceId)
-      .single();
+    const [workspace] = await db
+      .select({ creditBalance: workspaces.creditBalance })
+      .from(workspaces)
+      .where(eq(workspaces.id, workspaceId))
+      .limit(1);
 
     if (!workspace) break;
 
     // Skip for unlimited-credit accounts
-    if (isUnlimitedCredits(workspace.credit_balance)) {
+    if (isUnlimitedCredits(workspace.creditBalance)) {
       refunded = true;
       break;
     }
 
-    const { data: updated } = await supabase
-      .from("workspaces")
-      .update({ credit_balance: workspace.credit_balance + amount })
-      .eq("id", workspaceId)
-      .eq("credit_balance", workspace.credit_balance)
-      .select("credit_balance");
+    const updated = await db
+      .update(workspaces)
+      .set({ creditBalance: workspace.creditBalance + amount })
+      .where(
+        and(
+          eq(workspaces.id, workspaceId),
+          eq(workspaces.creditBalance, workspace.creditBalance)
+        )
+      )
+      .returning({ creditBalance: workspaces.creditBalance });
 
-    if (updated?.length) {
+    if (updated.length) {
       refunded = true;
       break;
     }
@@ -211,17 +233,18 @@ export async function refundCredits(
   }
 
   // Record refund transaction
-  const { error: txErr } = await supabase.from("credit_transactions").insert({
-    workspace_id: workspaceId,
-    amount: amount,
-    type: "refund",
-    description: `Credit refund: ${amount} credits returned`,
-  });
-  if (txErr) {
+  try {
+    await db.insert(creditTransactions).values({
+      workspaceId,
+      amount,
+      type: "refund",
+      description: `Credit refund: ${amount} credits returned`,
+    });
+  } catch (txErr) {
     console.error("[refundCredits] Ledger insert failed — refund applied to balance but no transaction record:", {
       workspace_id: workspaceId,
       amount,
-      error: txErr.message,
+      error: txErr instanceof Error ? txErr.message : String(txErr),
     });
   }
 
@@ -234,16 +257,16 @@ export async function refundCredits(
 function mapRow(row: any): AdInsightRecord {
   return {
     id: row.id,
-    workspaceId: row.workspace_id,
-    metaLibraryId: row.meta_library_id,
-    brandName: row.brand_name,
+    workspaceId: row.workspaceId,
+    metaLibraryId: row.metaLibraryId,
+    brandName: row.brandName,
     headline: row.headline,
-    bodyText: row.body_text,
+    bodyText: row.bodyText,
     format: row.format,
     insights: row.insights as AdInsightData,
     model: row.model,
-    creditsUsed: row.credits_used,
-    createdAt: row.created_at,
+    creditsUsed: row.creditsUsed,
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
   };
 }
 

@@ -1,32 +1,65 @@
-import { createClient } from "./server";
-import { createAdminClient } from "./admin";
+import { auth, currentUser } from "@clerk/nextjs/server";
+import { db } from "@/lib/db";
+import { workspaces, workspaceMembers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import type { Workspace } from "@/lib/hooks/use-workspace";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function getWorkspace(): Promise<Workspace | null> {
-  const supabase = await createClient();
+  const { userId } = await auth();
+  if (!userId) return null;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let [member] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
 
-  if (!user) return null;
-
-  // Use admin client to bypass RLS until migration policies are applied
-  const admin = createAdminClient();
-
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  // First-login migration: Clerk ID won't match old Supabase UUID.
+  // Look up the user's email in Clerk, find the matching Supabase UUID,
+  // and update workspace_members in place — transparent to the user.
+  if (!member) {
+    const clerkUser = await currentUser();
+    const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
+    if (email) {
+      const supabase = createAdminClient();
+      const { data: supabaseUser } = await supabase.auth.admin.getUserByEmail(email);
+      if (supabaseUser?.user?.id) {
+        const oldUuid = supabaseUser.user.id;
+        const [legacyMember] = await db
+          .select({ workspaceId: workspaceMembers.workspaceId, role: workspaceMembers.role })
+          .from(workspaceMembers)
+          .where(eq(workspaceMembers.userId, oldUuid))
+          .limit(1);
+        if (legacyMember) {
+          await db
+            .update(workspaceMembers)
+            .set({ userId })
+            .where(eq(workspaceMembers.userId, oldUuid));
+          member = { workspaceId: legacyMember.workspaceId };
+        }
+      }
+    }
+  }
 
   if (!member) return null;
 
-  const { data: workspace } = await admin
-    .from("workspaces")
-    .select("id, name, slug, timezone, currency, credit_balance, settings, meta_access_token, slack_access_token, slack_team_name")
-    .eq("id", member.workspace_id)
-    .single();
+  const [workspace] = await db
+    .select({
+      id: workspaces.id,
+      name: workspaces.name,
+      slug: workspaces.slug,
+      timezone: workspaces.timezone,
+      currency: workspaces.currency,
+      creditBalance: workspaces.creditBalance,
+      settings: workspaces.settings,
+      metaAccessToken: workspaces.metaAccessToken,
+      slackAccessToken: workspaces.slackAccessToken,
+      slackTeamName: workspaces.slackTeamName,
+    })
+    .from(workspaces)
+    .where(eq(workspaces.id, member.workspaceId))
+    .limit(1);
 
   if (!workspace) return null;
 
@@ -36,18 +69,15 @@ export async function getWorkspace(): Promise<Workspace | null> {
     slug: workspace.slug,
     timezone: workspace.timezone,
     currency: workspace.currency,
-    credit_balance: workspace.credit_balance,
+    credit_balance: workspace.creditBalance,
     settings: workspace.settings as Record<string, unknown>,
-    meta_connected: !!workspace.meta_access_token,
-    slack_connected: !!workspace.slack_access_token,
-    slack_team_name: workspace.slack_team_name ?? null,
+    meta_connected: !!workspace.metaAccessToken,
+    slack_connected: !!workspace.slackAccessToken,
+    slack_team_name: workspace.slackTeamName ?? null,
   };
 }
 
 export async function getUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  const { userId } = await auth();
+  return userId ? { id: userId } : null;
 }

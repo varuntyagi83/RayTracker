@@ -1,4 +1,4 @@
-import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
+import { uploadBrandAsset } from "@/lib/storage/brand-assets";
 import { downloadImage } from "./decompose";
 import { sanitizeForPrompt } from "@/lib/utils/prompt-sanitize";
 import type { CreativeOptions, BrandGuidelines, VariationStrategy } from "@/types/variations";
@@ -11,7 +11,6 @@ import {
 import { resizeToAspectRatio } from "./image-resize";
 import type { Asset } from "@/types/assets";
 
-const STORAGE_BUCKET = "brand-assets";
 const GEMINI_MODEL = "gemini-3.1-flash-image-preview";
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
@@ -318,22 +317,9 @@ export async function editAssetImageWithGemini(
     resultBuffer = await resizeToAspectRatio(resultBuffer, creativeOptions.aspectRatio);
   }
 
-  // 6. Upload to Supabase Storage
-  await ensureStorageBucket();
+  // 6. Upload to R2 storage
   const storagePath = `${workspaceId}/variations/${variationId}-edited.png`;
-  const supabase = createAdminClient();
-
-  const { error: uploadError } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, resultBuffer, { contentType: "image/png", upsert: true });
-
-  if (uploadError) {
-    throw new Error(`Storage upload failed: ${uploadError.message}`);
-  }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+  const publicUrl = await uploadBrandAsset(storagePath, resultBuffer, "image/png");
 
   return publicUrl;
 }

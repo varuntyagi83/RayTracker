@@ -1,4 +1,12 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import {
+  adAccounts,
+  campaigns,
+  campaignMetrics,
+  creatives,
+  creativeMetrics,
+} from "@/db/schema";
+import { eq, and, inArray, gte, lte, isNotNull, count } from "drizzle-orm";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -73,46 +81,51 @@ function getDateRanges() {
 export async function getWorkspaceKPIs(
   workspaceId: string
 ): Promise<WorkspaceKPIs> {
-  const supabase = createAdminClient();
   const { today, yesterday, last7 } = getDateRanges();
 
   // Get ad account count
-  const { count: adAccountCount } = await supabase
-    .from("ad_accounts")
-    .select("*", { count: "exact", head: true })
-    .eq("workspace_id", workspaceId);
+  const [{ adAccountCount }] = await db
+    .select({ adAccountCount: count() })
+    .from(adAccounts)
+    .where(eq(adAccounts.workspaceId, workspaceId));
 
   // Get campaign IDs for this workspace
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select("id")
-    .eq("workspace_id", workspaceId);
+  const campaignRows = await db
+    .select({ id: campaigns.id })
+    .from(campaigns)
+    .where(eq(campaigns.workspaceId, workspaceId));
 
-  const campaignIds = campaigns?.map((c) => c.id) ?? [];
+  const campaignIds = campaignRows.map((c) => c.id);
 
   if (campaignIds.length === 0) {
     return {
       today: { revenue: 0, spend: 0, profit: 0 },
       yesterday: { revenue: 0, spend: 0, profit: 0 },
       last7Days: { revenue: 0, spend: 0, profit: 0 },
-      adAccountCount: adAccountCount ?? 0,
+      adAccountCount,
     };
   }
 
   // Fetch all metrics for these campaigns in the last 7 days
-  const { data: metrics } = await supabase
-    .from("campaign_metrics")
-    .select("campaign_id, date, spend, revenue")
-    .in("campaign_id", campaignIds)
-    .gte("date", last7)
-    .lte("date", today);
-
-  const rows = metrics ?? [];
+  const metrics = await db
+    .select({
+      date: campaignMetrics.date,
+      spend: campaignMetrics.spend,
+      revenue: campaignMetrics.revenue,
+    })
+    .from(campaignMetrics)
+    .where(
+      and(
+        inArray(campaignMetrics.campaignId, campaignIds),
+        gte(campaignMetrics.date, last7),
+        lte(campaignMetrics.date, today)
+      )
+    );
 
   function sumPeriod(filterFn: (date: string) => boolean): KPIPeriod {
     let revenue = 0;
     let spend = 0;
-    for (const row of rows) {
+    for (const row of metrics) {
       if (filterFn(row.date)) {
         revenue += Number(row.revenue);
         spend += Number(row.spend);
@@ -125,7 +138,7 @@ export async function getWorkspaceKPIs(
     today: sumPeriod((d) => d === today),
     yesterday: sumPeriod((d) => d === yesterday),
     last7Days: sumPeriod((d) => d >= last7 && d <= today),
-    adAccountCount: adAccountCount ?? 0,
+    adAccountCount,
   };
 }
 
@@ -133,46 +146,62 @@ export async function getTopCreatives(
   workspaceId: string,
   limit = 10
 ): Promise<TopCreative[]> {
-  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
-  // Get creatives with their metrics aggregated over last 7 days
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "id, name, image_url, format, creative_metrics(spend, revenue, roas, impressions, date)"
+  // Fetch creatives and their metrics over last 7 days via join
+  const rows = await db
+    .select({
+      id: creatives.id,
+      name: creatives.name,
+      imageUrl: creatives.imageUrl,
+      format: creatives.format,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      date: creativeMetrics.date,
+    })
+    .from(creatives)
+    .leftJoin(
+      creativeMetrics,
+      and(
+        eq(creativeMetrics.creativeId, creatives.id),
+        gte(creativeMetrics.date, last7),
+        lte(creativeMetrics.date, today)
+      )
     )
-    .eq("workspace_id", workspaceId)
-    .limit(50);
+    .where(eq(creatives.workspaceId, workspaceId))
+    .limit(50 * 30); // up to 50 creatives x 30 days of metrics
 
-  if (!creatives) return [];
+  // Group by creative
+  const creativeMap = new Map<
+    string,
+    { name: string; imageUrl: string | null; format: string; spend: number; revenue: number; impressions: number }
+  >();
 
-  const result: TopCreative[] = creatives.map((c) => {
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string;
-        revenue: string;
-        roas: string;
-        impressions: number;
-        date: string;
-      }>
-    ).filter((m) => m.date >= last7 && m.date <= today);
-
-    const totalSpend = metrics.reduce((s, m) => s + Number(m.spend), 0);
-    const totalRevenue = metrics.reduce((s, m) => s + Number(m.revenue), 0);
-    const totalImpressions = metrics.reduce((s, m) => s + m.impressions, 0);
-    const avgRoas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
-
-    return {
-      id: c.id,
-      name: c.name,
-      imageUrl: c.image_url,
-      format: c.format,
-      roas: avgRoas,
-      spend: totalSpend,
-      impressions: totalImpressions,
+  for (const row of rows) {
+    const existing = creativeMap.get(row.id) ?? {
+      name: row.name,
+      imageUrl: row.imageUrl,
+      format: row.format,
+      spend: 0,
+      revenue: 0,
+      impressions: 0,
     };
-  });
+    if (row.spend !== null) existing.spend += Number(row.spend);
+    if (row.revenue !== null) existing.revenue += Number(row.revenue);
+    if (row.impressions !== null) existing.impressions += row.impressions;
+    creativeMap.set(row.id, existing);
+  }
+
+  const result: TopCreative[] = Array.from(creativeMap.entries()).map(([id, agg]) => ({
+    id,
+    name: agg.name,
+    imageUrl: agg.imageUrl,
+    format: agg.format,
+    roas: agg.spend > 0 ? agg.revenue / agg.spend : 0,
+    spend: agg.spend,
+    impressions: agg.impressions,
+  }));
 
   return result.sort((a, b) => b.roas - a.roas).slice(0, limit);
 }
@@ -181,48 +210,38 @@ export async function getTopHeadlines(
   workspaceId: string,
   limit = 10
 ): Promise<TopHeadline[]> {
-  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "headline, creative_metrics(spend, revenue, roas, impressions, date)"
+  const rows = await db
+    .select({
+      headline: creatives.headline,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      date: creativeMetrics.date,
+    })
+    .from(creatives)
+    .leftJoin(
+      creativeMetrics,
+      and(
+        eq(creativeMetrics.creativeId, creatives.id),
+        gte(creativeMetrics.date, last7),
+        lte(creativeMetrics.date, today)
+      )
     )
-    .eq("workspace_id", workspaceId)
-    .not("headline", "is", null)
-    .limit(50);
-
-  if (!creatives) return [];
+    .where(and(eq(creatives.workspaceId, workspaceId), isNotNull(creatives.headline)))
+    .limit(50 * 30);
 
   // Group by headline
-  const headlineMap = new Map<
-    string,
-    { spend: number; revenue: number; impressions: number }
-  >();
+  const headlineMap = new Map<string, { spend: number; revenue: number; impressions: number }>();
 
-  for (const c of creatives) {
-    if (!c.headline) continue;
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string;
-        revenue: string;
-        impressions: number;
-        date: string;
-      }>
-    ).filter((m) => m.date >= last7 && m.date <= today);
-
-    const existing = headlineMap.get(c.headline) ?? {
-      spend: 0,
-      revenue: 0,
-      impressions: 0,
-    };
-    for (const m of metrics) {
-      existing.spend += Number(m.spend);
-      existing.revenue += Number(m.revenue);
-      existing.impressions += m.impressions;
-    }
-    headlineMap.set(c.headline, existing);
+  for (const row of rows) {
+    if (!row.headline) continue;
+    const existing = headlineMap.get(row.headline) ?? { spend: 0, revenue: 0, impressions: 0 };
+    if (row.spend !== null) existing.spend += Number(row.spend);
+    if (row.revenue !== null) existing.revenue += Number(row.revenue);
+    if (row.impressions !== null) existing.impressions += row.impressions;
+    headlineMap.set(row.headline, existing);
   }
 
   const result: TopHeadline[] = Array.from(headlineMap.entries()).map(
@@ -241,45 +260,37 @@ export async function getTopCopy(
   workspaceId: string,
   limit = 10
 ): Promise<TopCopy[]> {
-  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select("body, creative_metrics(spend, revenue, roas, impressions, date)")
-    .eq("workspace_id", workspaceId)
-    .not("body", "is", null)
-    .limit(50);
+  const rows = await db
+    .select({
+      body: creatives.body,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      date: creativeMetrics.date,
+    })
+    .from(creatives)
+    .leftJoin(
+      creativeMetrics,
+      and(
+        eq(creativeMetrics.creativeId, creatives.id),
+        gte(creativeMetrics.date, last7),
+        lte(creativeMetrics.date, today)
+      )
+    )
+    .where(and(eq(creatives.workspaceId, workspaceId), isNotNull(creatives.body)))
+    .limit(50 * 30);
 
-  if (!creatives) return [];
+  const bodyMap = new Map<string, { spend: number; revenue: number; impressions: number }>();
 
-  const bodyMap = new Map<
-    string,
-    { spend: number; revenue: number; impressions: number }
-  >();
-
-  for (const c of creatives) {
-    if (!c.body) continue;
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string;
-        revenue: string;
-        impressions: number;
-        date: string;
-      }>
-    ).filter((m) => m.date >= last7 && m.date <= today);
-
-    const existing = bodyMap.get(c.body) ?? {
-      spend: 0,
-      revenue: 0,
-      impressions: 0,
-    };
-    for (const m of metrics) {
-      existing.spend += Number(m.spend);
-      existing.revenue += Number(m.revenue);
-      existing.impressions += m.impressions;
-    }
-    bodyMap.set(c.body, existing);
+  for (const row of rows) {
+    if (!row.body) continue;
+    const existing = bodyMap.get(row.body) ?? { spend: 0, revenue: 0, impressions: 0 };
+    if (row.spend !== null) existing.spend += Number(row.spend);
+    if (row.revenue !== null) existing.revenue += Number(row.revenue);
+    if (row.impressions !== null) existing.impressions += row.impressions;
+    bodyMap.set(row.body, existing);
   }
 
   const result: TopCopy[] = Array.from(bodyMap.entries()).map(
@@ -298,55 +309,39 @@ export async function getTopLandingPages(
   workspaceId: string,
   limit = 10
 ): Promise<TopLandingPage[]> {
-  const supabase = createAdminClient();
   const { last7, today } = getDateRanges();
 
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select(
-      "landing_page_url, creative_metrics(spend, revenue, roas, impressions, clicks, ctr, date)"
+  const rows = await db
+    .select({
+      landingPageUrl: creatives.landingPageUrl,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+      date: creativeMetrics.date,
+    })
+    .from(creatives)
+    .leftJoin(
+      creativeMetrics,
+      and(
+        eq(creativeMetrics.creativeId, creatives.id),
+        gte(creativeMetrics.date, last7),
+        lte(creativeMetrics.date, today)
+      )
     )
-    .eq("workspace_id", workspaceId)
-    .not("landing_page_url", "is", null)
-    .limit(50);
+    .where(and(eq(creatives.workspaceId, workspaceId), isNotNull(creatives.landingPageUrl)))
+    .limit(50 * 30);
 
-  if (!creatives) return [];
+  const lpMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number }>();
 
-  const lpMap = new Map<
-    string,
-    {
-      spend: number;
-      revenue: number;
-      impressions: number;
-      clicks: number;
-    }
-  >();
-
-  for (const c of creatives) {
-    if (!c.landing_page_url) continue;
-    const metrics = (
-      c.creative_metrics as Array<{
-        spend: string;
-        revenue: string;
-        impressions: number;
-        clicks: number;
-        date: string;
-      }>
-    ).filter((m) => m.date >= last7 && m.date <= today);
-
-    const existing = lpMap.get(c.landing_page_url) ?? {
-      spend: 0,
-      revenue: 0,
-      impressions: 0,
-      clicks: 0,
-    };
-    for (const m of metrics) {
-      existing.spend += Number(m.spend);
-      existing.revenue += Number(m.revenue);
-      existing.impressions += m.impressions;
-      existing.clicks += m.clicks;
-    }
-    lpMap.set(c.landing_page_url, existing);
+  for (const row of rows) {
+    if (!row.landingPageUrl) continue;
+    const existing = lpMap.get(row.landingPageUrl) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0 };
+    if (row.spend !== null) existing.spend += Number(row.spend);
+    if (row.revenue !== null) existing.revenue += Number(row.revenue);
+    if (row.impressions !== null) existing.impressions += row.impressions;
+    if (row.clicks !== null) existing.clicks += row.clicks;
+    lpMap.set(row.landingPageUrl, existing);
   }
 
   const result: TopLandingPage[] = Array.from(lpMap.entries()).map(

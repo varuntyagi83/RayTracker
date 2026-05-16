@@ -1,9 +1,10 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-const STORAGE_BUCKET = "brand-assets";
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/lib/db";
+import { workspaceMembers, adDecompositions } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
+import { uploadBrandAsset } from "@/lib/storage/brand-assets";
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -24,44 +25,45 @@ export async function fetchDecompositionHistory(): Promise<{
   data?: DecompositionHistoryItem[];
   error?: string;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { error: "Unauthorized" };
+  const { userId } = await auth();
+  if (!userId) return { error: "Unauthorized" };
 
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const [member] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
 
   if (!member) return { error: "No workspace" };
 
-  const { data, error } = await admin
-    .from("ad_decompositions")
-    .select(
-      "id, source_image_url, source_type, processing_status, extracted_texts, product_analysis, clean_image_url, created_at"
-    )
-    .eq("workspace_id", member.workspace_id)
-    .order("created_at", { ascending: false })
+  const rows = await db
+    .select({
+      id: adDecompositions.id,
+      sourceImageUrl: adDecompositions.sourceImageUrl,
+      sourceType: adDecompositions.sourceType,
+      processingStatus: adDecompositions.processingStatus,
+      extractedTexts: adDecompositions.extractedTexts,
+      productAnalysis: adDecompositions.productAnalysis,
+      cleanImageUrl: adDecompositions.cleanImageUrl,
+      createdAt: adDecompositions.createdAt,
+    })
+    .from(adDecompositions)
+    .where(eq(adDecompositions.workspaceId, member.workspaceId))
+    .orderBy(desc(adDecompositions.createdAt))
     .limit(20);
 
-  if (error) return { error: error.message };
-
-  const items: DecompositionHistoryItem[] = (data ?? []).map((row) => ({
+  const items: DecompositionHistoryItem[] = rows.map((row) => ({
     id: row.id,
-    sourceImageUrl: row.source_image_url,
-    sourceType: row.source_type,
-    processingStatus: row.processing_status,
-    extractedTextsCount: Array.isArray(row.extracted_texts)
-      ? row.extracted_texts.length
+    sourceImageUrl: row.sourceImageUrl,
+    sourceType: row.sourceType,
+    processingStatus: row.processingStatus,
+    extractedTextsCount: Array.isArray(row.extractedTexts)
+      ? row.extractedTexts.length
       : 0,
     productDetected:
-      (row.product_analysis as { detected?: boolean } | null)?.detected ?? false,
-    cleanImageUrl: row.clean_image_url,
-    createdAt: row.created_at,
+      (row.productAnalysis as { detected?: boolean } | null)?.detected ?? false,
+    cleanImageUrl: row.cleanImageUrl,
+    createdAt: row.createdAt.toISOString(),
   }));
 
   return { data: items };
@@ -72,28 +74,30 @@ export async function fetchDecompositionHistory(): Promise<{
 export async function deleteDecomposition(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  const { userId } = await auth();
+  if (!userId) return { success: false, error: "Unauthorized" };
 
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const [member] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
 
   if (!member) return { success: false, error: "No workspace" };
 
-  const { error } = await admin
-    .from("ad_decompositions")
-    .delete()
-    .eq("id", id)
-    .eq("workspace_id", member.workspace_id);
-
-  if (error) return { success: false, error: error.message };
+  try {
+    await db
+      .delete(adDecompositions)
+      .where(
+        and(
+          eq(adDecompositions.id, id),
+          eq(adDecompositions.workspaceId, member.workspaceId)
+        )
+      );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    return { success: false, error: msg };
+  }
 
   return { success: true };
 }
@@ -103,18 +107,14 @@ export async function deleteDecomposition(
 export async function uploadImageAction(
   formData: FormData
 ): Promise<{ success: boolean; url?: string; error?: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Unauthorized" };
+  const { userId } = await auth();
+  if (!userId) return { success: false, error: "Unauthorized" };
 
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const [member] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
 
   if (!member) return { success: false, error: "No workspace" };
 
@@ -135,19 +135,13 @@ export async function uploadImageAction(
   const buffer = Buffer.from(await file.arrayBuffer());
   const rawSafeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const safeName = rawSafeName.replace(/^_+|_+$/g, "") || "upload";
-  const path = `${member.workspace_id}/uploads/${Date.now()}-${safeName}`;
+  const path = `${member.workspaceId}/uploads/${Date.now()}-${safeName}`;
 
-  const { error: uploadError } = await admin.storage
-    .from(STORAGE_BUCKET)
-    .upload(path, buffer, { contentType: file.type, upsert: false });
-
-  if (uploadError) {
-    return { success: false, error: uploadError.message };
+  try {
+    const publicUrl = await uploadBrandAsset(path, buffer, file.type);
+    return { success: true, url: publicUrl };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Upload failed";
+    return { success: false, error: msg };
   }
-
-  const {
-    data: { publicUrl },
-  } = admin.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-
-  return { success: true, url: publicUrl };
 }

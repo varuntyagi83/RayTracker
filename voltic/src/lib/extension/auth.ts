@@ -1,3 +1,4 @@
+import { verifyToken } from "@clerk/backend";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 interface ExtensionAuthResult {
@@ -8,29 +9,29 @@ interface ExtensionAuthResult {
 }
 
 /**
- * Validates a Supabase access token from the Chrome extension.
+ * Validates a Clerk session token from the Chrome extension.
  * Returns the user ID and their workspace ID if valid.
  */
 export async function validateExtensionToken(
   token: string
 ): Promise<ExtensionAuthResult> {
-  const supabase = createAdminClient();
+  let userId: string;
 
-  // Validate the JWT via Supabase Auth
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  if (error || !user) {
+  try {
+    const payload = await verifyToken(token, {
+      secretKey: process.env.CLERK_SECRET_KEY!,
+    });
+    userId = payload.sub;
+  } catch {
     return { valid: false, error: "Invalid or expired token" };
   }
 
   // Look up workspace membership
-  const { data: member } = await supabase
+  const admin = createAdminClient();
+  const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!member) {
@@ -39,7 +40,7 @@ export async function validateExtensionToken(
 
   return {
     valid: true,
-    userId: user.id,
+    userId,
     workspaceId: member.workspace_id,
   };
 }

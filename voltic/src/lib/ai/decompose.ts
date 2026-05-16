@@ -1,7 +1,7 @@
 import { toFile } from "openai";
 import sharp from "sharp";
 import { getOpenAIClient } from "./openai";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { uploadBrandAsset } from "@/lib/storage/brand-assets";
 import { sanitizeForPrompt } from "@/lib/utils/prompt-sanitize";
 import type { BoundingBox, DecompositionResult } from "@/types/decomposition";
 
@@ -236,8 +236,6 @@ async function generateMask(
 
 // ─── Clean Product Image Generation ─────────────────────────────────────────
 
-const STORAGE_BUCKET = "brand-assets";
-
 /**
  * Generates a clean product image by removing marketing overlay text.
  * Tries Gemini (gemini-3.1-flash-image-preview) first, falls back to
@@ -416,7 +414,7 @@ CRITICAL: Do NOT alter the product, product packaging text, background, props, c
   return Buffer.from(imagePart.inlineData.data, "base64");
 }
 
-// ─── Upload clean image to Supabase Storage ─────────────────────────────────
+// ─── Upload clean image to R2 ────────────────────────────────────────────────
 
 async function _uploadCleanImage(
   imageBuffer: Buffer,
@@ -424,19 +422,5 @@ async function _uploadCleanImage(
   decompositionId: string
 ): Promise<string> {
   const storagePath = `${workspaceId}/decompose/${decompositionId}-clean.png`;
-
-  const supabase = createAdminClient();
-  const { error: uploadError } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, imageBuffer, { contentType: "image/png", upsert: true });
-
-  if (uploadError) {
-    throw new Error(`Storage upload failed: ${uploadError.message}`);
-  }
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
-
-  return publicUrl;
+  return uploadBrandAsset(storagePath, imageBuffer, "image/png");
 }

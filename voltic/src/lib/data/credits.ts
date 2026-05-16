@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { creditTransactions, workspaces } from "@/db/schema";
+import { eq, and, desc, lt, sql } from "drizzle-orm";
 import type { CreditTransaction, TransactionType } from "@/types/credits";
 import { generateTransactionDescription, isUnlimitedCredits } from "@/types/credits";
 
@@ -22,38 +24,44 @@ export async function getCreditTransactions(
   totalCount: number;
   totalPages: number;
 }> {
-  const supabase = createAdminClient();
   const { pageSize } = pagination;
   // Cap page to prevent arbitrarily large Postgres offsets
   const safePage = Math.min(Math.max(1, pagination.page), 1000);
-  const from = (safePage - 1) * pageSize;
-  const to = from + pageSize - 1;
+  const offset = (safePage - 1) * pageSize;
 
-  // Build query
-  let query = supabase
-    .from("credit_transactions")
-    .select("*", { count: "exact" })
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+  try {
+    const conditions = [eq(creditTransactions.workspaceId, workspaceId)];
+    if (filters.type) {
+      conditions.push(eq(creditTransactions.type, filters.type));
+    }
 
-  if (filters.type) {
-    query = query.eq("type", filters.type);
-  }
+    const whereClause = and(...conditions);
 
-  const { data, count, error } = await query;
+    // Run data + count in parallel
+    const [rows, countResult] = await Promise.all([
+      db
+        .select()
+        .from(creditTransactions)
+        .where(whereClause)
+        .orderBy(desc(creditTransactions.createdAt))
+        .limit(pageSize)
+        .offset(offset),
+      db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(creditTransactions)
+        .where(whereClause),
+    ]);
 
-  if (error || !data) {
+    const totalCount = countResult[0]?.total ?? 0;
+
+    return {
+      transactions: rows.map(mapRow),
+      totalCount,
+      totalPages: Math.ceil(totalCount / pageSize),
+    };
+  } catch {
     return { transactions: [], totalCount: 0, totalPages: 0 };
   }
-
-  const totalCount = count ?? 0;
-
-  return {
-    transactions: data.map(mapRow),
-    totalCount,
-    totalPages: Math.ceil(totalCount / pageSize),
-  };
 }
 
 // ─── Add Credits ─────────────────────────────────────────────────────────
@@ -65,54 +73,53 @@ export async function addCredits(
   description?: string,
   referenceId?: string
 ): Promise<{ success: boolean; newBalance: number; error?: string }> {
-  const supabase = createAdminClient();
-
   // Fetch current balance
-  const { data: workspace, error: fetchErr } = await supabase
-    .from("workspaces")
-    .select("credit_balance")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ creditBalance: workspaces.creditBalance })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
-  if (fetchErr || !workspace) {
+  if (!workspace) {
     return { success: false, newBalance: 0, error: "Workspace not found" };
   }
 
   // Skip balance updates for unlimited accounts (avoid noisy transactions)
-  if (isUnlimitedCredits(workspace.credit_balance)) {
-    return { success: true, newBalance: workspace.credit_balance };
+  if (isUnlimitedCredits(workspace.creditBalance)) {
+    return { success: true, newBalance: workspace.creditBalance };
   }
 
-  const newBalance = workspace.credit_balance + amount;
+  const newBalance = workspace.creditBalance + amount;
 
-  // Update balance with optimistic concurrency check
-  const { data: updated, error: updateErr } = await supabase
-    .from("workspaces")
-    .update({ credit_balance: newBalance })
-    .eq("id", workspaceId)
-    .eq("credit_balance", workspace.credit_balance)
-    .select("credit_balance");
+  // Update balance with optimistic concurrency check: only update if the balance
+  // hasn't changed since we read it (prevents lost updates under concurrent writes)
+  const updated = await db
+    .update(workspaces)
+    .set({ creditBalance: newBalance })
+    .where(and(eq(workspaces.id, workspaceId), eq(workspaces.creditBalance, workspace.creditBalance)))
+    .returning({ creditBalance: workspaces.creditBalance });
 
-  if (updateErr || !updated?.length) {
-    return { success: false, newBalance: workspace.credit_balance, error: updateErr?.message ?? "Balance changed concurrently — please retry." };
+  if (!updated.length) {
+    return { success: false, newBalance: workspace.creditBalance, error: "Balance changed concurrently, please retry." };
   }
 
   // Record transaction — log on failure but don't fail the caller; the balance
   // update already succeeded and rolling it back would require a separate lock.
   const txDescription = description ?? generateTransactionDescription(type, amount);
-  const { error: txErr } = await supabase.from("credit_transactions").insert({
-    workspace_id: workspaceId,
-    amount,
-    type,
-    description: txDescription,
-    reference_id: referenceId ?? null,
-  });
-  if (txErr) {
-    console.error("[addCredits] Ledger insert failed — balance updated but no transaction record:", {
-      workspace_id: workspaceId,
+  try {
+    await db.insert(creditTransactions).values({
+      workspaceId,
       amount,
       type,
-      error: txErr.message,
+      description: txDescription,
+      referenceId: referenceId ?? null,
+    });
+  } catch (txErr) {
+    console.error("[addCredits] Ledger insert failed — balance updated but no transaction record:", {
+      workspaceId,
+      amount,
+      type,
+      error: txErr instanceof Error ? txErr.message : String(txErr),
     });
   }
 
@@ -122,44 +129,37 @@ export async function addCredits(
 // ─── Get Current Balance ─────────────────────────────────────────────────
 
 export async function getCurrentBalance(workspaceId: string): Promise<number> {
-  const supabase = createAdminClient();
-  const { data } = await supabase
-    .from("workspaces")
-    .select("credit_balance")
-    .eq("id", workspaceId)
-    .single();
+  const [row] = await db
+    .select({ creditBalance: workspaces.creditBalance })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
-  return data?.credit_balance ?? 0;
+  return row?.creditBalance ?? 0;
 }
 
 // ─── Get Total Credits Used ─────────────────────────────────────────────
 
 export async function getTotalCreditsUsed(workspaceId: string): Promise<number> {
-  const supabase = createAdminClient();
-
   // Sum all negative amounts (usage transactions)
-  const { data, error } = await supabase
-    .from("credit_transactions")
-    .select("amount")
-    .eq("workspace_id", workspaceId)
-    .lt("amount", 0);
+  const [result] = await db
+    .select({ total: sql<number>`coalesce(sum(abs(amount)) filter (where amount < 0), 0)::int` })
+    .from(creditTransactions)
+    .where(and(eq(creditTransactions.workspaceId, workspaceId), lt(creditTransactions.amount, 0)));
 
-  if (error || !data) return 0;
-
-  return data.reduce((sum, row) => sum + Math.abs(row.amount), 0);
+  return result?.total ?? 0;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapRow(row: any): CreditTransaction {
+function mapRow(row: typeof creditTransactions.$inferSelect): CreditTransaction {
   return {
     id: row.id,
-    workspaceId: row.workspace_id,
+    workspaceId: row.workspaceId,
     amount: row.amount,
-    type: row.type,
-    referenceId: row.reference_id,
+    type: row.type as TransactionType,
+    referenceId: row.referenceId,
     description: row.description,
-    createdAt: row.created_at,
+    createdAt: row.createdAt.toISOString(),
   };
 }

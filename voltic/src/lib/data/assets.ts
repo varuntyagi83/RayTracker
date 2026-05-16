@@ -1,7 +1,8 @@
-import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
+import { uploadBrandAsset, deleteBrandAsset } from "@/lib/storage/brand-assets";
+import { db } from "@/lib/db";
+import { assets, brandGuidelinesTable } from "@/db/schema";
+import { eq, and, desc, ilike } from "drizzle-orm";
 import type { Asset } from "@/types/assets";
-
-const STORAGE_BUCKET = "brand-assets";
 
 // ─── List Assets ────────────────────────────────────────────────────────────
 
@@ -10,33 +11,41 @@ export async function getAssets(
   search?: string,
   brandGuidelineId?: string
 ): Promise<Asset[]> {
-  const supabase = createAdminClient();
-
-  let query = supabase
-    .from("assets")
-    .select("id, name, description, image_url, brand_guideline_id, created_at, updated_at, brand_guidelines(name)")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false });
+  const conditions = [eq(assets.workspaceId, workspaceId)];
 
   if (search?.trim()) {
-    query = query.ilike("name", `%${search.trim()}%`);
+    conditions.push(ilike(assets.name, `%${search.trim()}%`));
   }
 
   if (brandGuidelineId) {
-    query = query.eq("brand_guideline_id", brandGuidelineId);
+    conditions.push(eq(assets.brandGuidelineId, brandGuidelineId));
   }
 
-  const { data } = await query;
+  const rows = await db
+    .select({
+      id: assets.id,
+      name: assets.name,
+      description: assets.description,
+      imageUrl: assets.imageUrl,
+      brandGuidelineId: assets.brandGuidelineId,
+      createdAt: assets.createdAt,
+      updatedAt: assets.updatedAt,
+      brandGuidelineName: brandGuidelinesTable.name,
+    })
+    .from(assets)
+    .leftJoin(brandGuidelinesTable, eq(assets.brandGuidelineId, brandGuidelinesTable.id))
+    .where(and(...conditions))
+    .orderBy(desc(assets.createdAt));
 
-  return (data ?? []).map((a: Record<string, unknown>) => ({
-    id: a.id as string,
-    name: a.name as string,
-    description: a.description as string | null,
-    imageUrl: a.image_url as string,
-    brandGuidelineId: a.brand_guideline_id as string | null,
-    brandGuidelineName: (a.brand_guidelines as Record<string, unknown> | null)?.name as string | null ?? null,
-    createdAt: a.created_at as string,
-    updatedAt: a.updated_at as string,
+  return rows.map((a) => ({
+    id: a.id,
+    name: a.name,
+    description: a.description,
+    imageUrl: a.imageUrl,
+    brandGuidelineId: a.brandGuidelineId,
+    brandGuidelineName: a.brandGuidelineName ?? null,
+    createdAt: a.createdAt.toISOString(),
+    updatedAt: a.updatedAt.toISOString(),
   }));
 }
 
@@ -46,31 +55,37 @@ export async function getAsset(
   workspaceId: string,
   assetId: string
 ): Promise<Asset | null> {
-  const supabase = createAdminClient();
+  const [row] = await db
+    .select({
+      id: assets.id,
+      name: assets.name,
+      description: assets.description,
+      imageUrl: assets.imageUrl,
+      brandGuidelineId: assets.brandGuidelineId,
+      createdAt: assets.createdAt,
+      updatedAt: assets.updatedAt,
+      brandGuidelineName: brandGuidelinesTable.name,
+    })
+    .from(assets)
+    .leftJoin(brandGuidelinesTable, eq(assets.brandGuidelineId, brandGuidelinesTable.id))
+    .where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId)))
+    .limit(1);
 
-  const { data } = await supabase
-    .from("assets")
-    .select("id, name, description, image_url, brand_guideline_id, created_at, updated_at, brand_guidelines(name)")
-    .eq("id", assetId)
-    .eq("workspace_id", workspaceId)
-    .single();
+  if (!row) return null;
 
-  if (!data) return null;
-
-  const row = data as Record<string, unknown>;
   return {
-    id: row.id as string,
-    name: row.name as string,
-    description: row.description as string | null,
-    imageUrl: row.image_url as string,
-    brandGuidelineId: row.brand_guideline_id as string | null,
-    brandGuidelineName: (row.brand_guidelines as Record<string, unknown> | null)?.name as string | null ?? null,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    imageUrl: row.imageUrl,
+    brandGuidelineId: row.brandGuidelineId,
+    brandGuidelineName: row.brandGuidelineName ?? null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
-// ─── Upload Image to Supabase Storage ───────────────────────────────────────
+// ─── Upload Image to R2 Storage ─────────────────────────────────────────────
 
 export async function uploadAssetImage(
   workspaceId: string,
@@ -78,41 +93,31 @@ export async function uploadAssetImage(
   fileBuffer: Buffer,
   contentType: string
 ): Promise<{ url?: string; error?: string }> {
-  await ensureStorageBucket();
-  const supabase = createAdminClient();
-
   // Sanitize filename — same pattern as studio upload (M-12)
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
   const path = `${workspaceId}/assets/${Date.now()}-${safeFileName}`;
 
-  const { error } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(path, fileBuffer, {
-      contentType,
-      upsert: false,
-    });
-
-  if (error) return { error: error.message };
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
-
-  return { url: publicUrl };
+  try {
+    const url = await uploadBrandAsset(path, fileBuffer, contentType);
+    return { url };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Upload failed" };
+  }
 }
 
 // ─── Delete Image from Storage ──────────────────────────────────────────────
 
-export async function deleteAssetImage(imageUrl: string): Promise<void> {
-  const supabase = createAdminClient();
-
-  // Extract path from public URL
-  const bucketPrefix = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
-  const idx = imageUrl.indexOf(bucketPrefix);
-  if (idx === -1) return;
-
-  const path = imageUrl.slice(idx + bucketPrefix.length);
-  await supabase.storage.from(STORAGE_BUCKET).remove([path]);
+export async function deleteAssetImage(storagePath: string): Promise<void> {
+  // Accept either a raw storage path or a full public URL; extract path if needed
+  let path = storagePath;
+  if (storagePath.startsWith("http")) {
+    // Best-effort: strip everything up to and including the bucket name segment
+    const marker = "/brand-assets/";
+    const idx = storagePath.indexOf(marker);
+    if (idx === -1) return;
+    path = storagePath.slice(idx + marker.length);
+  }
+  await deleteBrandAsset(path);
 }
 
 // ─── Create Asset ───────────────────────────────────────────────────────────
@@ -124,22 +129,22 @@ export async function createAsset(
   description?: string,
   brandGuidelineId?: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const [inserted] = await db
+      .insert(assets)
+      .values({
+        workspaceId,
+        name,
+        imageUrl,
+        description: description || null,
+        brandGuidelineId: brandGuidelineId || null,
+      })
+      .returning({ id: assets.id });
 
-  const { data, error } = await supabase
-    .from("assets")
-    .insert({
-      workspace_id: workspaceId,
-      name,
-      image_url: imageUrl,
-      description: description || null,
-      brand_guideline_id: brandGuidelineId || null,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Update Asset ───────────────────────────────────────────────────────────
@@ -152,30 +157,30 @@ export async function updateAsset(
   imageUrl?: string,
   brandGuidelineId?: string | null
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    const updateData: Partial<typeof assets.$inferInsert> = {
+      name,
+      description: description || null,
+      updatedAt: new Date(),
+    };
 
-  const updateData: Record<string, unknown> = {
-    name,
-    description: description || null,
-    updated_at: new Date().toISOString(),
-  };
+    if (imageUrl) {
+      updateData.imageUrl = imageUrl;
+    }
 
-  if (imageUrl) {
-    updateData.image_url = imageUrl;
+    if (brandGuidelineId !== undefined) {
+      updateData.brandGuidelineId = brandGuidelineId || null;
+    }
+
+    await db
+      .update(assets)
+      .set(updateData)
+      .where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId)));
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
-
-  if (brandGuidelineId !== undefined) {
-    updateData.brand_guideline_id = brandGuidelineId || null;
-  }
-
-  const { error } = await supabase
-    .from("assets")
-    .update(updateData)
-    .eq("id", assetId)
-    .eq("workspace_id", workspaceId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
 }
 
 // ─── Delete Asset ───────────────────────────────────────────────────────────
@@ -184,18 +189,16 @@ export async function deleteAsset(
   workspaceId: string,
   assetId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
   // Get image URL first so we can clean up storage
   const asset = await getAsset(workspaceId, assetId);
 
-  const { error } = await supabase
-    .from("assets")
-    .delete()
-    .eq("id", assetId)
-    .eq("workspace_id", workspaceId);
-
-  if (error) return { success: false, error: error.message };
+  try {
+    await db
+      .delete(assets)
+      .where(and(eq(assets.id, assetId), eq(assets.workspaceId, workspaceId)));
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 
   // Clean up storage (fire-and-forget)
   if (asset?.imageUrl) {

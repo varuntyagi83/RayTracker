@@ -1,4 +1,6 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { campaigns, campaignMetrics, creatives, creativeMetrics, adAccounts } from "@/db/schema";
+import { eq, and, gte, lte, inArray, ilike, asc, desc } from "drizzle-orm";
 import type {
   CampaignListParams,
   CampaignListResult,
@@ -15,61 +17,84 @@ import type {
 export async function getCampaignList(
   params: CampaignListParams
 ): Promise<CampaignListResult> {
-  const supabase = createAdminClient();
   const { workspaceId, dateRange, search, statusFilter, objectiveFilter, sortKey, sortDirection } = params;
 
-  // 1. Get campaigns for this workspace
-  let query = supabase
-    .from("campaigns")
-    .select("id, name, status, objective, ad_account_id, ad_accounts(name)")
-    .eq("workspace_id", workspaceId);
-
+  // 1. Get campaigns with their ad account names
+  const conditions = [eq(campaigns.workspaceId, workspaceId)];
   if (search) {
-    query = query.ilike("name", `%${search}%`);
+    conditions.push(ilike(campaigns.name, `%${search}%`));
   }
   if (statusFilter && statusFilter !== "all") {
-    query = query.eq("status", statusFilter);
+    conditions.push(eq(campaigns.status, statusFilter));
   }
   if (objectiveFilter && objectiveFilter !== "all") {
-    query = query.eq("objective", objectiveFilter);
+    conditions.push(eq(campaigns.objective, objectiveFilter));
   }
 
-  const { data: campaigns } = await query;
-  if (!campaigns || campaigns.length === 0) {
+  const campaignRows = await db
+    .select({
+      id: campaigns.id,
+      name: campaigns.name,
+      status: campaigns.status,
+      objective: campaigns.objective,
+      adAccountId: campaigns.adAccountId,
+    })
+    .from(campaigns)
+    .where(and(...conditions));
+
+  if (campaignRows.length === 0) {
     return { campaigns: [], totalCount: 0 };
   }
 
+  // Fetch ad account names
+  const adAccountIds = [...new Set(campaignRows.map((c) => c.adAccountId))];
+  const adAccountRows = await db
+    .select({ id: adAccounts.id, name: adAccounts.name })
+    .from(adAccounts)
+    .where(inArray(adAccounts.id, adAccountIds));
+  const adAccountNameMap = new Map(adAccountRows.map((a) => [a.id, a.name]));
+
   // 2. Get metrics for these campaigns within date range
-  const campaignIds = campaigns.map((c) => c.id);
-  const { data: metrics } = await supabase
-    .from("campaign_metrics")
-    .select("campaign_id, spend, revenue, impressions, clicks, purchases")
-    .in("campaign_id", campaignIds)
-    .gte("date", dateRange.from)
-    .lte("date", dateRange.to);
+  const campaignIds = campaignRows.map((c) => c.id);
+  const metrics = await db
+    .select({
+      campaignId: campaignMetrics.campaignId,
+      spend: campaignMetrics.spend,
+      revenue: campaignMetrics.revenue,
+      impressions: campaignMetrics.impressions,
+      clicks: campaignMetrics.clicks,
+      purchases: campaignMetrics.purchases,
+    })
+    .from(campaignMetrics)
+    .where(
+      and(
+        inArray(campaignMetrics.campaignId, campaignIds),
+        gte(campaignMetrics.date, dateRange.from),
+        lte(campaignMetrics.date, dateRange.to)
+      )
+    );
 
   // 3. Aggregate metrics per campaign
   const metricsMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number; purchases: number }>();
-  for (const m of metrics ?? []) {
-    const existing = metricsMap.get(m.campaign_id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
+  for (const m of metrics) {
+    const existing = metricsMap.get(m.campaignId) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
     existing.spend += Number(m.spend);
     existing.revenue += Number(m.revenue);
     existing.impressions += m.impressions;
     existing.clicks += m.clicks;
     existing.purchases += m.purchases;
-    metricsMap.set(m.campaign_id, existing);
+    metricsMap.set(m.campaignId, existing);
   }
 
   // 4. Build result
-  const result: CampaignSummary[] = campaigns.map((c) => {
+  const result: CampaignSummary[] = campaignRows.map((c) => {
     const agg = metricsMap.get(c.id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
-    const adAccount = c.ad_accounts as unknown as { name: string } | null;
     return {
       id: c.id,
       name: c.name,
       status: c.status,
       objective: c.objective,
-      adAccountName: adAccount?.name ?? "Unknown",
+      adAccountName: adAccountNameMap.get(c.adAccountId) ?? "Unknown",
       spend: agg.spend,
       revenue: agg.revenue,
       roas: agg.spend > 0 ? agg.revenue / agg.spend : 0,
@@ -119,32 +144,54 @@ export async function getCampaignDetail(
   workspaceId: string,
   dateRange: DateRange
 ): Promise<CampaignDetail | null> {
-  const supabase = createAdminClient();
-
-  // Get campaign
-  const { data: campaign } = await supabase
-    .from("campaigns")
-    .select("id, name, status, objective, daily_budget, lifetime_budget, ad_account_id, ad_accounts(name)")
-    .eq("id", campaignId)
-    .eq("workspace_id", workspaceId)
-    .single();
+  // Get campaign with ad account name
+  const [campaign] = await db
+    .select({
+      id: campaigns.id,
+      name: campaigns.name,
+      status: campaigns.status,
+      objective: campaigns.objective,
+      dailyBudget: campaigns.dailyBudget,
+      lifetimeBudget: campaigns.lifetimeBudget,
+      adAccountId: campaigns.adAccountId,
+    })
+    .from(campaigns)
+    .where(and(eq(campaigns.id, campaignId), eq(campaigns.workspaceId, workspaceId)))
+    .limit(1);
 
   if (!campaign) return null;
 
-  // Get daily metrics
-  const { data: metrics } = await supabase
-    .from("campaign_metrics")
-    .select("date, spend, revenue, roas, impressions, clicks, ctr, purchases")
-    .eq("campaign_id", campaignId)
-    .gte("date", dateRange.from)
-    .lte("date", dateRange.to)
-    .order("date", { ascending: true });
+  const [adAccount] = await db
+    .select({ name: adAccounts.name })
+    .from(adAccounts)
+    .where(eq(adAccounts.id, campaign.adAccountId))
+    .limit(1);
 
-  const rows = metrics ?? [];
+  // Get daily metrics
+  const metricRows = await db
+    .select({
+      date: campaignMetrics.date,
+      spend: campaignMetrics.spend,
+      revenue: campaignMetrics.revenue,
+      roas: campaignMetrics.roas,
+      impressions: campaignMetrics.impressions,
+      clicks: campaignMetrics.clicks,
+      ctr: campaignMetrics.ctr,
+      purchases: campaignMetrics.purchases,
+    })
+    .from(campaignMetrics)
+    .where(
+      and(
+        eq(campaignMetrics.campaignId, campaignId),
+        gte(campaignMetrics.date, dateRange.from),
+        lte(campaignMetrics.date, dateRange.to)
+      )
+    )
+    .orderBy(asc(campaignMetrics.date));
 
   // Build time series — inject demo data when no real metrics exist
   let timeSeries: MetricDataPoint[];
-  if (rows.length === 0) {
+  if (metricRows.length === 0) {
     const baseSpend = 480 + (campaign.id.charCodeAt(0) % 10) * 60;
     const baseRoas = 2.8 + (campaign.id.charCodeAt(1) % 8) * 0.3;
     timeSeries = Array.from({ length: 7 }, (_, i) => {
@@ -167,7 +214,7 @@ export async function getCampaignDetail(
       };
     });
   } else {
-    timeSeries = rows.map((m) => ({
+    timeSeries = metricRows.map((m) => ({
       date: m.date,
       spend: Number(m.spend),
       revenue: Number(m.revenue),
@@ -199,15 +246,13 @@ export async function getCampaignDetail(
   totals.roas = totals.spend > 0 ? totals.revenue / totals.spend : 0;
   totals.ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
 
-  const adAccount = campaign.ad_accounts as unknown as { name: string } | null;
-
   return {
     id: campaign.id,
     name: campaign.name,
     status: campaign.status,
     objective: campaign.objective,
-    dailyBudget: campaign.daily_budget ? Number(campaign.daily_budget) : null,
-    lifetimeBudget: campaign.lifetime_budget ? Number(campaign.lifetime_budget) : null,
+    dailyBudget: campaign.dailyBudget ? Number(campaign.dailyBudget) : null,
+    lifetimeBudget: campaign.lifetimeBudget ? Number(campaign.lifetimeBudget) : null,
     adAccountName: adAccount?.name ?? "Unknown",
     totals,
     timeSeries,
@@ -221,39 +266,55 @@ export async function getCampaignCreatives(
   workspaceId: string,
   dateRange: DateRange
 ): Promise<CampaignCreative[]> {
-  const supabase = createAdminClient();
-
   // Get creatives for this campaign
-  const { data: creatives } = await supabase
-    .from("creatives")
-    .select("id, name, headline, body, format, image_url, status")
-    .eq("campaign_id", campaignId)
-    .eq("workspace_id", workspaceId);
+  const creativeRows = await db
+    .select({
+      id: creatives.id,
+      name: creatives.name,
+      headline: creatives.headline,
+      body: creatives.body,
+      format: creatives.format,
+      imageUrl: creatives.imageUrl,
+      status: creatives.status,
+    })
+    .from(creatives)
+    .where(and(eq(creatives.campaignId, campaignId), eq(creatives.workspaceId, workspaceId)));
 
-  if (!creatives || creatives.length === 0) return [];
+  if (creativeRows.length === 0) return [];
 
   // Get metrics for these creatives
-  const creativeIds = creatives.map((c) => c.id);
-  const { data: metrics } = await supabase
-    .from("creative_metrics")
-    .select("creative_id, spend, revenue, impressions, clicks, purchases")
-    .in("creative_id", creativeIds)
-    .gte("date", dateRange.from)
-    .lte("date", dateRange.to);
+  const creativeIds = creativeRows.map((c) => c.id);
+  const metrics = await db
+    .select({
+      creativeId: creativeMetrics.creativeId,
+      spend: creativeMetrics.spend,
+      revenue: creativeMetrics.revenue,
+      impressions: creativeMetrics.impressions,
+      clicks: creativeMetrics.clicks,
+      purchases: creativeMetrics.purchases,
+    })
+    .from(creativeMetrics)
+    .where(
+      and(
+        inArray(creativeMetrics.creativeId, creativeIds),
+        gte(creativeMetrics.date, dateRange.from),
+        lte(creativeMetrics.date, dateRange.to)
+      )
+    );
 
   // Aggregate
   const metricsMap = new Map<string, { spend: number; revenue: number; impressions: number; clicks: number; purchases: number }>();
-  for (const m of metrics ?? []) {
-    const existing = metricsMap.get(m.creative_id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
+  for (const m of metrics) {
+    const existing = metricsMap.get(m.creativeId) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
     existing.spend += Number(m.spend);
     existing.revenue += Number(m.revenue);
     existing.impressions += m.impressions;
     existing.clicks += m.clicks;
     existing.purchases += m.purchases;
-    metricsMap.set(m.creative_id, existing);
+    metricsMap.set(m.creativeId, existing);
   }
 
-  return creatives.map((c) => {
+  return creativeRows.map((c) => {
     const agg = metricsMap.get(c.id) ?? { spend: 0, revenue: 0, impressions: 0, clicks: 0, purchases: 0 };
     return {
       id: c.id,
@@ -261,7 +322,7 @@ export async function getCampaignCreatives(
       headline: c.headline,
       body: c.body,
       format: c.format,
-      imageUrl: c.image_url,
+      imageUrl: c.imageUrl,
       status: c.status,
       spend: agg.spend,
       revenue: agg.revenue,
@@ -300,17 +361,15 @@ export async function getCampaignComparison(
 // ─── Filter Options ─────────────────────────────────────────────────────────
 
 export async function getCampaignFilterOptions(workspaceId: string) {
-  const supabase = createAdminClient();
+  const rows = await db
+    .select({ status: campaigns.status, objective: campaigns.objective })
+    .from(campaigns)
+    .where(eq(campaigns.workspaceId, workspaceId));
 
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select("status, objective")
-    .eq("workspace_id", workspaceId);
+  if (rows.length === 0) return { statuses: [], objectives: [] };
 
-  if (!campaigns) return { statuses: [], objectives: [] };
-
-  const statuses = [...new Set(campaigns.map((c) => c.status))].sort();
-  const objectives = [...new Set(campaigns.map((c) => c.objective).filter(Boolean) as string[])].sort();
+  const statuses = [...new Set(rows.map((c) => c.status))].sort();
+  const objectives = [...new Set(rows.map((c) => c.objective).filter((o): o is string => o !== null))].sort();
 
   return { statuses, objectives };
 }

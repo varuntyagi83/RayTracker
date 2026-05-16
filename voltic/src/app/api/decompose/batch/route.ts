@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
@@ -22,12 +22,9 @@ const batchSchema = z.object({
 
 export async function POST(request: Request) {
   // 1. Authenticate
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -47,7 +44,7 @@ export async function POST(request: Request) {
   const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!member) {
@@ -90,7 +87,7 @@ export async function POST(request: Request) {
     }
   }
 
-  trackServer("ad_decomposition_batch_started", user.id, {
+  trackServer("ad_decomposition_batch_started", userId, {
     count: body.image_urls.length,
     total_credits: totalCost,
   });

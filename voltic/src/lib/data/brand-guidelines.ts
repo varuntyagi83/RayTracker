@@ -1,50 +1,56 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { brandGuidelinesTable, workspaces } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import type { BrandGuidelines, BrandGuidelineFile } from "@/types/variations";
-
-const STORAGE_BUCKET = "brand-assets";
+import {
+  uploadBrandAsset as uploadToR2,
+  deleteBrandAsset as deleteFromR2,
+} from "@/lib/storage/brand-assets";
 
 // ─── Get Brand Guidelines ───────────────────────────────────────────────────
 
 export async function getBrandGuidelines(
   workspaceId: string
 ): Promise<BrandGuidelines> {
-  const supabase = createAdminClient();
-
   // 1. Try new brand_guidelines table (default entity)
-  const { data: entity } = await supabase
-    .from("brand_guidelines")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("is_default", true)
-    .single();
+  const [entity] = await db
+    .select()
+    .from(brandGuidelinesTable)
+    .where(
+      and(
+        eq(brandGuidelinesTable.workspaceId, workspaceId),
+        eq(brandGuidelinesTable.isDefault, true)
+      )
+    )
+    .limit(1);
 
   if (entity) {
     // Convert entity to legacy BrandGuidelines shape
-    const palette = Array.isArray(entity.color_palette)
-      ? (entity.color_palette as Array<{ hex: string; name: string }>)
+    const palette = Array.isArray(entity.colorPalette)
+      ? (entity.colorPalette as Array<{ hex: string; name: string }>)
           .map((c) => c.hex)
           .join(", ")
       : undefined;
 
     return {
-      brandName: entity.brand_name ?? undefined,
-      brandVoice: entity.brand_voice ?? undefined,
+      brandName: entity.brandName ?? undefined,
+      brandVoice: entity.brandVoice ?? undefined,
       colorPalette: palette,
-      targetAudience: entity.target_audience ?? undefined,
-      dosAndDonts: entity.dos_and_donts ?? undefined,
+      targetAudience: entity.targetAudience ?? undefined,
+      dosAndDonts: entity.dosAndDonts ?? undefined,
       files: (entity.files as BrandGuidelineFile[]) ?? [],
     };
   }
 
   // 2. Fallback: workspace settings JSONB (legacy)
-  const { data } = await supabase
-    .from("workspaces")
-    .select("settings")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ settings: workspaces.settings })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const settings = (data?.settings ?? {}) as Record<string, any>;
+  const settings = ((workspace?.settings ?? {}) as Record<string, any>);
   return (settings.brandGuidelines ?? {}) as BrandGuidelines;
 }
 
@@ -54,17 +60,15 @@ export async function updateBrandGuidelines(
   workspaceId: string,
   guidelines: Omit<BrandGuidelines, "files">
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
   // Fetch current settings to merge
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("settings")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ settings: workspaces.settings })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const currentSettings = (workspace?.settings ?? {}) as Record<string, any>;
+  const currentSettings = ((workspace?.settings ?? {}) as Record<string, any>);
   const currentGuidelines = (currentSettings.brandGuidelines ?? {}) as BrandGuidelines;
 
   const updatedSettings = {
@@ -75,13 +79,15 @@ export async function updateBrandGuidelines(
     },
   };
 
-  const { error } = await supabase
-    .from("workspaces")
-    .update({ settings: updatedSettings })
-    .eq("id", workspaceId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+  try {
+    await db
+      .update(workspaces)
+      .set({ settings: updatedSettings })
+      .where(eq(workspaces.id, workspaceId));
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Upload Brand Asset File ────────────────────────────────────────────────
@@ -93,22 +99,14 @@ export async function uploadBrandAsset(
   contentType: string,
   fileSize: number
 ): Promise<{ success: boolean; file?: BrandGuidelineFile; error?: string }> {
-  const supabase = createAdminClient();
-
   const path = `${workspaceId}/${Date.now()}-${fileName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(path, fileBuffer, {
-      contentType,
-      upsert: false,
-    });
-
-  if (uploadError) return { success: false, error: uploadError.message };
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+  let publicUrl: string;
+  try {
+    publicUrl = await uploadToR2(path, fileBuffer, contentType);
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 
   const fileRecord: BrandGuidelineFile = {
     name: fileName,
@@ -120,14 +118,14 @@ export async function uploadBrandAsset(
   };
 
   // Add file to workspace settings
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("settings")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ settings: workspaces.settings })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const currentSettings = (workspace?.settings ?? {}) as Record<string, any>;
+  const currentSettings = ((workspace?.settings ?? {}) as Record<string, any>);
   const currentGuidelines = (currentSettings.brandGuidelines ?? {}) as BrandGuidelines;
   const currentFiles = currentGuidelines.files ?? [];
 
@@ -139,18 +137,16 @@ export async function uploadBrandAsset(
     },
   };
 
-  const { error: updateError } = await supabase
-    .from("workspaces")
-    .update({ settings: updatedSettings })
-    .eq("id", workspaceId);
-
-  if (updateError) {
-    // Clean up uploaded file
-    await supabase.storage.from(STORAGE_BUCKET).remove([path]);
-    return { success: false, error: updateError.message };
+  try {
+    await db
+      .update(workspaces)
+      .set({ settings: updatedSettings })
+      .where(eq(workspaces.id, workspaceId));
+    return { success: true, file: fileRecord };
+  } catch (err) {
+    await deleteFromR2(path).catch(() => {});
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
-
-  return { success: true, file: fileRecord };
 }
 
 // ─── Delete Brand Asset File ────────────────────────────────────────────────
@@ -159,20 +155,17 @@ export async function deleteBrandAsset(
   workspaceId: string,
   filePath: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
-  // Remove from storage
-  await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
+  await deleteFromR2(filePath).catch(() => {});
 
   // Remove from workspace settings
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("settings")
-    .eq("id", workspaceId)
-    .single();
+  const [workspace] = await db
+    .select({ settings: workspaces.settings })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const currentSettings = (workspace?.settings ?? {}) as Record<string, any>;
+  const currentSettings = ((workspace?.settings ?? {}) as Record<string, any>);
   const currentGuidelines = (currentSettings.brandGuidelines ?? {}) as BrandGuidelines;
   const currentFiles = currentGuidelines.files ?? [];
 
@@ -184,11 +177,13 @@ export async function deleteBrandAsset(
     },
   };
 
-  const { error } = await supabase
-    .from("workspaces")
-    .update({ settings: updatedSettings })
-    .eq("id", workspaceId);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+  try {
+    await db
+      .update(workspaces)
+      .set({ settings: updatedSettings })
+      .where(eq(workspaces.id, workspaceId));
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

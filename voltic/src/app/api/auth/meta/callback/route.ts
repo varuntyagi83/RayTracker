@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { encryptToken } from "@/lib/utils/token-crypto";
+import { db } from "@/lib/db";
+import { workspaceMembers, workspaces, adAccounts, facebookPages } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 
 const META_API_VERSION = "v21.0";
 const META_GRAPH_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -34,23 +36,19 @@ export async function GET(request: NextRequest) {
   }
 
   // 2. Verify user is authenticated
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const admin = createAdminClient();
-
   // 3. Get workspace from authenticated session
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const member = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
   if (!member) {
     return NextResponse.redirect(
@@ -58,7 +56,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const workspaceId = member.workspace_id;
+  const workspaceId = member.workspaceId;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const redirectUri = `${appUrl}/api/auth/meta/callback`;
 
@@ -76,7 +74,7 @@ export async function GET(request: NextRequest) {
 
   if (tokenData.error) {
     console.error("[meta-oauth] Token exchange failed:", tokenData.error);
-    trackServer("meta_connect_failed", user.id, {
+    trackServer("meta_connect_failed", userId, {
       error: tokenData.error.message || "token_exchange_failed",
     });
     return NextResponse.redirect(
@@ -101,7 +99,7 @@ export async function GET(request: NextRequest) {
       "[meta-oauth] Long-lived token exchange failed:",
       longTokenData.error
     );
-    trackServer("meta_connect_failed", user.id, {
+    trackServer("meta_connect_failed", userId, {
       error: longTokenData.error.message || "long_token_exchange_failed",
     });
     return NextResponse.redirect(
@@ -112,13 +110,14 @@ export async function GET(request: NextRequest) {
   const longLivedToken = longTokenData.access_token;
 
   // 5. Store long-lived token on workspace (encrypted at rest — M-27)
-  const { error: updateError } = await admin
-    .from("workspaces")
-    .update({ meta_access_token: encryptToken(longLivedToken) })
-    .eq("id", workspaceId);
+  const updateResult = await db
+    .update(workspaces)
+    .set({ metaAccessToken: encryptToken(longLivedToken) })
+    .where(eq(workspaces.id, workspaceId))
+    .returning({ id: workspaces.id });
 
-  if (updateError) {
-    console.error("[meta-oauth] Failed to store token:", updateError);
+  if (!updateResult.length) {
+    console.error("[meta-oauth] Failed to store token: no rows updated");
     return NextResponse.redirect(
       new URL("/settings?meta_error=save_failed", request.url)
     );
@@ -127,19 +126,19 @@ export async function GET(request: NextRequest) {
   // 6. Fetch and store ad accounts (non-fatal)
   let adAccountCount = 0;
   try {
-    adAccountCount = await syncAdAccounts(admin, workspaceId, longLivedToken);
+    adAccountCount = await syncAdAccounts(workspaceId, longLivedToken);
   } catch (err) {
     console.error("[meta-oauth] Ad account sync failed:", err);
   }
 
   // 7. Fetch and store Facebook pages (non-fatal)
   try {
-    await syncFacebookPages(admin, workspaceId, longLivedToken);
+    await syncFacebookPages(workspaceId, longLivedToken);
   } catch (err) {
     console.error("[meta-oauth] Facebook pages sync failed:", err);
   }
 
-  trackServer("meta_connected", user.id, {
+  trackServer("meta_connected", userId, {
     ad_account_count: adAccountCount,
   });
 
@@ -165,7 +164,6 @@ const STATUS_MAP: Record<number, string> = {
 };
 
 async function syncAdAccounts(
-  admin: ReturnType<typeof createAdminClient>,
   workspaceId: string,
   accessToken: string
 ): Promise<number> {
@@ -190,18 +188,27 @@ async function syncAdAccounts(
   }> = data.data || [];
 
   for (const account of accounts) {
-    await admin.from("ad_accounts").upsert(
-      {
-        workspace_id: workspaceId,
-        meta_account_id: account.id,
+    await db
+      .insert(adAccounts)
+      .values({
+        workspaceId,
+        metaAccountId: account.id,
         name: account.name || account.id,
         currency: account.currency || "USD",
         timezone: account.timezone_name || "UTC",
         status: STATUS_MAP[account.account_status] || "unknown",
-        last_synced_at: new Date().toISOString(),
-      },
-      { onConflict: "meta_account_id" }
-    );
+        lastSyncedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: adAccounts.metaAccountId,
+        set: {
+          name: account.name || account.id,
+          currency: account.currency || "USD",
+          timezone: account.timezone_name || "UTC",
+          status: STATUS_MAP[account.account_status] || "unknown",
+          lastSyncedAt: new Date(),
+        },
+      });
   }
 
   return accounts.length;
@@ -210,7 +217,6 @@ async function syncAdAccounts(
 // ─── Facebook Pages Sync ────────────────────────────────────────────────────
 
 async function syncFacebookPages(
-  admin: ReturnType<typeof createAdminClient>,
   workspaceId: string,
   accessToken: string
 ): Promise<void> {
@@ -233,30 +239,34 @@ async function syncFacebookPages(
   }> = data.data || [];
 
   for (const page of pages) {
-    const { data: existing } = await admin
-      .from("facebook_pages")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("page_id", page.id)
-      .single();
+    const existing = await db
+      .select({ id: facebookPages.id })
+      .from(facebookPages)
+      .where(
+        and(
+          eq(facebookPages.workspaceId, workspaceId),
+          eq(facebookPages.pageId, page.id)
+        )
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
 
     if (existing) {
-      await admin
-        .from("facebook_pages")
-        .update({
-          page_name: page.name,
-          has_instagram: !!page.instagram_business_account,
-          instagram_handle:
-            page.instagram_business_account?.username || null,
+      await db
+        .update(facebookPages)
+        .set({
+          pageName: page.name,
+          hasInstagram: !!page.instagram_business_account,
+          instagramHandle: page.instagram_business_account?.username ?? null,
         })
-        .eq("id", existing.id);
+        .where(eq(facebookPages.id, existing.id));
     } else {
-      await admin.from("facebook_pages").insert({
-        workspace_id: workspaceId,
-        page_id: page.id,
-        page_name: page.name,
-        has_instagram: !!page.instagram_business_account,
-        instagram_handle: page.instagram_business_account?.username || null,
+      await db.insert(facebookPages).values({
+        workspaceId,
+        pageId: page.id,
+        pageName: page.name,
+        hasInstagram: !!page.instagram_business_account,
+        instagramHandle: page.instagram_business_account?.username ?? null,
       });
     }
   }

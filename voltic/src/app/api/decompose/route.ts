@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
@@ -34,12 +34,9 @@ const decomposeSchema = z.object({
 
 export async function POST(request: Request) {
   // 1. Authenticate
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -59,7 +56,7 @@ export async function POST(request: Request) {
   const { data: member } = await admin
     .from("workspace_members")
     .select("workspace_id")
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .single();
 
   if (!member) {
@@ -149,7 +146,7 @@ export async function POST(request: Request) {
 
   const decompositionId = record.id;
 
-  trackServer("ad_decomposition_started", user.id, {
+  trackServer("ad_decomposition_started", userId, {
     source_type: body.source_type,
     source_id: body.source_id,
     generate_clean_image: body.generate_clean_image,
@@ -217,7 +214,7 @@ export async function POST(request: Request) {
 
     const durationMs = Date.now() - startTime;
 
-    trackServer("ad_decomposition_completed", user.id, {
+    trackServer("ad_decomposition_completed", userId, {
       decomposition_id: decompositionId,
       texts_found: result.texts.length,
       product_detected: result.product.detected,
@@ -252,7 +249,7 @@ export async function POST(request: Request) {
       })
       .eq("id", decompositionId);
 
-    trackServer("ad_decomposition_failed", user.id, {
+    trackServer("ad_decomposition_failed", userId, {
       decomposition_id: decompositionId,
       error: message,
     });

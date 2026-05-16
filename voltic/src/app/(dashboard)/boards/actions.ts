@@ -34,6 +34,9 @@ import { generateVariationText, generateVariationImage, generateAssetVariationIm
 import { enhanceCreativeText } from "@/lib/ai/creative-enhance";
 import { aiLimiter } from "@/lib/utils/rate-limit";
 import { VARIATION_CREDIT_COST, CREATIVE_ENHANCE_CREDIT_COST } from "@/types/variations";
+import { db } from "@/lib/db";
+import { savedAds } from "@/db/schema";
+import { eq, and } from "drizzle-orm";
 import type { Board, BoardWithAds, SavedAd } from "@/types/boards";
 import type { Variation, CreativeOptions } from "@/types/variations";
 import type { AdInsightData } from "@/types/discover";
@@ -245,14 +248,10 @@ export async function generateVariationsAction(
   // Fetch the saved ad only for competitor-based variations
   let savedAd: SavedAd | null = null;
   if (source === "competitor" && savedAdId) {
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const supabase = createAdminClient();
-    const { data: adRow } = await supabase
-      .from("saved_ads")
-      .select("*")
-      .eq("id", savedAdId)
-      .eq("workspace_id", workspace.id)
-      .single();
+    const [adRow] = await db
+      .select()
+      .from(savedAds)
+      .where(and(eq(savedAds.id, savedAdId), eq(savedAds.workspaceId, workspace.id)));
 
     if (!adRow) {
       const refund = await refundCredits(workspace.id, totalCost);
@@ -262,20 +261,20 @@ export async function generateVariationsAction(
 
     savedAd = {
       id: adRow.id,
-      boardId: adRow.board_id,
+      boardId: adRow.boardId,
       source: adRow.source,
-      metaLibraryId: adRow.meta_library_id,
-      brandName: adRow.brand_name,
+      metaLibraryId: adRow.metaLibraryId,
+      brandName: adRow.brandName,
       headline: adRow.headline,
       body: adRow.body,
       format: adRow.format,
-      imageUrl: adRow.image_url,
-      videoUrl: adRow.video_url,
-      landingPageUrl: adRow.landing_page_url,
+      imageUrl: adRow.imageUrl,
+      videoUrl: adRow.videoUrl,
+      landingPageUrl: adRow.landingPageUrl,
       platforms: adRow.platforms,
-      startDate: adRow.start_date,
-      runtimeDays: adRow.runtime_days,
-      createdAt: adRow.created_at,
+      startDate: adRow.startDate,
+      runtimeDays: adRow.runtimeDays,
+      createdAt: adRow.createdAt instanceof Date ? adRow.createdAt.toISOString() : adRow.createdAt,
     };
   }
 
@@ -477,20 +476,16 @@ export async function analyzeAdAction(
   if (!parsed.success) return { error: parsed.error.issues[0].message };
 
   // Fetch the saved ad
-  const { createAdminClient } = await import("@/lib/supabase/admin");
-  const supabase = createAdminClient();
-  const { data: adRow } = await supabase
-    .from("saved_ads")
-    .select("*")
-    .eq("id", parsed.data.savedAdId)
-    .eq("workspace_id", workspace.id)
-    .single();
+  const [adRow] = await db
+    .select()
+    .from(savedAds)
+    .where(and(eq(savedAds.id, parsed.data.savedAdId), eq(savedAds.workspaceId, workspace.id)));
 
   if (!adRow) return { error: "Ad not found" };
 
   // Check for cached insight
-  if (adRow.meta_library_id) {
-    const existing = await getExistingInsight(workspace.id, adRow.meta_library_id);
+  if (adRow.metaLibraryId) {
+    const existing = await getExistingInsight(workspace.id, adRow.metaLibraryId);
     if (existing) {
       return { data: existing.insights, cached: true };
     }
@@ -502,22 +497,22 @@ export async function analyzeAdAction(
 
   try {
     const insights = await generateAdInsights({
-      brandName: adRow.brand_name || "Unknown",
+      brandName: adRow.brandName || "Unknown",
       headline: adRow.headline || "",
       bodyText: adRow.body || "",
       format: adRow.format || "image",
       platforms: adRow.platforms || ["facebook"],
-      landingPageUrl: adRow.landing_page_url,
-      runtimeDays: adRow.runtime_days || 0,
+      landingPageUrl: adRow.landingPageUrl,
+      runtimeDays: adRow.runtimeDays || 0,
       isActive: true,
     });
 
     // Cache the result
-    if (adRow.meta_library_id) {
+    if (adRow.metaLibraryId) {
       await saveInsight(
         workspace.id,
-        adRow.meta_library_id,
-        adRow.brand_name || "Unknown",
+        adRow.metaLibraryId,
+        adRow.brandName || "Unknown",
         adRow.headline || "",
         adRow.body || "",
         adRow.format || "image",

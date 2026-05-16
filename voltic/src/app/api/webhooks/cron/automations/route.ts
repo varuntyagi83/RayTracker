@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { executeAutomation } from "@/lib/automations/executor";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import type { Automation, DayOfWeek } from "@/types/automation";
+import { db } from "@/lib/db";
+import { automations } from "@/db/schema";
+import { and, eq, inArray, isNull, lt, or } from "drizzle-orm";
 
 /**
  * Cron Endpoint: Execute Due Automations
@@ -22,35 +24,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-
   // Find all active automations
-  const { data: automations, error } = await admin
-    .from("automations")
-    .select("*")
-    .eq("status", "active")
-    .is("deleted_at", null);
-
-  if (error) {
+  let allAutomations: (typeof automations.$inferSelect)[];
+  try {
+    allAutomations = await db
+      .select()
+      .from(automations)
+      .where(eq(automations.status, "active"));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     // eslint-disable-next-line no-console
-    console.error("[cron] Failed to load automations:", error);
-    trackServer("automation_cron_error", "system", {
-      error: error.message,
-    });
+    console.error("[cron] Failed to load automations:", err);
+    trackServer("automation_cron_error", "system", { error: message });
     return NextResponse.json(
       { error: "Failed to load automations" },
       { status: 500 }
     );
   }
 
-  if (!automations || automations.length === 0) {
+  if (!allAutomations.length) {
     return NextResponse.json({ executed: 0, results: [] });
   }
 
   // Filter to automations that are due now
   const now = new Date();
-  const dueAutomations = (automations as Automation[]).filter((a) =>
-    isAutomationDue(a, now)
+  const dueAutomations = (allAutomations as unknown as Automation[]).filter(
+    (a) => isAutomationDue(a, now)
   );
 
   // Atomically claim due automations to prevent duplicate execution when two
@@ -58,14 +57,22 @@ export async function GET(request: NextRequest) {
   // The conditional WHERE (.or last_run_at IS NULL OR < cutoff) ensures only
   // one instance wins the UPDATE per automation — the other gets 0 rows back.
   const claimCutoff = new Date(now.getTime() - 55 * 60 * 1000);
-  const { data: claimed } = await admin
-    .from("automations")
-    .update({ last_run_at: now.toISOString() })
-    .in("id", dueAutomations.map((a) => a.id))
-    .or(`last_run_at.is.null,last_run_at.lt.${claimCutoff.toISOString()}`)
-    .select("id");
+  const dueIds = dueAutomations.map((a) => a.id);
 
-  const claimedIds = new Set((claimed ?? []).map((a) => a.id));
+  const claimed = dueIds.length
+    ? await db
+        .update(automations)
+        .set({ lastRunAt: now })
+        .where(
+          and(
+            inArray(automations.id, dueIds),
+            or(isNull(automations.lastRunAt), lt(automations.lastRunAt, claimCutoff))
+          )
+        )
+        .returning({ id: automations.id })
+    : [];
+
+  const claimedIds = new Set(claimed.map((a) => a.id));
   const automationsToRun = dueAutomations.filter((a) => claimedIds.has(a.id));
 
   // Execute due automations
@@ -82,13 +89,13 @@ export async function GET(request: NextRequest) {
   });
 
   trackServer("automation_cron_executed", "system", {
-    total: automations.length,
+    total: allAutomations.length,
     executed: automationsToRun.length,
   });
 
   return NextResponse.json({
     executed: automationsToRun.length,
-    total: automations.length,
+    total: allAutomations.length,
     results: summary,
   });
 }

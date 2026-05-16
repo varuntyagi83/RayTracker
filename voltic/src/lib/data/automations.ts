@@ -1,36 +1,59 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { automations } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import type { Automation } from "@/types/automation";
 
 export async function getAutomations(
   workspaceId: string
 ): Promise<Automation[]> {
-  const supabase = createAdminClient();
+  const rows = await db
+    .select()
+    .from(automations)
+    .where(eq(automations.workspaceId, workspaceId))
+    .orderBy(desc(automations.updatedAt));
 
-  const { data, error } = await supabase
-    .from("automations")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false });
-
-  if (error || !data) return [];
-
-  return data as Automation[];
+  return rows.map((r) => ({
+    id: r.id,
+    workspace_id: r.workspaceId,
+    name: r.name,
+    description: r.description ?? null,
+    type: r.type as Automation["type"],
+    status: r.status as Automation["status"],
+    config: r.config as Automation["config"],
+    schedule: r.schedule as Automation["schedule"],
+    delivery: r.delivery as Automation["delivery"],
+    classification: r.classification as Automation["classification"],
+    last_run_at: r.lastRunAt ? r.lastRunAt.toISOString() : null,
+    created_at: r.createdAt.toISOString(),
+    updated_at: r.updatedAt.toISOString(),
+  }));
 }
 
 export async function getAutomation(
   workspaceId: string,
   automationId: string
 ): Promise<Automation | null> {
-  const supabase = createAdminClient();
+  const [row] = await db
+    .select()
+    .from(automations)
+    .where(and(eq(automations.id, automationId), eq(automations.workspaceId, workspaceId)))
+    .limit(1);
 
-  const { data, error } = await supabase
-    .from("automations")
-    .select("*")
-    .eq("id", automationId)
-    .eq("workspace_id", workspaceId)
-    .single();
+  if (!row) return null;
 
-  if (error || !data) return null;
-
-  return data as Automation;
+  return {
+    id: row.id,
+    workspace_id: row.workspaceId,
+    name: row.name,
+    description: row.description ?? null,
+    type: row.type as Automation["type"],
+    status: row.status as Automation["status"],
+    config: row.config as Automation["config"],
+    schedule: row.schedule as Automation["schedule"],
+    delivery: row.delivery as Automation["delivery"],
+    classification: row.classification as Automation["classification"],
+    last_run_at: row.lastRunAt ? row.lastRunAt.toISOString() : null,
+    created_at: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
+  };
 }

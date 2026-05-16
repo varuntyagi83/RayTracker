@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { validateExtensionToken } from "@/lib/extension/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { authLimiter } from "@/lib/utils/rate-limit";
+import { db } from "@/lib/db";
+import { workspaces } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -34,12 +36,12 @@ export async function GET(req: NextRequest) {
   }
 
   // Fetch workspace info
-  const supabase = createAdminClient();
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("id, name, slug")
-    .eq("id", auth.workspaceId)
-    .single();
+  const workspace = await db
+    .select({ id: workspaces.id, name: workspaces.name, slug: workspaces.slug })
+    .from(workspaces)
+    .where(eq(workspaces.id, auth.workspaceId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
   if (!workspace) {
     return NextResponse.json(

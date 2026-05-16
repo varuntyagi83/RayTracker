@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { PostHogProvider } from "@/lib/analytics/posthog-provider";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,6 +33,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    <ClerkProvider
+      signInUrl="/login"
+      signUpUrl="/signup"
+      afterSignOutUrl="/login"
+    >
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -51,5 +57,6 @@ export default function RootLayout({
         <SpeedInsights />
       </body>
     </html>
+    </ClerkProvider>
   );
 }

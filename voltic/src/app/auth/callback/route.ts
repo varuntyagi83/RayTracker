@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { workspaceMembers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -16,19 +19,17 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error) {
-      // Refresh session to ensure cookies are fully propagated
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Get the authenticated user via Clerk after the code exchange
+      const { userId } = await auth();
 
-      if (user) {
+      if (userId) {
         // Check if this user already has a workspace
-        const admin = createAdminClient();
-        const { data: member } = await admin
-          .from("workspace_members")
-          .select("workspace_id")
-          .eq("user_id", user.id)
-          .single();
+        const member = await db
+          .select({ workspaceId: workspaceMembers.workspaceId })
+          .from(workspaceMembers)
+          .where(eq(workspaceMembers.userId, userId))
+          .limit(1)
+          .then((rows) => rows[0] ?? null);
 
         if (!member) {
           // New user confirmed email but has no workspace yet — send to signup

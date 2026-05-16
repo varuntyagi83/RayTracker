@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@clerk/nextjs/server";
 import { encryptToken } from "@/lib/utils/token-crypto";
+import { db } from "@/lib/db";
+import { workspaceMembers, workspaces } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 /**
  * Slack OAuth Callback
@@ -57,23 +59,19 @@ export async function GET(request: NextRequest) {
   }
 
   // Get current user
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId } = await auth();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const admin = createAdminClient();
-
   // Find user's workspace
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", user.id)
-    .single();
+  const member = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
 
   if (!member) {
     return NextResponse.redirect(
@@ -82,17 +80,18 @@ export async function GET(request: NextRequest) {
   }
 
   // Store Slack credentials on workspace (access token encrypted at rest — M-27)
-  const { error: updateError } = await admin
-    .from("workspaces")
-    .update({
-      slack_team_id: tokenData.team?.id ?? null,
-      slack_access_token: encryptToken(tokenData.access_token),
-      slack_team_name: tokenData.team?.name ?? null,
+  const updateResult = await db
+    .update(workspaces)
+    .set({
+      slackTeamId: tokenData.team?.id ?? null,
+      slackAccessToken: encryptToken(tokenData.access_token),
+      slackTeamName: tokenData.team?.name ?? null,
     })
-    .eq("id", member.workspace_id);
+    .where(eq(workspaces.id, member.workspaceId))
+    .returning({ id: workspaces.id });
 
-  if (updateError) {
-    console.error("[slack-oauth] Failed to store token:", updateError);
+  if (!updateResult.length) {
+    console.error("[slack-oauth] Failed to store token: no rows updated");
     return NextResponse.redirect(
       new URL("/automations?slack_error=save_failed", request.url)
     );

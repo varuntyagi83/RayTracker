@@ -1,4 +1,7 @@
-import { createAdminClient, ensureStorageBucket } from "@/lib/supabase/admin";
+import { uploadBrandAsset, deleteBrandAsset } from "@/lib/storage/brand-assets";
+import { db } from "@/lib/db";
+import { brandGuidelinesTable } from "@/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import type {
   BrandGuidelineEntity,
   BrandGuidelineInput,
@@ -6,8 +9,6 @@ import type {
   ColorSwatch,
   Typography,
 } from "@/types/brand-guidelines";
-
-const STORAGE_BUCKET = "brand-assets";
 
 // ─── Slug Generation ────────────────────────────────────────────────────────
 
@@ -20,23 +21,25 @@ function generateSlug(name: string): string {
 
 // ─── Row to Entity ──────────────────────────────────────────────────────────
 
-function rowToEntity(row: Record<string, unknown>): BrandGuidelineEntity {
+type BrandGuidelineRow = typeof brandGuidelinesTable.$inferSelect;
+
+function rowToEntity(row: BrandGuidelineRow): BrandGuidelineEntity {
   return {
-    id: row.id as string,
-    workspaceId: row.workspace_id as string,
-    name: row.name as string,
-    slug: row.slug as string,
-    brandName: row.brand_name as string | null,
-    brandVoice: row.brand_voice as string | null,
-    colorPalette: (row.color_palette as ColorSwatch[]) ?? [],
+    id: row.id,
+    workspaceId: row.workspaceId,
+    name: row.name,
+    slug: row.slug,
+    brandName: row.brandName,
+    brandVoice: row.brandVoice,
+    colorPalette: (row.colorPalette as ColorSwatch[]) ?? [],
     typography: (row.typography as Typography) ?? {},
-    targetAudience: row.target_audience as string | null,
-    dosAndDonts: row.dos_and_donts as string | null,
-    logoUrl: row.logo_url as string | null,
+    targetAudience: row.targetAudience,
+    dosAndDonts: row.dosAndDonts,
+    logoUrl: row.logoUrl,
     files: (row.files as BrandGuidelineFile[]) ?? [],
-    isDefault: row.is_default as boolean,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    isDefault: row.isDefault,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -45,15 +48,13 @@ function rowToEntity(row: Record<string, unknown>): BrandGuidelineEntity {
 export async function listBrandGuidelines(
   workspaceId: string
 ): Promise<BrandGuidelineEntity[]> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("brand_guidelines")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false });
+  const rows = await db
+    .select()
+    .from(brandGuidelinesTable)
+    .where(eq(brandGuidelinesTable.workspaceId, workspaceId))
+    .orderBy(desc(brandGuidelinesTable.updatedAt));
 
-  if (error || !data) return [];
-  return data.map(rowToEntity);
+  return rows.map(rowToEntity);
 }
 
 // ─── Get By ID ──────────────────────────────────────────────────────────────
@@ -62,16 +63,19 @@ export async function getBrandGuidelineById(
   workspaceId: string,
   id: string
 ): Promise<BrandGuidelineEntity | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("brand_guidelines")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("id", id)
-    .single();
+  const [row] = await db
+    .select()
+    .from(brandGuidelinesTable)
+    .where(
+      and(
+        eq(brandGuidelinesTable.workspaceId, workspaceId),
+        eq(brandGuidelinesTable.id, id)
+      )
+    )
+    .limit(1);
 
-  if (error || !data) return null;
-  return rowToEntity(data);
+  if (!row) return null;
+  return rowToEntity(row);
 }
 
 // ─── Get By Slug ────────────────────────────────────────────────────────────
@@ -80,16 +84,19 @@ export async function getBrandGuidelineBySlug(
   workspaceId: string,
   slug: string
 ): Promise<BrandGuidelineEntity | null> {
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("brand_guidelines")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("slug", slug)
-    .single();
+  const [row] = await db
+    .select()
+    .from(brandGuidelinesTable)
+    .where(
+      and(
+        eq(brandGuidelinesTable.workspaceId, workspaceId),
+        eq(brandGuidelinesTable.slug, slug)
+      )
+    )
+    .limit(1);
 
-  if (error || !data) return null;
-  return rowToEntity(data);
+  if (!row) return null;
+  return rowToEntity(row);
 }
 
 // ─── Get Default ────────────────────────────────────────────────────────────
@@ -97,26 +104,27 @@ export async function getBrandGuidelineBySlug(
 export async function getDefaultBrandGuideline(
   workspaceId: string
 ): Promise<BrandGuidelineEntity | null> {
-  const supabase = createAdminClient();
-
   // Try is_default = true first
-  const { data: defaultRow } = await supabase
-    .from("brand_guidelines")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("is_default", true)
-    .single();
+  const [defaultRow] = await db
+    .select()
+    .from(brandGuidelinesTable)
+    .where(
+      and(
+        eq(brandGuidelinesTable.workspaceId, workspaceId),
+        eq(brandGuidelinesTable.isDefault, true)
+      )
+    )
+    .limit(1);
 
   if (defaultRow) return rowToEntity(defaultRow);
 
   // Fall back to most recently updated
-  const { data: latest } = await supabase
-    .from("brand_guidelines")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false })
-    .limit(1)
-    .single();
+  const [latest] = await db
+    .select()
+    .from(brandGuidelinesTable)
+    .where(eq(brandGuidelinesTable.workspaceId, workspaceId))
+    .orderBy(desc(brandGuidelinesTable.updatedAt))
+    .limit(1);
 
   if (latest) return rowToEntity(latest);
   return null;
@@ -128,37 +136,42 @@ export async function createBrandGuideline(
   workspaceId: string,
   input: BrandGuidelineInput
 ): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createAdminClient();
   const slug = generateSlug(input.name);
 
-  // If setting as default, unset existing default
-  if (input.isDefault) {
-    await supabase
-      .from("brand_guidelines")
-      .update({ is_default: false })
-      .eq("workspace_id", workspaceId)
-      .eq("is_default", true);
+  try {
+    // If setting as default, unset existing default
+    if (input.isDefault) {
+      await db
+        .update(brandGuidelinesTable)
+        .set({ isDefault: false })
+        .where(
+          and(
+            eq(brandGuidelinesTable.workspaceId, workspaceId),
+            eq(brandGuidelinesTable.isDefault, true)
+          )
+        );
+    }
+
+    const [inserted] = await db
+      .insert(brandGuidelinesTable)
+      .values({
+        workspaceId,
+        name: input.name,
+        slug,
+        brandName: input.brandName ?? null,
+        brandVoice: input.brandVoice ?? null,
+        colorPalette: input.colorPalette ?? [],
+        typography: input.typography ?? {},
+        targetAudience: input.targetAudience ?? null,
+        dosAndDonts: input.dosAndDonts ?? null,
+        isDefault: input.isDefault ?? false,
+      })
+      .returning({ id: brandGuidelinesTable.id });
+
+    return { success: true, id: inserted.id };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
-
-  const { data, error } = await supabase
-    .from("brand_guidelines")
-    .insert({
-      workspace_id: workspaceId,
-      name: input.name,
-      slug,
-      brand_name: input.brandName ?? null,
-      brand_voice: input.brandVoice ?? null,
-      color_palette: input.colorPalette ?? [],
-      typography: input.typography ?? {},
-      target_audience: input.targetAudience ?? null,
-      dos_and_donts: input.dosAndDonts ?? null,
-      is_default: input.isDefault ?? false,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
 }
 
 // ─── Update ─────────────────────────────────────────────────────────────────
@@ -168,38 +181,49 @@ export async function updateBrandGuideline(
   id: string,
   input: Partial<BrandGuidelineInput>
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    // If setting as default, unset existing default
+    if (input.isDefault) {
+      await db
+        .update(brandGuidelinesTable)
+        .set({ isDefault: false })
+        .where(
+          and(
+            eq(brandGuidelinesTable.workspaceId, workspaceId),
+            eq(brandGuidelinesTable.isDefault, true)
+          )
+        );
+    }
 
-  // If setting as default, unset existing default
-  if (input.isDefault) {
-    await supabase
-      .from("brand_guidelines")
-      .update({ is_default: false })
-      .eq("workspace_id", workspaceId)
-      .eq("is_default", true);
+    const updates: Partial<typeof brandGuidelinesTable.$inferInsert> & { updatedAt: Date } = {
+      updatedAt: new Date(),
+    };
+    if (input.name !== undefined) {
+      updates.name = input.name;
+      updates.slug = generateSlug(input.name);
+    }
+    if (input.brandName !== undefined) updates.brandName = input.brandName;
+    if (input.brandVoice !== undefined) updates.brandVoice = input.brandVoice;
+    if (input.colorPalette !== undefined) updates.colorPalette = input.colorPalette;
+    if (input.typography !== undefined) updates.typography = input.typography;
+    if (input.targetAudience !== undefined) updates.targetAudience = input.targetAudience;
+    if (input.dosAndDonts !== undefined) updates.dosAndDonts = input.dosAndDonts;
+    if (input.isDefault !== undefined) updates.isDefault = input.isDefault;
+
+    await db
+      .update(brandGuidelinesTable)
+      .set(updates)
+      .where(
+        and(
+          eq(brandGuidelinesTable.workspaceId, workspaceId),
+          eq(brandGuidelinesTable.id, id)
+        )
+      );
+
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
-
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (input.name !== undefined) {
-    updates.name = input.name;
-    updates.slug = generateSlug(input.name);
-  }
-  if (input.brandName !== undefined) updates.brand_name = input.brandName;
-  if (input.brandVoice !== undefined) updates.brand_voice = input.brandVoice;
-  if (input.colorPalette !== undefined) updates.color_palette = input.colorPalette;
-  if (input.typography !== undefined) updates.typography = input.typography;
-  if (input.targetAudience !== undefined) updates.target_audience = input.targetAudience;
-  if (input.dosAndDonts !== undefined) updates.dos_and_donts = input.dosAndDonts;
-  if (input.isDefault !== undefined) updates.is_default = input.isDefault;
-
-  const { error } = await supabase
-    .from("brand_guidelines")
-    .update(updates)
-    .eq("workspace_id", workspaceId)
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
 }
 
 // ─── Delete ─────────────────────────────────────────────────────────────────
@@ -208,8 +232,6 @@ export async function deleteBrandGuideline(
   workspaceId: string,
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
   // Get the guideline to clean up storage files
   const guideline = await getBrandGuidelineById(workspaceId, id);
   if (!guideline) return { success: false, error: "Not found" };
@@ -217,23 +239,29 @@ export async function deleteBrandGuideline(
   // Clean up logo
   if (guideline.logoUrl) {
     const logoPath = `${workspaceId}/guidelines/${id}/logo`;
-    await supabase.storage.from(STORAGE_BUCKET).remove([logoPath]);
+    await deleteBrandAsset(logoPath).catch(() => {});
   }
 
   // Clean up files
   if (guideline.files.length > 0) {
-    const filePaths = guideline.files.map((f) => f.path);
-    await supabase.storage.from(STORAGE_BUCKET).remove(filePaths);
+    await Promise.all(
+      guideline.files.map((f) => deleteBrandAsset(f.path).catch(() => {}))
+    );
   }
 
-  const { error } = await supabase
-    .from("brand_guidelines")
-    .delete()
-    .eq("workspace_id", workspaceId)
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+  try {
+    await db
+      .delete(brandGuidelinesTable)
+      .where(
+        and(
+          eq(brandGuidelinesTable.workspaceId, workspaceId),
+          eq(brandGuidelinesTable.id, id)
+        )
+      );
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Set Default ────────────────────────────────────────────────────────────
@@ -242,24 +270,33 @@ export async function setDefaultBrandGuideline(
   workspaceId: string,
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
+  try {
+    // Unset existing default
+    await db
+      .update(brandGuidelinesTable)
+      .set({ isDefault: false })
+      .where(
+        and(
+          eq(brandGuidelinesTable.workspaceId, workspaceId),
+          eq(brandGuidelinesTable.isDefault, true)
+        )
+      );
 
-  // Unset existing default
-  await supabase
-    .from("brand_guidelines")
-    .update({ is_default: false })
-    .eq("workspace_id", workspaceId)
-    .eq("is_default", true);
+    // Set new default
+    await db
+      .update(brandGuidelinesTable)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(
+        and(
+          eq(brandGuidelinesTable.workspaceId, workspaceId),
+          eq(brandGuidelinesTable.id, id)
+        )
+      );
 
-  // Set new default
-  const { error } = await supabase
-    .from("brand_guidelines")
-    .update({ is_default: true, updated_at: new Date().toISOString() })
-    .eq("workspace_id", workspaceId)
-    .eq("id", id);
-
-  if (error) return { success: false, error: error.message };
-  return { success: true };
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 // ─── Upload Logo ────────────────────────────────────────────────────────────
@@ -271,28 +308,27 @@ export async function uploadBrandGuidelineLogo(
   fileBuffer: Buffer,
   contentType: string
 ): Promise<{ url?: string; error?: string }> {
-  await ensureStorageBucket();
-  const supabase = createAdminClient();
   // Sanitize filename — same pattern as studio/asset uploads (H-27)
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
   const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${safeFileName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, fileBuffer, { contentType, upsert: true });
-
-  if (uploadError) return { error: uploadError.message };
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+  let publicUrl: string;
+  try {
+    publicUrl = await uploadBrandAsset(storagePath, fileBuffer, contentType);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Upload failed" };
+  }
 
   // Update the guideline's logo_url
-  await supabase
-    .from("brand_guidelines")
-    .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
-    .eq("id", guidelineId)
-    .eq("workspace_id", workspaceId);
+  await db
+    .update(brandGuidelinesTable)
+    .set({ logoUrl: publicUrl, updatedAt: new Date() })
+    .where(
+      and(
+        eq(brandGuidelinesTable.id, guidelineId),
+        eq(brandGuidelinesTable.workspaceId, workspaceId)
+      )
+    );
 
   return { url: publicUrl };
 }
@@ -307,21 +343,16 @@ export async function uploadBrandGuidelineFile(
   contentType: string,
   fileSize: number
 ): Promise<{ file?: BrandGuidelineFile; error?: string }> {
-  await ensureStorageBucket();
-  const supabase = createAdminClient();
   // Sanitize filename — same pattern as studio/asset uploads (H-27)
   const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
   const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${safeFileName}`;
 
-  const { error: uploadError } = await supabase.storage
-    .from(STORAGE_BUCKET)
-    .upload(storagePath, fileBuffer, { contentType });
-
-  if (uploadError) return { error: uploadError.message };
-
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+  let publicUrl: string;
+  try {
+    publicUrl = await uploadBrandAsset(storagePath, fileBuffer, contentType);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Upload failed" };
+  }
 
   const newFile: BrandGuidelineFile = {
     name: fileName,
@@ -337,11 +368,15 @@ export async function uploadBrandGuidelineFile(
   if (!guideline) return { error: "Guideline not found" };
 
   const updatedFiles = [...guideline.files, newFile];
-  await supabase
-    .from("brand_guidelines")
-    .update({ files: updatedFiles, updated_at: new Date().toISOString() })
-    .eq("id", guidelineId)
-    .eq("workspace_id", workspaceId);
+  await db
+    .update(brandGuidelinesTable)
+    .set({ files: updatedFiles, updatedAt: new Date() })
+    .where(
+      and(
+        eq(brandGuidelinesTable.id, guidelineId),
+        eq(brandGuidelinesTable.workspaceId, workspaceId)
+      )
+    );
 
   return { file: newFile };
 }
@@ -358,8 +393,6 @@ export async function uploadBrandGuidelineFiles(
     fileSize: number;
   }>
 ): Promise<{ files: BrandGuidelineFile[]; errors: string[] }> {
-  await ensureStorageBucket();
-  const supabase = createAdminClient();
   const errors: string[] = [];
 
   // Upload all files to storage in parallel
@@ -369,18 +402,13 @@ export async function uploadBrandGuidelineFiles(
       const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
       const storagePath = `${workspaceId}/guidelines/${guidelineId}/${Date.now()}-${safeFileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(storagePath, fileBuffer, { contentType });
-
-      if (uploadError) {
-        errors.push(`${fileName}: ${uploadError.message}`);
+      let publicUrl: string;
+      try {
+        publicUrl = await uploadBrandAsset(storagePath, fileBuffer, contentType);
+      } catch (err) {
+        errors.push(`${fileName}: ${err instanceof Error ? err.message : "Upload failed"}`);
         return null;
       }
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
 
       return {
         name: safeFileName,
@@ -400,11 +428,15 @@ export async function uploadBrandGuidelineFiles(
     const guideline = await getBrandGuidelineById(workspaceId, guidelineId);
     if (guideline) {
       const updatedFiles = [...guideline.files, ...newFiles];
-      await supabase
-        .from("brand_guidelines")
-        .update({ files: updatedFiles, updated_at: new Date().toISOString() })
-        .eq("id", guidelineId)
-        .eq("workspace_id", workspaceId);
+      await db
+        .update(brandGuidelinesTable)
+        .set({ files: updatedFiles, updatedAt: new Date() })
+        .where(
+          and(
+            eq(brandGuidelinesTable.id, guidelineId),
+            eq(brandGuidelinesTable.workspaceId, workspaceId)
+          )
+        );
     }
   }
 
@@ -418,21 +450,23 @@ export async function deleteBrandGuidelineFile(
   guidelineId: string,
   filePath: string
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createAdminClient();
-
   // Remove from storage
-  await supabase.storage.from(STORAGE_BUCKET).remove([filePath]);
+  await deleteBrandAsset(filePath).catch(() => {});
 
   // Remove from files array
   const guideline = await getBrandGuidelineById(workspaceId, guidelineId);
   if (!guideline) return { success: false, error: "Guideline not found" };
 
   const updatedFiles = guideline.files.filter((f) => f.path !== filePath);
-  await supabase
-    .from("brand_guidelines")
-    .update({ files: updatedFiles, updated_at: new Date().toISOString() })
-    .eq("id", guidelineId)
-    .eq("workspace_id", workspaceId);
+  await db
+    .update(brandGuidelinesTable)
+    .set({ files: updatedFiles, updatedAt: new Date() })
+    .where(
+      and(
+        eq(brandGuidelinesTable.id, guidelineId),
+        eq(brandGuidelinesTable.workspaceId, workspaceId)
+      )
+    );
 
   return { success: true };
 }
