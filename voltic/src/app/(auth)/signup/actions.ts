@@ -1,43 +1,35 @@
 "use server";
 
 import { z } from "zod";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { workspaceMembers, workspaces } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const createWorkspaceSchema = z.object({
   workspaceName: z.string().min(1, "Workspace name is required").max(100).trim(),
-  userId: z.string().uuid("Invalid user ID"),
 });
 
-export async function createWorkspace(workspaceName: string, userId: string) {
-  const parsed = createWorkspaceSchema.safeParse({ workspaceName, userId });
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0].message };
-  }
-
-  // Use admin client for auth calls only (bypasses RLS)
-  const admin = createAdminClient();
-
-  // Verify the user actually exists in Supabase Auth
-  const { data: authUser, error: authError } = await admin.auth.admin.getUserById(parsed.data.userId);
-  if (authError || !authUser?.user) {
+export async function createWorkspace(workspaceName: string) {
+  const { userId } = await auth();
+  if (!userId) {
     return { error: "Not authenticated" };
   }
 
-  const user = authUser.user;
+  const parsed = createWorkspaceSchema.safeParse({ workspaceName });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0].message };
+  }
 
   // Check if user already has a workspace (prevent duplicates on retry)
   const existingMember = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
-    .where(eq(workspaceMembers.userId, user.id))
+    .where(eq(workspaceMembers.userId, userId))
     .limit(1)
     .then((rows) => rows[0] ?? null);
 
   if (existingMember) {
-    // User already has a workspace — just succeed silently
     return { error: null };
   }
 
@@ -61,7 +53,7 @@ export async function createWorkspace(workspaceName: string, userId: string) {
   try {
     await db.insert(workspaceMembers).values({
       workspaceId: newWorkspace.id,
-      userId: user.id,
+      userId,
       role: "owner",
     });
   } catch (err) {
