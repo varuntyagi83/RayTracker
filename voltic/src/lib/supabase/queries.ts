@@ -1,10 +1,9 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser as clerkCurrentUser } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaces, workspaceMembers } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Workspace } from "@/lib/hooks/use-workspace";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 const WORKSPACE_COOKIE = "voltic-active-workspace";
 
@@ -38,35 +37,10 @@ export async function getWorkspaces(): Promise<Workspace[]> {
   const { userId } = await auth();
   if (!userId) return [];
 
-  let members = await db
+  const members = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
     .where(eq(workspaceMembers.userId, userId));
-
-  // First-login migration: Clerk ID won't match old Supabase UUID.
-  // Look up by email in Supabase, migrate all rows for that user in one pass.
-  if (members.length === 0) {
-    const clerkUser = await currentUser();
-    const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
-    if (email) {
-      const supabase = createAdminClient();
-      const { data: supabaseUser } = await supabase.auth.admin.getUserByEmail(email);
-      if (supabaseUser?.user?.id) {
-        const oldUuid = supabaseUser.user.id;
-        const legacyMembers = await db
-          .select({ workspaceId: workspaceMembers.workspaceId })
-          .from(workspaceMembers)
-          .where(eq(workspaceMembers.userId, oldUuid));
-        if (legacyMembers.length > 0) {
-          await db
-            .update(workspaceMembers)
-            .set({ userId })
-            .where(eq(workspaceMembers.userId, oldUuid));
-          members = legacyMembers;
-        }
-      }
-    }
-  }
 
   if (members.length === 0) return [];
 
@@ -108,7 +82,7 @@ export async function getWorkspace(): Promise<Workspace | null> {
 export async function getUser() {
   const { userId } = await auth();
   if (!userId) return null;
-  const clerkUser = await currentUser();
+  const clerkUser = await clerkCurrentUser();
   const email = clerkUser?.emailAddresses?.[0]?.emailAddress ?? "";
   return { id: userId, email };
 }

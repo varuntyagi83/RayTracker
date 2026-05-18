@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { adDecompositions } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 import { createAsset } from "@/lib/data/assets";
 import { trackServer } from "@/lib/analytics/posthog-server";
 
@@ -10,94 +13,56 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  // 1. Authenticate
   const { userId } = await auth();
-
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-
-  // 2. Get workspace
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .single();
-
-  if (!member) {
+  const workspace = await getWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
   }
+  const workspaceId = workspace.id;
 
-  const workspaceId = member.workspace_id;
+  const [decomposition] = await db
+    .select({
+      id: adDecompositions.id,
+      processingStatus: adDecompositions.processingStatus,
+      cleanImageUrl: adDecompositions.cleanImageUrl,
+      productAnalysis: adDecompositions.productAnalysis,
+      sourceImageUrl: adDecompositions.sourceImageUrl,
+    })
+    .from(adDecompositions)
+    .where(and(eq(adDecompositions.id, id), eq(adDecompositions.workspaceId, workspaceId)))
+    .limit(1);
 
-  // 3. Fetch decomposition (must be completed with clean_image_url)
-  const { data: decomposition, error } = await admin
-    .from("ad_decompositions")
-    .select(
-      "id, processing_status, clean_image_url, product_analysis, source_image_url"
-    )
-    .eq("id", id)
-    .eq("workspace_id", workspaceId)
-    .single();
-
-  if (error || !decomposition) {
-    return NextResponse.json(
-      { error: "Decomposition not found" },
-      { status: 404 }
-    );
+  if (!decomposition) {
+    return NextResponse.json({ error: "Decomposition not found" }, { status: 404 });
   }
 
-  if (decomposition.processing_status !== "completed") {
-    return NextResponse.json(
-      { error: "Decomposition is not completed yet" },
-      { status: 400 }
-    );
+  if (decomposition.processingStatus !== "completed") {
+    return NextResponse.json({ error: "Decomposition is not completed yet" }, { status: 400 });
   }
 
-  // Use clean image if available, otherwise fall back to source image
-  const imageUrl =
-    decomposition.clean_image_url ?? decomposition.source_image_url;
-
+  const imageUrl = decomposition.cleanImageUrl ?? decomposition.sourceImageUrl;
   if (!imageUrl) {
-    return NextResponse.json(
-      { error: "No image URL available for this decomposition" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "No image URL available for this decomposition" }, { status: 400 });
   }
 
-  // 4. Extract product info for asset name/description
-  const product = decomposition.product_analysis as {
-    description?: string;
-    detected?: boolean;
-  };
-  const name = product?.description
-    ? product.description.slice(0, 100)
-    : "Extracted product image";
-  const description = `Extracted from ad decomposition${
-    decomposition.clean_image_url ? " (marketing text removed)" : ""
-  }`;
+  const product = decomposition.productAnalysis as { description?: string; detected?: boolean };
+  const name = product?.description ? product.description.slice(0, 100) : "Extracted product image";
+  const description = `Extracted from ad decomposition${decomposition.cleanImageUrl ? " (marketing text removed)" : ""}`;
 
-  // 5. Create asset using existing data layer
   const result = await createAsset(workspaceId, name, imageUrl, description);
-
   if (!result.success) {
-    return NextResponse.json(
-      { error: result.error ?? "Failed to create asset" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: result.error ?? "Failed to create asset" }, { status: 500 });
   }
 
   trackServer("decomposition_saved_as_asset", userId, {
     decomposition_id: id,
     asset_id: result.id!,
-    has_clean_image: !!decomposition.clean_image_url,
+    has_clean_image: !!decomposition.cleanImageUrl,
   });
 
-  return NextResponse.json({
-    asset_id: result.id,
-    name,
-    image_url: imageUrl,
-  });
+  return NextResponse.json({ asset_id: result.id, name, image_url: imageUrl });
 }

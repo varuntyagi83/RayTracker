@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe/client";
 import { addCredits } from "@/lib/data/credits";
 import { trackServer } from "@/lib/analytics/posthog-server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { creditTransactions } from "@/db/schema";
+import { sql } from "drizzle-orm";
 
 /**
  * POST /api/webhooks/stripe
@@ -15,21 +17,14 @@ export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
 
   if (!signature) {
-    return NextResponse.json(
-      { error: "Missing stripe-signature header" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing stripe-signature header" }, { status: 400 });
   }
 
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!webhookSecret) {
-    return NextResponse.json(
-      { error: "Webhook secret not configured" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Webhook secret not configured" }, { status: 500 });
   }
 
-  // Verify signature
   const stripe = getStripe();
   let event;
 
@@ -43,24 +38,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Handle events
   switch (event.type) {
     case "checkout.session.completed": {
       const session = event.data.object;
       const metadata = session.metadata;
 
       if (!metadata?.workspace_id || !metadata?.credits) {
-        // ALERT: session paid but metadata is missing — credits cannot be applied.
-        // Return 200 so Stripe stops retrying; investigate via console logs / PostHog.
         console.error("[stripe-webhook] ALERT: Missing metadata on checkout.session.completed", {
           session_id: session.id,
           has_workspace_id: !!metadata?.workspace_id,
           has_credits: !!metadata?.credits,
         });
-        trackServer("stripe_webhook_missing_metadata", "system", {
-          session_id: session.id,
-          alert: true,
-        });
+        trackServer("stripe_webhook_missing_metadata", "system", { session_id: session.id, alert: true });
         return NextResponse.json({ received: true });
       }
 
@@ -69,7 +58,6 @@ export async function POST(request: NextRequest) {
       const packageId = metadata.package_id || "unknown";
       const userId = metadata.user_id || "unknown";
 
-      // Guard against corrupted metadata — parseInt returns NaN on non-numeric strings
       if (!Number.isFinite(credits) || credits <= 0) {
         console.error("[stripe-webhook] Invalid credits value in metadata:", {
           raw: metadata.credits,
@@ -79,23 +67,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Invalid credits metadata" }, { status: 400 });
       }
 
-      // Idempotency guard: if this session was already processed, skip.
-      // Stripe retries webhooks on 5xx — without this, credits would be
-      // added multiple times for a single purchase.
-      const admin = createAdminClient();
-      const { data: existing } = await admin
-        .from("credit_transactions")
-        .select("id")
-        .eq("reference_id", session.id)
-        .limit(1)
-        .single();
+      // Idempotency guard: skip if this session was already processed.
+      // reference_id is UUID in schema; use text cast to compare Stripe session IDs.
+      const [existing] = await db
+        .select({ id: creditTransactions.id })
+        .from(creditTransactions)
+        .where(sql`${creditTransactions.referenceId}::text = ${session.id}`)
+        .limit(1);
 
       if (existing) {
-        // Already processed — return 200 so Stripe stops retrying
         break;
       }
 
-      // Add credits to workspace, storing session.id as reference_id
       const result = await addCredits(
         workspaceId,
         credits,
@@ -113,16 +96,12 @@ export async function POST(request: NextRequest) {
           amount: session.amount_total ? session.amount_total / 100 : 0,
         });
       } else {
-        trackServer("credits_purchase_failed", userId, {
-          workspace_id: workspaceId,
-          error: result.error,
-        });
+        trackServer("credits_purchase_failed", userId, { workspace_id: workspaceId, error: result.error });
       }
       break;
     }
 
     default:
-      // Ignore other event types
       break;
   }
 

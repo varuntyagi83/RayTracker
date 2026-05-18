@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { adDecompositions } from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits } from "@/lib/data/insights";
@@ -21,14 +24,11 @@ const batchSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // 1. Authenticate
   const { userId } = await auth();
-
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. Parse & validate
   let body: z.infer<typeof batchSchema>;
   try {
     const raw = await request.json();
@@ -38,47 +38,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const admin = createAdminClient();
-
-  // 3. Get workspace
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .single();
-
-  if (!member) {
+  const workspace = await getWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
   }
+  const workspaceId = workspace.id;
 
-  const workspaceId = member.workspace_id;
+  const existingDecomps = await db
+    .select({ id: adDecompositions.id, sourceImageUrl: adDecompositions.sourceImageUrl })
+    .from(adDecompositions)
+    .where(
+      and(
+        eq(adDecompositions.workspaceId, workspaceId),
+        eq(adDecompositions.processingStatus, "completed"),
+        inArray(adDecompositions.sourceImageUrl, body.image_urls)
+      )
+    );
 
-  // 4. Filter out already-cached images
-  const { data: existingDecomps } = await admin
-    .from("ad_decompositions")
-    .select("id, source_image_url")
-    .eq("workspace_id", workspaceId)
-    .eq("processing_status", "completed")
-    .in("source_image_url", body.image_urls);
-
-  const cachedUrls = new Set(
-    (existingDecomps ?? []).map((d) => d.source_image_url)
-  );
+  const cachedUrls = new Set(existingDecomps.map((d) => d.sourceImageUrl));
   const newUrls = body.image_urls.filter((url) => !cachedUrls.has(url));
 
-  // 5. Calculate credit cost for new images only
   const perImageCost =
     DECOMPOSITION_ANALYSIS_COST +
     (body.generate_clean_images ? DECOMPOSITION_CLEAN_IMAGE_COST : 0);
   const totalCost = newUrls.length * perImageCost;
 
   if (totalCost > 0) {
-    const creditResult = await checkAndDeductCredits(
-      workspaceId,
-      totalCost,
-      "decomposition"
-    );
-
+    const creditResult = await checkAndDeductCredits(workspaceId, totalCost, "decomposition");
     if (!creditResult.success) {
       return NextResponse.json(
         { error: creditResult.error ?? "Insufficient credits" },
@@ -92,7 +78,6 @@ export async function POST(request: Request) {
     total_credits: totalCost,
   });
 
-  // 6. Process each new image
   const results: Array<{
     image_url: string;
     decomposition_id: string;
@@ -101,39 +86,29 @@ export async function POST(request: Request) {
     error?: string;
   }> = [];
 
-  // Add cached results
-  for (const decomp of existingDecomps ?? []) {
+  for (const decomp of existingDecomps) {
     results.push({
-      image_url: decomp.source_image_url,
+      image_url: decomp.sourceImageUrl,
       decomposition_id: decomp.id,
       cached: true,
       status: "completed",
     });
   }
 
-  // Process new images sequentially to avoid rate limits
   for (const imageUrl of newUrls) {
-    // Create pending record
-    const { data: record, error: insertErr } = await admin
-      .from("ad_decompositions")
-      .insert({
-        workspace_id: workspaceId,
-        source_image_url: imageUrl,
-        source_type: body.source_type,
-        processing_status: "analyzing",
-        credits_used: perImageCost,
+    const [record] = await db
+      .insert(adDecompositions)
+      .values({
+        workspaceId,
+        sourceImageUrl: imageUrl,
+        sourceType: body.source_type,
+        processingStatus: "analyzing",
+        creditsUsed: perImageCost,
       })
-      .select("id")
-      .single();
+      .returning({ id: adDecompositions.id });
 
-    if (insertErr || !record) {
-      results.push({
-        image_url: imageUrl,
-        decomposition_id: "",
-        cached: false,
-        status: "failed",
-        error: "Failed to create record",
-      });
+    if (!record) {
+      results.push({ image_url: imageUrl, decomposition_id: "", cached: false, status: "failed", error: "Failed to create record" });
       continue;
     }
 
@@ -146,18 +121,9 @@ export async function POST(request: Request) {
         try {
           const overlayTexts = decomResult.texts.filter((t) => t.type !== "brand");
           const marketingTexts = overlayTexts.map((t) => t.content);
-          const boundingBoxes = overlayTexts
-            .filter((t) => t.bounding_box)
-            .map((t) => t.bounding_box!);
-
+          const boundingBoxes = overlayTexts.filter((t) => t.bounding_box).map((t) => t.bounding_box!);
           if (marketingTexts.length > 0 && boundingBoxes.length > 0) {
-            cleanImageUrl = await generateCleanProductImage(
-              imageBuffer,
-              marketingTexts,
-              boundingBoxes,
-              workspaceId,
-              record.id
-            );
+            cleanImageUrl = await generateCleanProductImage(imageBuffer, marketingTexts, boundingBoxes, workspaceId, record.id);
           } else {
             cleanImageUrl = imageUrl;
           }
@@ -166,54 +132,36 @@ export async function POST(request: Request) {
         }
       }
 
-      await admin
-        .from("ad_decompositions")
-        .update({
-          extracted_texts: decomResult.texts,
-          product_analysis: decomResult.product,
-          background_analysis: decomResult.background,
-          layout_analysis: decomResult.layout,
-          clean_image_url: cleanImageUrl,
-          processing_status: "completed",
-          updated_at: new Date().toISOString(),
+      await db
+        .update(adDecompositions)
+        .set({
+          extractedTexts: decomResult.texts,
+          productAnalysis: decomResult.product,
+          backgroundAnalysis: decomResult.background,
+          layoutAnalysis: decomResult.layout,
+          cleanImageUrl,
+          processingStatus: "completed",
+          updatedAt: new Date(),
         })
-        .eq("id", record.id);
+        .where(eq(adDecompositions.id, record.id));
 
-      results.push({
-        image_url: imageUrl,
-        decomposition_id: record.id,
-        cached: false,
-        status: "completed",
-      });
+      results.push({ image_url: imageUrl, decomposition_id: record.id, cached: false, status: "completed" });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      await admin
-        .from("ad_decompositions")
-        .update({
-          processing_status: "failed",
-          error_message: message,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", record.id);
+      await db
+        .update(adDecompositions)
+        .set({ processingStatus: "failed", errorMessage: message, updatedAt: new Date() })
+        .where(eq(adDecompositions.id, record.id));
 
-      results.push({
-        image_url: imageUrl,
-        decomposition_id: record.id,
-        cached: false,
-        status: "failed",
-        error: message,
-      });
+      results.push({ image_url: imageUrl, decomposition_id: record.id, cached: false, status: "failed", error: message });
     }
   }
 
-  const completed = results.filter((r) => r.status === "completed").length;
-  const failed = results.filter((r) => r.status === "failed").length;
-
   return NextResponse.json({
     total: results.length,
-    completed,
-    failed,
+    completed: results.filter((r) => r.status === "completed").length,
+    failed: results.filter((r) => r.status === "failed").length,
     cached: results.filter((r) => r.cached).length,
     results,
   });

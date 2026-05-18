@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getWorkspace } from "@/lib/supabase/queries";
 import crypto from "crypto";
 
 /**
@@ -11,22 +11,13 @@ import crypto from "crypto";
  */
 export async function GET(request: NextRequest) {
   const { userId } = await auth();
-
   if (!userId) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .single();
-
-  if (!member) {
-    return NextResponse.redirect(
-      new URL("/settings?meta_error=no_workspace", request.url)
-    );
+  const workspace = await getWorkspace();
+  if (!workspace) {
+    return NextResponse.redirect(new URL("/settings?meta_error=no_workspace", request.url));
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
@@ -35,21 +26,12 @@ export async function GET(request: NextRequest) {
   const metaAuthUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
   metaAuthUrl.searchParams.set("client_id", process.env.META_APP_ID!);
   metaAuthUrl.searchParams.set("redirect_uri", redirectUri);
-  // OAuth scopes:
-  //   ads_read        — Read ad accounts, campaigns, and creatives for analytics
-  //   read_insights   — Access campaign metrics (spend, revenue, impressions, etc.)
-  //   pages_show_list — List Facebook Pages for comment monitoring automations
-  metaAuthUrl.searchParams.set(
-    "scope",
-    "ads_read,read_insights,pages_show_list"
-  );
-  // Generate a random nonce as state (M-25 fix — mirrors Slack OAuth pattern)
+  metaAuthUrl.searchParams.set("scope", "ads_read,read_insights,pages_show_list");
   const oauthState = crypto.randomUUID();
   metaAuthUrl.searchParams.set("state", oauthState);
   metaAuthUrl.searchParams.set("response_type", "code");
 
   const response = NextResponse.redirect(metaAuthUrl.toString());
-  // Store nonce in httpOnly cookie (10 min TTL) for CSRF validation in callback
   response.cookies.set("meta_oauth_state", oauthState, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

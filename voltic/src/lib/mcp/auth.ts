@@ -1,44 +1,39 @@
 import { createHash, randomBytes } from "crypto";
-import { createAdminClient } from "@/lib/supabase/admin";
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnySupabaseClient = any;
+import { db } from "@/lib/db";
+import { mcpApiKeys } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function resolveWorkspaceFromApiKey(apiKey: string): Promise<{
   workspaceId: string;
   scopes: string[];
 } | null> {
   const keyHash = createHash("sha256").update(apiKey).digest("hex");
-  const admin = createAdminClient() as AnySupabaseClient;
 
-  const { data } = (await admin
-    .from("mcp_api_keys")
-    .select("workspace_id, scopes, is_active, expires_at")
-    .eq("key_hash", keyHash)
-    .single()) as {
-    data: {
-      workspace_id: string;
-      scopes: string[] | null;
-      is_active: boolean;
-      expires_at: string | null;
-    } | null;
-    error: unknown;
-  };
+  const [data] = await db
+    .select({
+      workspaceId: mcpApiKeys.workspaceId,
+      scopes: mcpApiKeys.scopes,
+      isActive: mcpApiKeys.isActive,
+      expiresAt: mcpApiKeys.expiresAt,
+      keyHash: mcpApiKeys.keyHash,
+    })
+    .from(mcpApiKeys)
+    .where(eq(mcpApiKeys.keyHash, keyHash))
+    .limit(1);
 
-  if (!data || !data.is_active) return null;
-  if (data.expires_at && new Date(data.expires_at) < new Date()) return null;
+  if (!data || !data.isActive) return null;
+  if (data.expiresAt && new Date(data.expiresAt) < new Date()) return null;
 
   // Update last_used_at (fire-and-forget)
-  admin
-    .from("mcp_api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("key_hash", keyHash)
+  db.update(mcpApiKeys)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(mcpApiKeys.keyHash, keyHash))
     .then(() => {})
     .catch((err: unknown) => {
       console.error("[mcp-auth] Failed to update last_used_at:", err);
     });
 
-  return { workspaceId: data.workspace_id, scopes: data.scopes ?? [] };
+  return { workspaceId: data.workspaceId, scopes: data.scopes ?? [] };
 }
 
 export function generateApiKey(): string {

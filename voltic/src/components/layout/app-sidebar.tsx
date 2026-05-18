@@ -51,7 +51,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useWorkspace } from "@/lib/hooks/use-workspace";
-import { createClient } from "@/lib/supabase/client";
+import { useClerk } from "@clerk/nextjs";
 import { track } from "@/lib/analytics/events";
 import { resetPostHog } from "@/lib/analytics/posthog-provider";
 
@@ -88,6 +88,7 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { workspace, allWorkspaces } = useWorkspace();
+  const { signOut } = useClerk();
 
   const initial = workspace.name.charAt(0).toUpperCase();
 
@@ -112,10 +113,7 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
   async function handleLogout() {
     track("user_logged_out");
     resetPostHog();
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
+    await signOut({ redirectUrl: "/login" });
   }
 
   return (

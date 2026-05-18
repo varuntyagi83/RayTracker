@@ -1,5 +1,7 @@
 import { verifyToken } from "@clerk/backend";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { workspaceMembers } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 interface ExtensionAuthResult {
   valid: boolean;
@@ -12,9 +14,7 @@ interface ExtensionAuthResult {
  * Validates a Clerk session token from the Chrome extension.
  * Returns the user ID and their workspace ID if valid.
  */
-export async function validateExtensionToken(
-  token: string
-): Promise<ExtensionAuthResult> {
+export async function validateExtensionToken(token: string): Promise<ExtensionAuthResult> {
   let userId: string;
 
   try {
@@ -26,21 +26,15 @@ export async function validateExtensionToken(
     return { valid: false, error: "Invalid or expired token" };
   }
 
-  // Look up workspace membership
-  const admin = createAdminClient();
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .single();
+  const [member] = await db
+    .select({ workspaceId: workspaceMembers.workspaceId })
+    .from(workspaceMembers)
+    .where(eq(workspaceMembers.userId, userId))
+    .limit(1);
 
   if (!member) {
     return { valid: false, error: "User has no workspace" };
   }
 
-  return {
-    valid: true,
-    userId,
-    workspaceId: member.workspace_id,
-  };
+  return { valid: true, userId, workspaceId: member.workspaceId };
 }

@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { adDecompositions } from "@/db/schema";
+import { and, eq } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 import type { ExtractedText, TextType } from "@/types/decomposition";
 
-/** Maps decomposition text types to Creative Builder roles */
 function mapTextRole(type: TextType): "headline" | "body" {
   switch (type) {
     case "headline":
       return "headline";
-    case "subheadline":
-    case "body":
-    case "cta":
-    case "legal":
-      return "body";
     default:
       return "body";
   }
@@ -24,50 +21,35 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // 1. Authenticate
   const { userId } = await auth();
-
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createAdminClient();
-
-  // 2. Get workspace
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .single();
-
-  if (!member) {
+  const workspace = await getWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
   }
 
-  // 3. Fetch decomposition
-  const { data: decomposition, error } = await admin
-    .from("ad_decompositions")
-    .select("id, processing_status, extracted_texts")
-    .eq("id", id)
-    .eq("workspace_id", member.workspace_id)
-    .single();
+  const [decomposition] = await db
+    .select({
+      id: adDecompositions.id,
+      processingStatus: adDecompositions.processingStatus,
+      extractedTexts: adDecompositions.extractedTexts,
+    })
+    .from(adDecompositions)
+    .where(and(eq(adDecompositions.id, id), eq(adDecompositions.workspaceId, workspace.id)))
+    .limit(1);
 
-  if (error || !decomposition) {
-    return NextResponse.json(
-      { error: "Decomposition not found" },
-      { status: 404 }
-    );
+  if (!decomposition) {
+    return NextResponse.json({ error: "Decomposition not found" }, { status: 404 });
   }
 
-  if (decomposition.processing_status !== "completed") {
-    return NextResponse.json(
-      { error: "Decomposition is not completed yet" },
-      { status: 400 }
-    );
+  if (decomposition.processingStatus !== "completed") {
+    return NextResponse.json({ error: "Decomposition is not completed yet" }, { status: 400 });
   }
 
-  // 4. Filter to marketing-only texts (exclude product/packaging text)
-  const allTexts = decomposition.extracted_texts as ExtractedText[];
+  const allTexts = decomposition.extractedTexts as ExtractedText[];
   const marketingTexts = allTexts
     .filter((t) => t.type !== "brand")
     .map((t) => ({
@@ -79,8 +61,5 @@ export async function GET(
       confidence: t.confidence,
     }));
 
-  return NextResponse.json({
-    decomposition_id: id,
-    texts: marketingTexts,
-  });
+  return NextResponse.json({ decomposition_id: id, texts: marketingTexts });
 }

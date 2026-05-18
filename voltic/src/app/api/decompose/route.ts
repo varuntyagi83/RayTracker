@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@clerk/nextjs/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { db } from "@/lib/db";
+import { adDecompositions } from "@/db/schema";
+import { and, eq, desc } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits, refundCredits } from "@/lib/data/insights";
@@ -16,8 +19,6 @@ function isPublicUrl(rawUrl: string): boolean {
   try {
     const { protocol, hostname } = new URL(rawUrl);
     if (protocol !== "https:") return false;
-    // Block loopback, private ranges, and cloud metadata endpoints.
-    // 169.254.x.x covers AWS IMDSv1 (169.254.169.254) and GCP metadata.
     const BLOCKED = /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1|0\.0\.0\.0)/i;
     return !BLOCKED.test(hostname);
   } catch {
@@ -33,14 +34,11 @@ const decomposeSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // 1. Authenticate
   const { userId } = await auth();
-
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. Parse & validate body
   let body: z.infer<typeof decomposeSchema>;
   try {
     const raw = await request.json();
@@ -50,72 +48,62 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  const admin = createAdminClient();
-
-  // 3. Get workspace
-  const { data: member } = await admin
-    .from("workspace_members")
-    .select("workspace_id")
-    .eq("user_id", userId)
-    .single();
-
-  if (!member) {
+  const workspace = await getWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
   }
+  const workspaceId = workspace.id;
 
-  const workspaceId = member.workspace_id;
-
-  // 4. Check for cached result (same image URL + workspace)
-  // Use .limit(1) instead of .single() — .single() errors when multiple completed
-  // records exist (from past re-decomposition attempts), causing cache misses.
-  const { data: cachedRows } = await admin
-    .from("ad_decompositions")
-    .select("id, processing_status, extracted_texts, product_analysis, background_analysis, layout_analysis, clean_image_url")
-    .eq("workspace_id", workspaceId)
-    .eq("source_image_url", body.image_url)
-    .eq("processing_status", "completed")
-    .order("created_at", { ascending: false })
+  // Check cache: same image URL already decomposed in this workspace
+  const [cached] = await db
+    .select({
+      id: adDecompositions.id,
+      processingStatus: adDecompositions.processingStatus,
+      extractedTexts: adDecompositions.extractedTexts,
+      productAnalysis: adDecompositions.productAnalysis,
+      backgroundAnalysis: adDecompositions.backgroundAnalysis,
+      layoutAnalysis: adDecompositions.layoutAnalysis,
+      cleanImageUrl: adDecompositions.cleanImageUrl,
+    })
+    .from(adDecompositions)
+    .where(
+      and(
+        eq(adDecompositions.workspaceId, workspaceId),
+        eq(adDecompositions.sourceImageUrl, body.image_url),
+        eq(adDecompositions.processingStatus, "completed")
+      )
+    )
+    .orderBy(desc(adDecompositions.createdAt))
     .limit(1);
 
-  const cached = cachedRows?.[0] ?? null;
-
   if (cached) {
-    // Patch stale cache: if clean image was requested but missing, use original URL
-    let cleanImageUrl = cached.clean_image_url;
+    let cleanImageUrl = cached.cleanImageUrl;
     if (body.generate_clean_image && !cleanImageUrl) {
       cleanImageUrl = body.image_url;
-      // Backfill the DB record so future hits are correct
-      await admin
-        .from("ad_decompositions")
-        .update({ clean_image_url: cleanImageUrl, updated_at: new Date().toISOString() })
-        .eq("id", cached.id)
-        .eq("workspace_id", workspaceId);
+      await db
+        .update(adDecompositions)
+        .set({ cleanImageUrl, updatedAt: new Date() })
+        .where(and(eq(adDecompositions.id, cached.id), eq(adDecompositions.workspaceId, workspaceId)));
     }
 
     return NextResponse.json({
       decomposition_id: cached.id,
       cached: true,
       result: {
-        texts: cached.extracted_texts ?? [],
-        product: cached.product_analysis ?? { detected: false, description: "", position: "center", occupies_percent: 0 },
-        background: cached.background_analysis ?? { type: "solid_color", dominant_colors: [], description: "" },
-        layout: cached.layout_analysis ?? { style: "product_hero", text_overlay_on_image: false, brand_elements: [] },
+        texts: cached.extractedTexts ?? [],
+        product: cached.productAnalysis ?? { detected: false, description: "", position: "center", occupies_percent: 0 },
+        background: cached.backgroundAnalysis ?? { type: "solid_color", dominant_colors: [], description: "" },
+        layout: cached.layoutAnalysis ?? { style: "product_hero", text_overlay_on_image: false, brand_elements: [] },
         clean_image_url: cleanImageUrl,
       },
     });
   }
 
-  // 5. Calculate credit cost & check balance
   const totalCost =
     DECOMPOSITION_ANALYSIS_COST +
     (body.generate_clean_image ? DECOMPOSITION_CLEAN_IMAGE_COST : 0);
 
-  const creditResult = await checkAndDeductCredits(
-    workspaceId,
-    totalCost,
-    "decomposition"
-  );
-
+  const creditResult = await checkAndDeductCredits(workspaceId, totalCost, "decomposition");
   if (!creditResult.success) {
     return NextResponse.json(
       { error: creditResult.error ?? "Insufficient credits" },
@@ -123,25 +111,20 @@ export async function POST(request: Request) {
     );
   }
 
-  // 6. Create pending record
-  const { data: record, error: insertErr } = await admin
-    .from("ad_decompositions")
-    .insert({
-      workspace_id: workspaceId,
-      source_image_url: body.image_url,
-      source_type: body.source_type,
-      source_id: body.source_id ?? null,
-      processing_status: "analyzing",
-      credits_used: totalCost,
+  const [record] = await db
+    .insert(adDecompositions)
+    .values({
+      workspaceId,
+      sourceImageUrl: body.image_url,
+      sourceType: body.source_type as SourceType,
+      sourceId: body.source_id ?? null,
+      processingStatus: "analyzing",
+      creditsUsed: totalCost,
     })
-    .select("id")
-    .single();
+    .returning({ id: adDecompositions.id });
 
-  if (insertErr || !record) {
-    return NextResponse.json(
-      { error: "Failed to create decomposition record" },
-      { status: 500 }
-    );
+  if (!record) {
+    return NextResponse.json({ error: "Failed to create decomposition record" }, { status: 500 });
   }
 
   const decompositionId = record.id;
@@ -152,73 +135,52 @@ export async function POST(request: Request) {
     generate_clean_image: body.generate_clean_image,
   });
 
-  // 7. Download image once, then run decomposition + clean image with the buffer
   const startTime = Date.now();
 
   try {
-    // Download once with browser headers — avoids expired/blocked FB CDN URLs
     const imageBuffer = await downloadImage(body.image_url);
-
-    // Send base64 to GPT-4o Vision (not the URL, which OpenAI might fail to download)
     const result = await decomposeAdImage(imageBuffer);
 
     let cleanImageUrl: string | null = null;
     if (body.generate_clean_image && result.product.detected) {
       try {
-        // Include all non-brand text, PLUS any "brand" text that is large/prominent
-        // at the top of the image (likely a misclassified marketing headline)
         const overlayTexts = result.texts.filter(
           (t) =>
             t.type !== "brand" ||
-            (t.estimated_font_size === "large" &&
-              (t.position === "top" || t.position === "overlay")) ||
+            (t.estimated_font_size === "large" && (t.position === "top" || t.position === "overlay")) ||
             (t.estimated_font_size === "medium" && t.position === "top")
         );
         const marketingTexts = overlayTexts.map((t) => t.content);
-        const boundingBoxes = overlayTexts
-          .filter((t) => t.bounding_box)
-          .map((t) => t.bounding_box!);
+        const boundingBoxes = overlayTexts.filter((t) => t.bounding_box).map((t) => t.bounding_box!);
 
         if (marketingTexts.length > 0 && boundingBoxes.length > 0) {
-          // Pass the already-downloaded buffer — no second download needed
-          cleanImageUrl = await generateCleanProductImage(
-            imageBuffer,
-            marketingTexts,
-            boundingBoxes,
-            workspaceId,
-            decompositionId
-          );
+          cleanImageUrl = await generateCleanProductImage(imageBuffer, marketingTexts, boundingBoxes, workspaceId, decompositionId);
         } else {
-          // No marketing text to remove — the original image is already clean
           cleanImageUrl = body.image_url;
         }
       } catch (cleanErr) {
-        // Non-fatal: clean image generation can fail without failing the whole decomposition
         console.error("[decompose] Clean image generation failed:", cleanErr);
       }
     }
 
-    // 8. Update record with results
-    await admin
-      .from("ad_decompositions")
-      .update({
-        extracted_texts: result.texts,
-        product_analysis: result.product,
-        background_analysis: result.background,
-        layout_analysis: result.layout,
-        clean_image_url: cleanImageUrl,
-        processing_status: "completed",
-        updated_at: new Date().toISOString(),
+    await db
+      .update(adDecompositions)
+      .set({
+        extractedTexts: result.texts,
+        productAnalysis: result.product,
+        backgroundAnalysis: result.background,
+        layoutAnalysis: result.layout,
+        cleanImageUrl,
+        processingStatus: "completed",
+        updatedAt: new Date(),
       })
-      .eq("id", decompositionId);
-
-    const durationMs = Date.now() - startTime;
+      .where(eq(adDecompositions.id, decompositionId));
 
     trackServer("ad_decomposition_completed", userId, {
       decomposition_id: decompositionId,
       texts_found: result.texts.length,
       product_detected: result.product.detected,
-      duration_ms: durationMs,
+      duration_ms: Date.now() - startTime,
       credits_used: totalCost,
     });
 
@@ -236,28 +198,16 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    // Refund credits on failure
     await refundCredits(workspaceId, totalCost);
 
-    // Mark as failed
-    await admin
-      .from("ad_decompositions")
-      .update({
-        processing_status: "failed",
-        error_message: message,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", decompositionId);
+    await db
+      .update(adDecompositions)
+      .set({ processingStatus: "failed", errorMessage: message, updatedAt: new Date() })
+      .where(eq(adDecompositions.id, decompositionId));
 
-    trackServer("ad_decomposition_failed", userId, {
-      decomposition_id: decompositionId,
-      error: message,
-    });
+    trackServer("ad_decomposition_failed", userId, { decomposition_id: decompositionId, error: message });
 
     console.error("[decompose] Error:", { workspace_id: workspaceId, error: message });
-    return NextResponse.json(
-      { error: `${message}. Credits have been refunded.` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `${message}. Credits have been refunded.` }, { status: 500 });
   }
 }
