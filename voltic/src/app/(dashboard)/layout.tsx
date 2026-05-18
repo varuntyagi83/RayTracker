@@ -26,7 +26,7 @@ export default async function DashboardLayout({
   } catch {
     redirect("/login");
   }
-  if (!workspace) redirect("/signup");
+  if (!workspace) redirect("/onboarding");
 
   return (
     <WorkspaceProvider workspace={workspace}>
