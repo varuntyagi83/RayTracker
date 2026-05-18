@@ -45,6 +45,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -86,7 +87,7 @@ interface AppSidebarProps {
 export function AppSidebar({ userEmail }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { workspace } = useWorkspace();
+  const { workspace, allWorkspaces } = useWorkspace();
 
   const initial = workspace.name.charAt(0).toUpperCase();
 
@@ -95,6 +96,17 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
       destination,
       current_page: pathname,
     });
+  }
+
+  async function handleSwitchWorkspace(workspaceId: string) {
+    if (workspaceId === workspace.id) return;
+    await fetch("/api/workspace/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId }),
+    });
+    router.push("/home");
+    router.refresh();
   }
 
   async function handleLogout() {
@@ -138,12 +150,24 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
                 side="bottom"
                 sideOffset={4}
               >
-                <DropdownMenuItem className="gap-2 p-2">
-                  <div className="flex size-6 items-center justify-center rounded-sm bg-emerald-600 text-white text-xs font-semibold">
-                    {initial}
-                  </div>
-                  {workspace.name}
-                </DropdownMenuItem>
+                <DropdownMenuLabel className="text-xs text-muted-foreground font-normal px-2 py-1.5">
+                  Workspaces
+                </DropdownMenuLabel>
+                {allWorkspaces.map((ws) => (
+                  <DropdownMenuItem
+                    key={ws.id}
+                    className="gap-2 p-2"
+                    onClick={() => handleSwitchWorkspace(ws.id)}
+                  >
+                    <div className="flex size-6 items-center justify-center rounded-sm bg-emerald-600 text-white text-xs font-semibold shrink-0">
+                      {ws.name.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="truncate">{ws.name}</span>
+                    {ws.id === workspace.id && (
+                      <span className="ml-auto text-xs text-muted-foreground">Active</span>
+                    )}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>

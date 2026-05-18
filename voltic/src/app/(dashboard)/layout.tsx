@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getWorkspace, getUser } from "@/lib/supabase/queries";
+import { getWorkspaces, getWorkspace, getUser } from "@/lib/supabase/queries";
 import { WorkspaceProvider } from "@/components/shared/workspace-provider";
 import { PostHogIdentify } from "@/components/shared/posthog-identify";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -13,6 +13,7 @@ export default async function DashboardLayout({
 }) {
   let user;
   let workspace;
+  let allWorkspaces;
 
   try {
     user = await getUser();
@@ -22,14 +23,17 @@ export default async function DashboardLayout({
   if (!user) redirect("/login");
 
   try {
-    workspace = await getWorkspace();
+    [workspace, allWorkspaces] = await Promise.all([
+      getWorkspace(),
+      getWorkspaces(),
+    ]);
   } catch {
     redirect("/login");
   }
   if (!workspace) redirect("/onboarding");
 
   return (
-    <WorkspaceProvider workspace={workspace}>
+    <WorkspaceProvider workspace={workspace} allWorkspaces={allWorkspaces ?? []}>
       <PostHogIdentify
         userId={user.id}
         email={user.email ?? ""}

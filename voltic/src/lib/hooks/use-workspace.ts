@@ -18,6 +18,7 @@ export interface Workspace {
 interface WorkspaceContextValue {
   workspace: Workspace;
   workspaceId: string;
+  allWorkspaces: Workspace[];
 }
 
 export const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
