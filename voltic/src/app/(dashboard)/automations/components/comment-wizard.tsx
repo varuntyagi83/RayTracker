@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -33,7 +32,6 @@ import {
 import { CommentPreview } from "./comment-preview";
 import { createAutomation, updateAutomation } from "../actions";
 import { track } from "@/lib/analytics/events";
-import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import {
   type CommentWizardState,
   type CommentDigestConfig,
@@ -313,42 +311,24 @@ function StepCommentBasics({
   onUpdateConfig: (p: Partial<CommentDigestConfig>) => void;
   onTogglePage: (page: FacebookPageRef) => void;
 }) {
-  const { userId } = useAuth();
   const [availablePages, setAvailablePages] = useState<FacebookPageRef[]>([]);
   const [loadingPages, setLoadingPages] = useState(true);
 
   useEffect(() => {
     async function loadPages() {
       try {
-        if (!userId) return;
-        const supabase = createBrowserClient();
-
-        // Get workspace
-        const { data: member } = await supabase
-          .from("workspace_members")
-          .select("workspace_id")
-          .eq("user_id", userId)
-          .single();
-
-        if (!member) return;
-
-        const { data: pages } = await supabase
-          .from("facebook_pages")
-          .select("id, page_id, page_name, has_instagram, instagram_handle")
-          .eq("workspace_id", member.workspace_id)
-          .order("page_name");
-
-        if (pages) {
-          setAvailablePages(
-            pages.map((p) => ({
-              id: p.id,
-              pageId: p.page_id,
-              pageName: p.page_name,
-              hasInstagram: p.has_instagram,
-              instagramHandle: p.instagram_handle,
-            }))
-          );
-        }
+        const res = await fetch("/api/automations/facebook-pages");
+        if (!res.ok) return;
+        const { pages } = await res.json();
+        setAvailablePages(
+          (pages as { id: string; pageId: string; pageName: string; hasInstagram: boolean; instagramHandle: string | null }[]).map((p) => ({
+            id: p.id,
+            pageId: p.pageId,
+            pageName: p.pageName,
+            hasInstagram: p.hasInstagram,
+            instagramHandle: p.instagramHandle,
+          }))
+        );
       } catch {
         // Silently fail — pages will be empty
       } finally {
@@ -356,7 +336,7 @@ function StepCommentBasics({
       }
     }
     loadPages();
-  }, [userId]);
+  }, []);
 
   const selectedCount = state.config.pages.length;
   const totalCount = availablePages.length;

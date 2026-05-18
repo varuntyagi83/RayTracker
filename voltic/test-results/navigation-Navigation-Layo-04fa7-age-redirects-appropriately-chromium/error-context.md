@@ -1,0 +1,460 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - generic [ref=e6]:
+            - generic [ref=e7]: MKT-INTEL
+            - generic [ref=e8]: v1.0
+          - generic [ref=e10]: Updated 1:24:12 PM
+        - generic [ref=e11]:
+          - generic [ref=e12]:
+            - button "🇺🇸US" [ref=e13] [cursor=pointer]
+            - button "🇪🇺EU" [ref=e14] [cursor=pointer]
+            - button "🇮🇳INDIA" [ref=e15] [cursor=pointer]
+            - button "₿CRYPTO" [ref=e16] [cursor=pointer]
+          - button "↺ Fetch All" [ref=e17] [cursor=pointer]
+    - main [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e21]: 🇺🇸 US Markets
+        - generic [ref=e22]:
+          - generic [ref=e23]:
+            - generic [ref=e24]:
+              - generic [ref=e25]: SPY
+              - generic [ref=e26]: ▼ 1.31%
+            - generic [ref=e27]: $672.38
+            - generic [ref=e28]:
+              - generic [ref=e29]:
+                - generic [ref=e30]: H
+                - generic [ref=e31]: $676.11
+              - generic [ref=e32]:
+                - generic [ref=e33]: L
+                - generic [ref=e34]: $669.76
+              - generic [ref=e35]:
+                - generic [ref=e36]: Chg
+                - generic [ref=e37]: $-8.93
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - generic [ref=e40]: QQQ
+              - generic [ref=e41]: ▼ 1.50%
+            - generic [ref=e42]: $599.75
+            - generic [ref=e43]:
+              - generic [ref=e44]:
+                - generic [ref=e45]: H
+                - generic [ref=e46]: $606.00
+              - generic [ref=e47]:
+                - generic [ref=e48]: L
+                - generic [ref=e49]: $598.33
+              - generic [ref=e50]:
+                - generic [ref=e51]: Chg
+                - generic [ref=e52]: $-9.16
+          - generic [ref=e53]:
+            - generic [ref=e54]:
+              - generic [ref=e55]: DIA
+              - generic [ref=e56]: ▼ 0.96%
+            - generic [ref=e57]: $475.23
+            - generic [ref=e58]:
+              - generic [ref=e59]:
+                - generic [ref=e60]: H
+                - generic [ref=e61]: $476.23
+              - generic [ref=e62]:
+                - generic [ref=e63]: L
+                - generic [ref=e64]: $470.46
+              - generic [ref=e65]:
+                - generic [ref=e66]: Chg
+                - generic [ref=e67]: $-4.61
+          - generic [ref=e68]:
+            - generic [ref=e69]:
+              - generic [ref=e70]: AAPL
+              - generic [ref=e71]: ▼ 1.09%
+            - generic [ref=e72]: $257.46
+            - generic [ref=e73]:
+              - generic [ref=e74]:
+                - generic [ref=e75]: H
+                - generic [ref=e76]: $258.77
+              - generic [ref=e77]:
+                - generic [ref=e78]: L
+                - generic [ref=e79]: $254.37
+              - generic [ref=e80]:
+                - generic [ref=e81]: Chg
+                - generic [ref=e82]: $-2.83
+          - generic [ref=e83]:
+            - generic [ref=e84]:
+              - generic [ref=e85]: MSFT
+              - generic [ref=e86]: ▼ 0.42%
+            - generic [ref=e87]: $408.96
+            - generic [ref=e88]:
+              - generic [ref=e89]:
+                - generic [ref=e90]: H
+                - generic [ref=e91]: $413.05
+              - generic [ref=e92]:
+                - generic [ref=e93]: L
+                - generic [ref=e94]: $408.51
+              - generic [ref=e95]:
+                - generic [ref=e96]: Chg
+                - generic [ref=e97]: $-1.72
+          - generic [ref=e98]:
+            - generic [ref=e99]:
+              - generic [ref=e100]: NVDA
+              - generic [ref=e101]: ▼ 3.01%
+            - generic [ref=e102]: $177.82
+            - generic [ref=e103]:
+              - generic [ref=e104]:
+                - generic [ref=e105]: H
+                - generic [ref=e106]: $182.76
+              - generic [ref=e107]:
+                - generic [ref=e108]: L
+                - generic [ref=e109]: $176.82
+              - generic [ref=e110]:
+                - generic [ref=e111]: Chg
+                - generic [ref=e112]: $-5.52
+          - generic [ref=e113]:
+            - generic [ref=e114]:
+              - generic [ref=e115]: GOOGL
+              - generic [ref=e116]: ▼ 0.78%
+            - generic [ref=e117]: $298.52
+            - generic [ref=e118]:
+              - generic [ref=e119]:
+                - generic [ref=e120]: H
+                - generic [ref=e121]: $300.53
+              - generic [ref=e122]:
+                - generic [ref=e123]: L
+                - generic [ref=e124]: $295.18
+              - generic [ref=e125]:
+                - generic [ref=e126]: Chg
+                - generic [ref=e127]: $-2.36
+          - generic [ref=e128]:
+            - generic [ref=e129]:
+              - generic [ref=e130]: AMZN
+              - generic [ref=e131]: ▼ 2.62%
+            - generic [ref=e132]: $213.21
+            - generic [ref=e133]:
+              - generic [ref=e134]:
+                - generic [ref=e135]: H
+                - generic [ref=e136]: $217.32
+              - generic [ref=e137]:
+                - generic [ref=e138]: L
+                - generic [ref=e139]: $212.53
+              - generic [ref=e140]:
+                - generic [ref=e141]: Chg
+                - generic [ref=e142]: $-5.73
+          - generic [ref=e143]:
+            - generic [ref=e144]:
+              - generic [ref=e145]: META
+              - generic [ref=e146]: ▼ 2.38%
+            - generic [ref=e147]: $644.86
+            - generic [ref=e148]:
+              - generic [ref=e149]:
+                - generic [ref=e150]: H
+                - generic [ref=e151]: $649.47
+              - generic [ref=e152]:
+                - generic [ref=e153]: L
+                - generic [ref=e154]: $636.11
+              - generic [ref=e155]:
+                - generic [ref=e156]: Chg
+                - generic [ref=e157]: $-15.71
+          - generic [ref=e158]:
+            - generic [ref=e159]:
+              - generic [ref=e160]: TSLA
+              - generic [ref=e161]: ▼ 2.17%
+            - generic [ref=e162]: $396.73
+            - generic [ref=e163]:
+              - generic [ref=e164]:
+                - generic [ref=e165]: H
+                - generic [ref=e166]: $402.35
+              - generic [ref=e167]:
+                - generic [ref=e168]: L
+                - generic [ref=e169]: $394.21
+              - generic [ref=e170]:
+                - generic [ref=e171]: Chg
+                - generic [ref=e172]: $-8.82
+          - generic [ref=e173]:
+            - generic [ref=e174]:
+              - generic [ref=e175]: AMD
+              - generic [ref=e176]: ▼ 3.52%
+            - generic [ref=e177]: $192.43
+            - generic [ref=e178]:
+              - generic [ref=e179]:
+                - generic [ref=e180]: H
+                - generic [ref=e181]: $200.24
+              - generic [ref=e182]:
+                - generic [ref=e183]: L
+                - generic [ref=e184]: $191.25
+              - generic [ref=e185]:
+                - generic [ref=e186]: Chg
+                - generic [ref=e187]: $-7.02
+          - generic [ref=e188]:
+            - generic [ref=e189]:
+              - generic [ref=e190]: JPM
+              - generic [ref=e191]: ▼ 1.39%
+            - generic [ref=e192]: $289.48
+            - generic [ref=e193]:
+              - generic [ref=e194]:
+                - generic [ref=e195]: H
+                - generic [ref=e196]: $289.99
+              - generic [ref=e197]:
+                - generic [ref=e198]: L
+                - generic [ref=e199]: $283.71
+              - generic [ref=e200]:
+                - generic [ref=e201]: Chg
+                - generic [ref=e202]: $-4.07
+          - generic [ref=e203]:
+            - generic [ref=e204]:
+              - generic [ref=e205]: V
+              - generic [ref=e206]: ▼ 0.76%
+            - generic [ref=e207]: $317.36
+            - generic [ref=e208]:
+              - generic [ref=e209]:
+                - generic [ref=e210]: H
+                - generic [ref=e211]: $317.69
+              - generic [ref=e212]:
+                - generic [ref=e213]: L
+                - generic [ref=e214]: $312.30
+              - generic [ref=e215]:
+                - generic [ref=e216]: Chg
+                - generic [ref=e217]: $-2.44
+      - generic [ref=e218]:
+        - generic [ref=e220]:
+          - generic [ref=e222]: News Feed
+          - generic [ref=e223]:
+            - link "Iran attacks breach international law, Swiss Defence Minister says - Reuters Reuters · 1h ago" [ref=e224] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMitAFBVV95cUxNR05zSnZhbXcybjN3NHpiNzc4dGhGd1lOX2VWMFYybG01NFZDTm5DTVRWU3FnXy1JQ29NVTlrTGlmUVJYWVh5S29GSmNWcnZJa0VDQmg0NUptQ1dqOHlqZHUxUXN4X2d6RFEtYVpqcmJ4N0VYZmV1djdHMTJvWC1NLVlYb2pHZXg1eWk5OE9maWlFQUlJbWo5WlNQQmZybUNoSDJKN1drVWpxbEZ5VmI0dy16U0I?oc=5
+              - generic [ref=e226]: Iran attacks breach international law, Swiss Defence Minister says - Reuters
+              - generic [ref=e227]:
+                - generic [ref=e228]: Reuters
+                - generic [ref=e229]: ·
+                - generic [ref=e230]: 1h ago
+            - link "Israeli military says it will pursue every successor of Iran's Khamenei - Reuters Reuters · 4h ago" [ref=e231] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMivgFBVV95cUxObTFiNXNVUGsxSnFpb0tuVzd5UDVsdW9HNWxFSUtpQmRxSjVmRHlmSzNwaXY1YTdfc09KTzFkQ3VxVE5felJCQ05uak5kOE5WXzlMRl9rbk50Rk9uVVhUdzV5Q3U3Y1FXcWxRaWswcjdiSU5JTWtzLUgzVHVWaHZVd1J1Smw3NFE0SXVnbUl5ekFHNmZEY0RYODROTTlLRkdwc2hSVGZIellMUW02VVBEZ0ptdVpPYkVRbC0wVlRn?oc=5
+              - generic [ref=e233]: Israeli military says it will pursue every successor of Iran's Khamenei - Reuters
+              - generic [ref=e234]:
+                - generic [ref=e235]: Reuters
+                - generic [ref=e236]: ·
+                - generic [ref=e237]: 4h ago
+            - link "Saudi index extends gains as Iran approves pause on Gulf attacks - Reuters Reuters · 4h ago" [ref=e238] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMisgFBVV95cUxNbVFaSHNlMjR4U3AxQmwxT0E3QnNmRmx1V3M4U2gwaFZ3ZUQwWTFJN1NoMEhhOVcyeW9McmdUV2dDOFFNUWV5enhnanhTa3RrSVNOTE9PUl9yOUtjNVVlUVdSN3YzUHoxUkIwS2RQcGxGRHZJTW9Nb3JiNm5YdFRCT3JDVHZLMEhmUzdrbFNNZ2VKanYycEE1cnd1VFVfNTFJeU1BT05sdkRMd3p4UVJTWTBR?oc=5
+              - generic [ref=e240]: Saudi index extends gains as Iran approves pause on Gulf attacks - Reuters
+              - generic [ref=e241]:
+                - generic [ref=e242]: Reuters
+                - generic [ref=e243]: ·
+                - generic [ref=e244]: 4h ago
+            - link "Panel picking Iran's supreme leader has reached consensus, member says - Reuters Reuters · 5h ago" [ref=e245] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMiwgFBVV95cUxQejM4c0YyQ1lielEzSExDaG10R3pVN2sxWU5WdmVQZWhUWk9fUjQ2b3hHVEZuV0U2X2UyZjkyNzB2c3JpX2JUOWhrcU5iM0tQOGVDdkZCbktxTGNlVlJySlZ4OHdCV2tQTFdQbzhhMExCQVF2TDRsQXhjM0QtTE0wblk1UzdOSmE3TUZ5aGlYY0VmdXh1U0RaYVM0WE5UMnpibk51UHNiTDFJYU1aQWZWRlZLX1RXWXBiRDNjbURwR2Nfdw?oc=5
+              - generic [ref=e247]: Panel picking Iran's supreme leader has reached consensus, member says - Reuters
+              - generic [ref=e248]:
+                - generic [ref=e249]: Reuters
+                - generic [ref=e250]: ·
+                - generic [ref=e251]: 5h ago
+            - link "Israel presses Iran assault as Tehran nears succession decision - Reuters Reuters · 9h ago" [ref=e252] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMivwFBVV95cUxOSFh3VW9kcGVhakNiREpuNVJiM1hCRFdkQ3dmQU43QWtMM3dDdmJEWW8zcTdrRDc5MDZDbkwzUDJQVU41N1N5OTNXWjFMaTlzdFpfakZhSTgxbFc2UFZjNXZBTm1uUjh4aF9oRS02c0o3TDBHY1JaVXZ6Nno4ZmtOZGU1Rm1uUF9QRFl6TjNXR0Z2cUx0YVJrVlBOeDJ5Sm1RLXJNWDRFQlAzR1FvQjRaV2RIdjUzQi1fbXpib0xObw?oc=5
+              - generic [ref=e254]: Israel presses Iran assault as Tehran nears succession decision - Reuters
+              - generic [ref=e255]:
+                - generic [ref=e256]: Reuters
+                - generic [ref=e257]: ·
+                - generic [ref=e258]: 9h ago
+            - link "Australia weighing requests for assistance from countries attacked by Iran - Reuters Reuters · 10h ago" [ref=e259] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMivAFBVV95cUxQSDBRTU8zcDRyMC1ZTHc4WEVGS3EwR2JKbGU3czA2dlhaZ3ZwZEY3Z1dTcVVsWk11RkJKTUhFNkp6X205ejRRWnkxMFduNHBkOU9VYWR6aTdwU3U3S3cwaUU2YzFJeWc2NGFITm10TUdvZ1dYR19HenJ1T3c4T0UtQThueDU2UEt6dDRQd05aLVZoS09ZUUZoUmlta2h6aE1tcEp5aEljWHBoNkExdDJoYnYyMVV0YmhpSDFSMg?oc=5
+              - generic [ref=e261]: Australia weighing requests for assistance from countries attacked by Iran - Reuters
+              - generic [ref=e262]:
+                - generic [ref=e263]: Reuters
+                - generic [ref=e264]: ·
+                - generic [ref=e265]: 10h ago
+            - link "Explosion causes minor damage to US embassy in Oslo, police hunt perpetrators - Reuters Reuters · 11h ago" [ref=e266] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMipwFBVV95cUxQeGFYT0NPSDM0RUZsdTRTOUtzM3FMUnczbnBqcFhHQzMwNHlDNHB5UXN4SmJwUjBlUXg4WVhZNm1ScURsanZVWTBCOS1seldOd3Atc2NzM2JicS1NcDNub2dVSDNmNlRzeWJ4Q0pheDdUMlRTbGRzMWxmVGlzWkpJaVl3SWJqRzBJZ1l4QzJjNEx5Qkp3U29PVGRLX1BGWGVsYmJMRG9BSQ?oc=5
+              - generic [ref=e268]: Explosion causes minor damage to US embassy in Oslo, police hunt perpetrators - Reuters
+              - generic [ref=e269]:
+                - generic [ref=e270]: Reuters
+                - generic [ref=e271]: ·
+                - generic [ref=e272]: 11h ago
+            - link "Israel says it targeted Iranian commanders in Beirut as death toll nears 400 - Reuters Reuters · 11h ago" [ref=e273] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMixwFBVV95cUxNd0JEcnVjaUtIcHJrai12NnZVV0VVLWpqeWZGZGFEZ1dpeVJnazBuXzNtdHJQRzlRZEhyV2V5NWFkZHpsdmpUU0dBODdkNE1OeXdKU2p0b3ZwZ0ppeXFwMTgyLXgxMGZSQkFVazVCZUNaN2R4U3FzR0VmU0ZOekNUc1IxczU2Rkszemp2NmpvSkpZZHpNc1dMYl84c2o5ZlFTUU40NHdIVExwUDZEWmNNNHZsR1dXaXBEbEM2eHl1a0JmcTdqWlZR?oc=5
+              - generic [ref=e275]: Israel says it targeted Iranian commanders in Beirut as death toll nears 400 - Reuters
+              - generic [ref=e276]:
+                - generic [ref=e277]: Reuters
+                - generic [ref=e278]: ·
+                - generic [ref=e279]: 11h ago
+            - link "White House halts security bulletin warning of Iran-related threats - Reuters Reuters · 12h ago" [ref=e280] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMirgFBVV95cUxQel9XZnJPRHgxSzJ3TWpNYVc3b095dHdrV2ZQVVZsdGFnTFFiVURVelIyWktreUpEMnY0UHlLVmsxMV94ejd2TnBnQWUxMGkzRzF0YXI5WHR5bWpnSG95MWJod0hVek8wNUN5a1M4YjdPX2diaDY5Nl9OYS00b1hTa3ZqTUlwdXdCbTZEN1NkQWVTOG9OYmIwcThfRTlsazZ3c2ZuOVBnYWd6Tms2ZXc?oc=5
+              - generic [ref=e282]: White House halts security bulletin warning of Iran-related threats - Reuters
+              - generic [ref=e283]:
+                - generic [ref=e284]: Reuters
+                - generic [ref=e285]: ·
+                - generic [ref=e286]: 12h ago
+            - link "Trump tells Britain he does not need its help to win Iran war - Reuters Reuters · 13h ago" [ref=e287] [cursor=pointer]:
+              - /url: https://news.google.com/rss/articles/CBMiqwFBVV95cUxNZ3Z1TGNwellYQ0FsdDBlZVh0UlpzMERhOGdqLWJpY3h1bXNJTFI3UElCLUhKeGhNMU15SjJJS1NnRlFmQnZXR29QX09rZUlWX3EtTFNCUlRrSWhxV1I5YmlvdGoxVUxteG9uY3NRVDF3dGpwcGduNUNZbW9SM1JmSGVfamY5cVdHb1pObEQycGZuR3NzS0VRdTU2N3BNX1BxSVV0RHRZbVZGY28?oc=5
+              - generic [ref=e289]: Trump tells Britain he does not need its help to win Iran war - Reuters
+              - generic [ref=e290]:
+                - generic [ref=e291]: Reuters
+                - generic [ref=e292]: ·
+                - generic [ref=e293]: 13h ago
+            - link "In Dharavi, girls learn to defend themselves The Times of India · 1d ago" [ref=e294] [cursor=pointer]:
+              - /url: https://timesofindia.indiatimes.com/city/mumbai/in-dharavi-girls-learn-to-defend-themselves/articleshow/129213726.cms
+              - generic [ref=e296]: In Dharavi, girls learn to defend themselves
+              - generic [ref=e297]:
+                - generic [ref=e298]: The Times of India
+                - generic [ref=e299]: ·
+                - generic [ref=e300]: 1d ago
+            - link "Middle East Crisis Drives Palantir Technologies Inc. (PLTR)’s Recovery Yahoo Entertainment · 1d ago" [ref=e301] [cursor=pointer]:
+              - /url: https://finance.yahoo.com/news/middle-east-crisis-drives-palantir-121002046.html
+              - generic [ref=e303]: Middle East Crisis Drives Palantir Technologies Inc. (PLTR)’s Recovery
+              - generic [ref=e304]:
+                - generic [ref=e305]: Yahoo Entertainment
+                - generic [ref=e306]: ·
+                - generic [ref=e307]: 1d ago
+            - link "Is Coinbase Global, Inc. (COIN) Among ARK Invest’s Top Stock Picks for 2026? Yahoo Entertainment · 1d ago" [ref=e308] [cursor=pointer]:
+              - /url: https://consent.yahoo.com/v2/collectConsent?sessionId=1_cc-session_f0eb0be5-2cd1-4cde-8a46-8462f921668e
+              - generic [ref=e310]: Is Coinbase Global, Inc. (COIN) Among ARK Invest’s Top Stock Picks for 2026?
+              - generic [ref=e311]:
+                - generic [ref=e312]: Yahoo Entertainment
+                - generic [ref=e313]: ·
+                - generic [ref=e314]: 1d ago
+            - 'link "Weekend reading: Trouble brewing in the crowdfunding space Monevator.com · 1d ago" [ref=e315] [cursor=pointer]':
+              - /url: https://monevator.com/weekend-reading-trouble-brewing-in-the-crowdfunding-space/
+              - generic [ref=e317]: "Weekend reading: Trouble brewing in the crowdfunding space"
+              - generic [ref=e318]:
+                - generic [ref=e319]: Monevator.com
+                - generic [ref=e320]: ·
+                - generic [ref=e321]: 1d ago
+            - 'link "Better Stock to Buy Right Now: Royal Caribbean vs. Viking Holdings Yahoo Entertainment · 1d ago" [ref=e322] [cursor=pointer]':
+              - /url: https://consent.yahoo.com/v2/collectConsent?sessionId=1_cc-session_5cb70090-9b4b-4fbe-b315-074330512267
+              - generic [ref=e324]: "Better Stock to Buy Right Now: Royal Caribbean vs. Viking Holdings"
+              - generic [ref=e325]:
+                - generic [ref=e326]: Yahoo Entertainment
+                - generic [ref=e327]: ·
+                - generic [ref=e328]: 1d ago
+            - link "Terry Smith, the \"English Warren Buffett,\" Says This Trend Is Pushing the Stock Market Toward \"a Major Investment Disaster\" Yahoo Entertainment · 1d ago" [ref=e329] [cursor=pointer]:
+              - /url: https://consent.yahoo.com/v2/collectConsent?sessionId=1_cc-session_9118f147-2a58-4bc6-bd6c-eb0bd18adb72
+              - generic [ref=e331]: Terry Smith, the "English Warren Buffett," Says This Trend Is Pushing the Stock Market Toward "a Major Investment Disaster"
+              - generic [ref=e332]:
+                - generic [ref=e333]: Yahoo Entertainment
+                - generic [ref=e334]: ·
+                - generic [ref=e335]: 1d ago
+            - 'link "‘Bridgerton’: Who is the new Lady Whistledown? Fans fill social media with theories The Times of India · 1d ago" [ref=e336] [cursor=pointer]':
+              - /url: https://timesofindia.indiatimes.com/etimes/trending/bridgerton-who-is-the-new-lady-whistledown-fans-fill-social-media-with-theories/articleshow/129212506.cms
+              - generic [ref=e338]: "‘Bridgerton’: Who is the new Lady Whistledown? Fans fill social media with theories"
+              - generic [ref=e339]:
+                - generic [ref=e340]: The Times of India
+                - generic [ref=e341]: ·
+                - generic [ref=e342]: 1d ago
+            - 'link "Kalshi, Polymarket eye $20B valuations in potential fundraising: WSJ Cointelegraph · 1d ago" [ref=e343] [cursor=pointer]':
+              - /url: https://cointelegraph.com/news/kalshi-polymarket-20b-valuation-fundraising-wsj
+              - generic [ref=e345]: "Kalshi, Polymarket eye $20B valuations in potential fundraising: WSJ"
+              - generic [ref=e346]:
+                - generic [ref=e347]: Cointelegraph
+                - generic [ref=e348]: ·
+                - generic [ref=e349]: 1d ago
+            - link "Sister of slain bishop reflects on traveling exhibit honoring the 19 Algerian martyrs Ewtnnews.com · 1d ago" [ref=e350] [cursor=pointer]:
+              - /url: https://www.ewtnnews.com/world/africa/sister-of-slain-bishop-reflects-on-traveling-exhibit-honoring-the-19-algerian-martyrs
+              - generic [ref=e352]: Sister of slain bishop reflects on traveling exhibit honoring the 19 Algerian martyrs
+              - generic [ref=e353]:
+                - generic [ref=e354]: Ewtnnews.com
+                - generic [ref=e355]: ·
+                - generic [ref=e356]: 1d ago
+            - link "Goldman Sachs Sees Market Warning Signs – But Likes These 2 Stocks Yahoo Entertainment · 1d ago" [ref=e357] [cursor=pointer]:
+              - /url: https://finance.yahoo.com/news/goldman-sachs-sees-market-warning-115000046.html
+              - generic [ref=e359]: Goldman Sachs Sees Market Warning Signs – But Likes These 2 Stocks
+              - generic [ref=e360]:
+                - generic [ref=e361]: Yahoo Entertainment
+                - generic [ref=e362]: ·
+                - generic [ref=e363]: 1d ago
+            - link "Why Verizon Stock Skyrocketed 20.4% Last Month and Is Rising in March Yahoo Entertainment · 1d ago" [ref=e364] [cursor=pointer]:
+              - /url: https://consent.yahoo.com/v2/collectConsent?sessionId=1_cc-session_0aca8ef9-24d9-4cdb-a409-e492fb919281
+              - generic [ref=e366]: Why Verizon Stock Skyrocketed 20.4% Last Month and Is Rising in March
+              - generic [ref=e367]:
+                - generic [ref=e368]: Yahoo Entertainment
+                - generic [ref=e369]: ·
+                - generic [ref=e370]: 1d ago
+            - link "Will US stock market head for big crash on Monday, and will Dow Jones, S&P 500 and Nasdaq stay in red or finally turn green? US stock market prediction, analysts insights and market outlook explained. Here's what should investors do now The Times of India · 1d ago" [ref=e371] [cursor=pointer]:
+              - /url: https://economictimes.indiatimes.com/news/international/us/will-us-stock-market-head-for-big-crash-on-monday-and-will-dow-jones-sp-500-and-nasdaq-stay-in-red-or-finally-turn-green-us-stock-market-prediction-analysts-insights-and-market-outlook-explained-heres-what-should-investors-do-now/articleshow/129210732.cms
+              - generic [ref=e373]: Will US stock market head for big crash on Monday, and will Dow Jones, S&P 500 and Nasdaq stay in red or finally turn green? US stock market prediction, analysts insights and market outlook explained. Here's what should investors do now
+              - generic [ref=e374]:
+                - generic [ref=e375]: The Times of India
+                - generic [ref=e376]: ·
+                - generic [ref=e377]: 1d ago
+            - 'link "Explained: Why BlackRock stock tanked 7% after curbing withdrawals from flagship fund The Times of India · 1d ago" [ref=e378] [cursor=pointer]':
+              - /url: https://economictimes.indiatimes.com/markets/stocks/news/explained-why-blackrock-stock-tanked-7-after-curbing-withdrawals-from-flagship-fund/articleshow/129210168.cms
+              - generic [ref=e380]: "Explained: Why BlackRock stock tanked 7% after curbing withdrawals from flagship fund"
+              - generic [ref=e381]:
+                - generic [ref=e382]: The Times of India
+                - generic [ref=e383]: ·
+                - generic [ref=e384]: 1d ago
+            - 'link "Charting the Global Economy: Oil Prices Top $90 on Iran War Financial Post · 1d ago" [ref=e385] [cursor=pointer]':
+              - /url: https://financialpost.com/pmn/business-pmn/charting-the-global-economy-oil-prices-top-90-on-iran-war
+              - generic [ref=e387]: "Charting the Global Economy: Oil Prices Top $90 on Iran War"
+              - generic [ref=e388]:
+                - generic [ref=e389]: Financial Post
+                - generic [ref=e390]: ·
+                - generic [ref=e391]: 1d ago
+        - generic [ref=e393]:
+          - generic [ref=e395]: AI Analysis
+          - generic [ref=e396]:
+            - button "Claude" [ref=e397] [cursor=pointer]
+            - button "GPT-4o" [ref=e398] [cursor=pointer]
+            - button "🔮 Consensus" [ref=e399] [cursor=pointer]
+          - generic [ref=e400]:
+            - button "📋Full Briefing" [ref=e401] [cursor=pointer]
+            - button "📈Technical" [ref=e402] [cursor=pointer]
+            - button "🌍Geopolitical" [ref=e403] [cursor=pointer]
+            - button "🎭Sentiment" [ref=e404] [cursor=pointer]
+          - generic [ref=e405]: Select an analysis mode above · Using claude
+      - generic [ref=e407]:
+        - generic [ref=e409]: Buy / Hold / Sell Advisory
+        - button "⚡ Generate Market Advisories" [ref=e410] [cursor=pointer]
+        - generic [ref=e411]: Click to get AI-powered Buy / Hold / Sell ratings for all US stocks
+      - generic [ref=e412]:
+        - generic [ref=e414]:
+          - generic [ref=e416]: Technical Indicators
+          - generic [ref=e417]:
+            - textbox "Ticker (e.g. AAPL)" [ref=e418]
+            - button "Load" [disabled] [ref=e419]
+          - generic [ref=e420]:
+            - text: Enter a ticker to load RSI, MACD, Bollinger Bands and moving averages
+            - generic [ref=e421]: Powered by Alpha Vantage (primary) · Twelve Data (fallback)
+        - generic [ref=e423]:
+          - generic [ref=e425]: Deep Dive
+          - generic [ref=e426]:
+            - textbox "Enter ticker (e.g. AAPL)" [ref=e427]
+            - button "Dive" [disabled] [ref=e428]
+          - generic [ref=e429]:
+            - button "AAPL" [ref=e430] [cursor=pointer]
+            - button "NVDA" [ref=e431] [cursor=pointer]
+            - button "MSFT" [ref=e432] [cursor=pointer]
+            - button "GOOGL" [ref=e433] [cursor=pointer]
+            - button "TSLA" [ref=e434] [cursor=pointer]
+          - generic [ref=e435]: Enter a ticker symbol for a comprehensive deep-dive analysis
+      - generic [ref=e437]:
+        - generic [ref=e439]:
+          - text: Stock Scout
+          - paragraph [ref=e440]: US (NASDAQ + NYSE) · FMP fundamentals + growth → GPT-4o synthesis
+        - generic [ref=e441]:
+          - button "💎Undervalued Quality" [ref=e442] [cursor=pointer]
+          - button "🚀Emerging Growth" [ref=e443] [cursor=pointer]
+          - button "💰High FCF Yield" [ref=e444] [cursor=pointer]
+          - button "🔍Deep Value" [ref=e445] [cursor=pointer]
+          - button "📈Dividend Compounder" [ref=e446] [cursor=pointer]
+        - paragraph [ref=e447]: Low P/E + high ROIC + strong margins + low debt
+        - generic [ref=e448]:
+          - button "▼ Filters" [ref=e449] [cursor=pointer]
+          - button "🔍 Scout" [ref=e450] [cursor=pointer]
+        - generic [ref=e451]:
+          - generic [ref=e452]: 🔍
+          - generic [ref=e453]: Select a strategy and click Scout to discover opportunities
+          - generic [ref=e454]: US (NASDAQ + NYSE) · enriches with TTM fundamentals + growth · GPT-4o ranked analysis
+      - generic [ref=e456]:
+        - generic [ref=e457]:
+          - generic [ref=e458]: Custom Research
+          - generic [ref=e459]: ⌘K
+        - generic [ref=e460]:
+          - textbox "Ask anything about the markets… (Enter to submit, Shift+Enter for newline)" [ref=e461]
+          - generic [ref=e462]:
+            - generic [ref=e463]:
+              - button "What are the key risks for US tech stock…" [ref=e464] [cursor=pointer]
+              - button "Compare FAANG valuations vs 2021 peak" [ref=e465] [cursor=pointer]
+              - button "Fed rate impact on growth stocks" [ref=e466] [cursor=pointer]
+            - button "Research →" [disabled] [ref=e467]
+      - generic [ref=e468]: Market Intelligence Agent · Finnhub + CoinGecko + Alpha Vantage + FMP + Claude + GPT-4o · Auto-refreshes every 60s
+  - alert [ref=e469]
+```
