@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -10,8 +10,9 @@ import {
   Plus,
   Trash2,
   Shield,
-  CheckCircle,
-  XCircle,
+  Pencil,
+  Check,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -55,6 +57,88 @@ interface MemberRow {
   createdAt: string;
 }
 
+// ─── Inline Credit Editor ─────────────────────────────────────────────────────
+
+function CreditEditor({
+  workspaceId,
+  initial,
+  onSaved,
+}: {
+  workspaceId: string;
+  initial: number;
+  onSaved: (next: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(initial));
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.select();
+  }, [editing]);
+
+  async function save() {
+    const n = parseInt(value, 10);
+    if (isNaN(n) || n < 0) { toast.error("Enter a valid number"); return; }
+    setSaving(true);
+    const res = await fetch(`/api/admin/workspaces/${workspaceId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creditBalance: n }),
+    });
+    setSaving(false);
+    if (!res.ok) { toast.error("Failed to update credits"); return; }
+    onSaved(n);
+    setEditing(false);
+    toast.success("Credits updated");
+  }
+
+  function cancel() {
+    setValue(String(initial));
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <button
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground group"
+        onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+        title="Edit credits"
+      >
+        <CreditCard className="h-3.5 w-3.5" />
+        <span>{initial.toLocaleString()}</span>
+        <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <Input
+        ref={inputRef}
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") cancel(); }}
+        className="h-6 w-24 text-xs px-1.5"
+      />
+      {saving ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+      ) : (
+        <>
+          <button onClick={save} className="text-emerald-600 hover:text-emerald-700">
+            <Check className="h-3.5 w-3.5" />
+          </button>
+          <button onClick={cancel} className="text-muted-foreground hover:text-foreground">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminClient() {
@@ -63,16 +147,23 @@ export default function AdminClient() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [members, setMembers] = useState<Record<string, MemberRow[]>>({});
   const [membersLoading, setMembersLoading] = useState<Record<string, boolean>>({});
+
+  // Add member dialog
   const [addDialogWorkspaceId, setAddDialogWorkspaceId] = useState<string | null>(null);
   const [addUserId, setAddUserId] = useState("");
   const [addRole, setAddRole] = useState<"owner" | "admin" | "member">("member");
   const [addLoading, setAddLoading] = useState(false);
 
+  // Delete workspace dialog
+  const [deleteWorkspace, setDeleteWorkspace] = useState<WorkspaceRow | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+
   const fetchWorkspaces = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/admin/workspaces");
-      if (!res.ok) throw new Error("Failed to load workspaces");
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setWorkspaces(data.workspaces);
     } catch {
@@ -86,26 +177,23 @@ export default function AdminClient() {
 
   const fetchMembers = useCallback(async (workspaceId: string) => {
     if (members[workspaceId]) return;
-    setMembersLoading((prev) => ({ ...prev, [workspaceId]: true }));
+    setMembersLoading((p) => ({ ...p, [workspaceId]: true }));
     try {
       const res = await fetch(`/api/admin/workspaces/${workspaceId}/members`);
-      if (!res.ok) throw new Error("Failed to load members");
+      if (!res.ok) throw new Error();
       const data = await res.json();
-      setMembers((prev) => ({ ...prev, [workspaceId]: data.members }));
+      setMembers((p) => ({ ...p, [workspaceId]: data.members }));
     } catch {
       toast.error("Could not load members");
     } finally {
-      setMembersLoading((prev) => ({ ...prev, [workspaceId]: false }));
+      setMembersLoading((p) => ({ ...p, [workspaceId]: false }));
     }
   }, [members]);
 
   const toggleWorkspace = useCallback((workspaceId: string) => {
-    if (expandedId === workspaceId) {
-      setExpandedId(null);
-    } else {
-      setExpandedId(workspaceId);
-      fetchMembers(workspaceId);
-    }
+    if (expandedId === workspaceId) { setExpandedId(null); return; }
+    setExpandedId(workspaceId);
+    fetchMembers(workspaceId);
   }, [expandedId, fetchMembers]);
 
   const changeRole = useCallback(async (workspaceId: string, memberId: string, role: string) => {
@@ -115,11 +203,9 @@ export default function AdminClient() {
       body: JSON.stringify({ role }),
     });
     if (!res.ok) { toast.error("Failed to update role"); return; }
-    setMembers((prev) => ({
-      ...prev,
-      [workspaceId]: prev[workspaceId].map((m) =>
-        m.userId === memberId ? { ...m, role } : m
-      ),
+    setMembers((p) => ({
+      ...p,
+      [workspaceId]: p[workspaceId].map((m) => m.userId === memberId ? { ...m, role } : m),
     }));
     toast.success("Role updated");
   }, []);
@@ -129,15 +215,8 @@ export default function AdminClient() {
       method: "DELETE",
     });
     if (!res.ok) { toast.error("Failed to remove member"); return; }
-    setMembers((prev) => ({
-      ...prev,
-      [workspaceId]: prev[workspaceId].filter((m) => m.userId !== memberId),
-    }));
-    setWorkspaces((prev) =>
-      prev.map((w) =>
-        w.id === workspaceId ? { ...w, memberCount: w.memberCount - 1 } : w
-      )
-    );
+    setMembers((p) => ({ ...p, [workspaceId]: p[workspaceId].filter((m) => m.userId !== memberId) }));
+    setWorkspaces((p) => p.map((w) => w.id === workspaceId ? { ...w, memberCount: w.memberCount - 1 } : w));
     toast.success("Member removed");
   }, []);
 
@@ -152,21 +231,13 @@ export default function AdminClient() {
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? "Failed to add member"); return; }
-      const newMember: MemberRow = {
-        id: data.id,
-        userId: addUserId.trim(),
-        role: addRole,
-        createdAt: new Date().toISOString(),
-      };
-      setMembers((prev) => ({
-        ...prev,
-        [addDialogWorkspaceId]: [...(prev[addDialogWorkspaceId] ?? []), newMember],
+      setMembers((p) => ({
+        ...p,
+        [addDialogWorkspaceId]: [...(p[addDialogWorkspaceId] ?? []), {
+          id: data.id, userId: addUserId.trim(), role: addRole, createdAt: new Date().toISOString(),
+        }],
       }));
-      setWorkspaces((prev) =>
-        prev.map((w) =>
-          w.id === addDialogWorkspaceId ? { ...w, memberCount: w.memberCount + 1 } : w
-        )
-      );
+      setWorkspaces((p) => p.map((w) => w.id === addDialogWorkspaceId ? { ...w, memberCount: w.memberCount + 1 } : w));
       setAddDialogWorkspaceId(null);
       setAddUserId("");
       setAddRole("member");
@@ -175,6 +246,22 @@ export default function AdminClient() {
       setAddLoading(false);
     }
   }, [addDialogWorkspaceId, addUserId, addRole]);
+
+  const confirmDeleteWorkspace = useCallback(async () => {
+    if (!deleteWorkspace) return;
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/admin/workspaces/${deleteWorkspace.id}`, { method: "DELETE" });
+      if (!res.ok) { toast.error("Failed to delete workspace"); return; }
+      setWorkspaces((p) => p.filter((w) => w.id !== deleteWorkspace.id));
+      if (expandedId === deleteWorkspace.id) setExpandedId(null);
+      setDeleteWorkspace(null);
+      setDeleteConfirmName("");
+      toast.success(`Workspace "${deleteWorkspace.name}" deleted`);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [deleteWorkspace, expandedId]);
 
   if (loading) {
     return (
@@ -205,37 +292,45 @@ export default function AdminClient() {
                 onClick={() => toggleWorkspace(ws.id)}
               >
                 <div className="flex items-center gap-3">
-                  {expandedId === ws.id ? (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  )}
+                  {expandedId === ws.id
+                    ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                   <div>
                     <CardTitle className="text-base">{ws.name}</CardTitle>
                     <p className="text-xs text-muted-foreground mt-0.5">/{ws.slug}</p>
                   </div>
                 </div>
+
                 <div className="flex items-center gap-3">
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Users className="h-3.5 w-3.5" />
                     <span>{ws.memberCount}</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <CreditCard className="h-3.5 w-3.5" />
-                    <span>{ws.creditBalance}</span>
-                  </div>
+
+                  <CreditEditor
+                    workspaceId={ws.id}
+                    initial={ws.creditBalance}
+                    onSaved={(n) =>
+                      setWorkspaces((p) => p.map((w) => w.id === ws.id ? { ...w, creditBalance: n } : w))
+                    }
+                  />
+
                   <div className="flex items-center gap-1.5">
-                    {ws.metaConnected ? (
-                      <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Meta</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">No Meta</Badge>
-                    )}
-                    {ws.slackConnected ? (
-                      <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">Slack</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">No Slack</Badge>
-                    )}
+                    {ws.metaConnected
+                      ? <Badge variant="secondary" className="text-xs bg-blue-50 text-blue-700 border-blue-200">Meta</Badge>
+                      : <Badge variant="outline" className="text-xs text-muted-foreground">No Meta</Badge>}
+                    {ws.slackConnected
+                      ? <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">Slack</Badge>
+                      : <Badge variant="outline" className="text-xs text-muted-foreground">No Slack</Badge>}
                   </div>
+
+                  <button
+                    className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                    title="Delete workspace"
+                    onClick={(e) => { e.stopPropagation(); setDeleteWorkspace(ws); setDeleteConfirmName(""); }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
             </CardHeader>
@@ -334,9 +429,7 @@ export default function AdminClient() {
             <div className="space-y-1.5">
               <Label htmlFor="role">Role</Label>
               <Select value={addRole} onValueChange={(v) => setAddRole(v as typeof addRole)}>
-                <SelectTrigger id="role">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger id="role"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="owner">Owner</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
@@ -346,12 +439,48 @@ export default function AdminClient() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialogWorkspaceId(null)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setAddDialogWorkspaceId(null)}>Cancel</Button>
             <Button onClick={addMember} disabled={addLoading || !addUserId.trim()}>
               {addLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Add member
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Workspace Dialog */}
+      <Dialog
+        open={!!deleteWorkspace}
+        onOpenChange={(open) => { if (!open) { setDeleteWorkspace(null); setDeleteConfirmName(""); } }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete workspace</DialogTitle>
+            <DialogDescription>
+              This permanently deletes <strong>{deleteWorkspace?.name}</strong> and all its data: ad
+              accounts, campaigns, automations, boards, assets, and members. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label htmlFor="confirm-name">
+              Type <strong>{deleteWorkspace?.name}</strong> to confirm
+            </Label>
+            <Input
+              id="confirm-name"
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder={deleteWorkspace?.name}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteWorkspace(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteLoading || deleteConfirmName !== deleteWorkspace?.name}
+              onClick={confirmDeleteWorkspace}
+            >
+              {deleteLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Delete workspace
             </Button>
           </DialogFooter>
         </DialogContent>
