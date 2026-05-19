@@ -10,6 +10,8 @@ const isPublicRoute = createRouteMatcher([
   "/",
 ]);
 
+const isAuthRoute = createRouteMatcher(["/login", "/signup", "/"]);
+
 export default clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
 
@@ -18,7 +20,7 @@ export default clerkMiddleware(async (auth, request) => {
     return NextResponse.redirect(loginUrl);
   }
 
-  if (userId && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/")) {
+  if (userId && isAuthRoute(request)) {
     return NextResponse.redirect(new URL("/home", request.url));
   }
 });

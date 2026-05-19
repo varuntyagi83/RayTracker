@@ -16,12 +16,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  typescript: {
-    // Supabase database.types.ts is not checked in — suppress build-time TS errors.
-    // Runtime behaviour is unaffected. Re-enable after running:
-    //   supabase gen types typescript --project-id aeivwnkugdbwbbzjyycz > src/lib/supabase/database.types.ts
-    ignoreBuildErrors: true,
-  },
   experimental: {
     proxyClientMaxBodySize: "50mb",
     serverActions: {
@@ -38,7 +32,6 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "*.supabase.co" },
       { protocol: "https", hostname: "*.fbcdn.net" },
       { protocol: "https", hostname: "picsum.photos" },
       { protocol: "https", hostname: "loremflickr.com" },

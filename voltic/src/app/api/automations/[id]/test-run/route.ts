@@ -3,8 +3,9 @@ import { auth } from "@clerk/nextjs/server";
 import { executeAutomation } from "@/lib/automations/executor";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { db } from "@/lib/db";
-import { workspaceMembers, automations } from "@/db/schema";
+import { automations } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 
 /**
  * Test Run Endpoint
@@ -27,17 +28,11 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Verify automation exists and belongs to user's workspace
-  const member = await db
-    .select({ workspaceId: workspaceMembers.workspaceId })
-    .from(workspaceMembers)
-    .where(eq(workspaceMembers.userId, userId))
-    .limit(1)
-    .then((rows) => rows[0] ?? null);
-
-  if (!member) {
+  const workspace = await getWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 403 });
   }
+  const member = { workspaceId: workspace.id };
 
   const automation = await db
     .select({ workspaceId: automations.workspaceId })

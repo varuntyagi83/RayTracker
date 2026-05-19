@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import {
-  workspaceMembers,
   workspaces,
   adAccounts,
   campaigns,
   campaignMetrics,
 } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { apiLimiter } from "@/lib/utils/rate-limit";
 import { decryptToken } from "@/lib/utils/token-crypto";
@@ -30,24 +30,18 @@ export async function POST() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. Get workspace
-  const [member] = await db
-    .select({ workspaceId: workspaceMembers.workspaceId })
-    .from(workspaceMembers)
-    .where(eq(workspaceMembers.userId, userId))
-    .limit(1);
-
-  if (!member) {
+  // 2. Get active workspace (respects cookie for multi-workspace users)
+  const activeWorkspace = await getWorkspace();
+  if (!activeWorkspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
   }
+  const workspaceId = activeWorkspace.id;
 
   // Rate limit: 3 syncs per minute per workspace (each sync fans out to many Meta API calls)
-  const rl = await apiLimiter.check(member.workspaceId, 3);
+  const rl = await apiLimiter.check(workspaceId, 3);
   if (!rl.success) {
     return NextResponse.json({ error: "Too many sync requests — please wait before syncing again" }, { status: 429 });
   }
-
-  const workspaceId = member.workspaceId;
 
   // 3. Get Meta access token
   const [workspace] = await db

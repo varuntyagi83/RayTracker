@@ -24,7 +24,7 @@ import { TOOL_LIST, handleMcpMethod } from "./tools";
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_APP_URL ?? "*",
+  "Access-Control-Allow-Origin": process.env.NEXT_PUBLIC_APP_URL ?? "https://volticlens.com",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Authorization, Content-Type",
 };

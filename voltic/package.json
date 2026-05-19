@@ -25,8 +25,6 @@
     "@react-pdf/renderer": "^4.3.2",
     "@slack/web-api": "^7.14.1",
     "@stripe/stripe-js": "^8.7.0",
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.95.3",
     "@tiptap/extension-mention": "^3.19.0",
     "@tiptap/extension-placeholder": "^3.19.0",
     "@tiptap/pm": "^3.19.0",

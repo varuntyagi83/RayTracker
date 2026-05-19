@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   res.cookies.set("voltic-active-workspace", workspaceId, {
     path: "/",
     httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 30,
   });
