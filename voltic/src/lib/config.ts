@@ -10,9 +10,18 @@ const REQUIRED_PROD_VARS: string[] = [
   "CLERK_SECRET_KEY",
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
+  "META_APP_ID",
+  "META_APP_SECRET",
+  "SLACK_CLIENT_ID",
+  "SLACK_CLIENT_SECRET",
+  "OPENAI_API_KEY",
 ];
 
-if (process.env.NODE_ENV === "production") {
+// NEXT_PHASE is set to "phase-production-build" during `next build`.
+// Env vars for secrets are not injected at build time on Vercel — skip checks then.
+const isBuilding = process.env.NEXT_PHASE === "phase-production-build";
+
+if (process.env.NODE_ENV === "production" && !isBuilding) {
   for (const key of REQUIRED_PROD_VARS) {
     if (!process.env[key]) {
       throw new Error(
