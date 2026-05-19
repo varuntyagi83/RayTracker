@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { workspaceMembers, workspaces } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
@@ -16,7 +16,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
   const { id: workspaceId } = await params;
 
-  const members = await db
+  const rows = await db
     .select({
       id: workspaceMembers.id,
       userId: workspaceMembers.userId,
@@ -26,6 +26,33 @@ export async function GET(_req: NextRequest, { params }: Params) {
     .from(workspaceMembers)
     .where(eq(workspaceMembers.workspaceId, workspaceId))
     .orderBy(workspaceMembers.createdAt);
+
+  // Enrich with Clerk user profiles in a single batch call.
+  let nameMap: Record<string, { name: string; email: string }> = {};
+  if (rows.length > 0) {
+    try {
+      const client = await clerkClient();
+      const { data: clerkUsers } = await client.users.getUserList({
+        userId: rows.map((r) => r.userId),
+        limit: 100,
+      });
+      for (const u of clerkUsers) {
+        const name = [u.firstName, u.lastName].filter(Boolean).join(" ").trim()
+          || u.username
+          || "";
+        const email = u.emailAddresses[0]?.emailAddress ?? "";
+        nameMap[u.id] = { name, email };
+      }
+    } catch {
+      // Non-fatal: fall back to showing the raw user ID
+    }
+  }
+
+  const members = rows.map((r) => ({
+    ...r,
+    name: nameMap[r.userId]?.name ?? "",
+    email: nameMap[r.userId]?.email ?? "",
+  }));
 
   return NextResponse.json({ members });
 }

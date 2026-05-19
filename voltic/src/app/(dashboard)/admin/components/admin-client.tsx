@@ -55,6 +55,8 @@ interface MemberRow {
   userId: string;
   role: string;
   createdAt: string;
+  name: string;
+  email: string;
 }
 
 // ─── Inline Credit Editor ─────────────────────────────────────────────────────
@@ -234,7 +236,7 @@ export default function AdminClient() {
       setMembers((p) => ({
         ...p,
         [addDialogWorkspaceId]: [...(p[addDialogWorkspaceId] ?? []), {
-          id: data.id, userId: addUserId.trim(), role: addRole, createdAt: new Date().toISOString(),
+          id: data.id, userId: addUserId.trim(), role: addRole, createdAt: new Date().toISOString(), name: "", email: "",
         }],
       }));
       setWorkspaces((p) => p.map((w) => w.id === addDialogWorkspaceId ? { ...w, memberCount: w.memberCount + 1 } : w));
@@ -365,8 +367,11 @@ export default function AdminClient() {
                           className="flex items-center justify-between py-2 px-3 rounded-md bg-muted/40"
                         >
                           <div>
-                            <p className="text-sm font-mono">{member.userId}</p>
+                            <p className="text-sm font-medium">
+                              {member.name || member.email || member.userId}
+                            </p>
                             <p className="text-xs text-muted-foreground">
+                              {member.email && member.name ? `${member.email} · ` : ""}
                               Added {new Date(member.createdAt).toLocaleDateString()}
                             </p>
                           </div>
