@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { searchMetaPages } from "@/lib/meta/page-search";
+import { aiLimiter } from "@/lib/utils/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -17,6 +18,16 @@ const CACHE_TTL_MS = 5 * 60 * 1_000; // 5 minutes
 export async function GET(req: NextRequest) {
   // No auth check — this reads public Facebook page data.
   // The SCRAPECREATORS_API_KEY stays server-side only.
+  // Rate limit by client IP: 20 requests per minute to protect third-party API quota.
+  const clientIp =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "anonymous";
+  const rl = await aiLimiter.check(`page-search:${clientIp}`, 20);
+  if (!rl.success) {
+    return NextResponse.json(
+      { error: "Too many requests — please wait before searching again" },
+      { status: 429 }
+    );
+  }
 
   const { searchParams } = req.nextUrl;
   const parsed = schema.safeParse({

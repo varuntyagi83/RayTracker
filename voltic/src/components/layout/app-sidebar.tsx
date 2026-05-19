@@ -26,6 +26,7 @@ import {
   Settings,
   LogOut,
   ChevronsUpDown,
+  Shield,
 } from "lucide-react";
 
 import {
@@ -82,9 +83,10 @@ const reportItems = [
 
 interface AppSidebarProps {
   userEmail: string;
+  isSuperAdmin?: boolean;
 }
 
-export function AppSidebar({ userEmail }: AppSidebarProps) {
+export function AppSidebar({ userEmail, isSuperAdmin = false }: AppSidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { workspace, allWorkspaces } = useWorkspace();
@@ -280,6 +282,15 @@ export function AppSidebar({ userEmail }: AppSidebarProps) {
                   <Settings className="size-4" />
                   Settings
                 </DropdownMenuItem>
+                {isSuperAdmin && (
+                  <DropdownMenuItem
+                    className="gap-2 text-orange-600"
+                    onClick={() => router.push("/admin")}
+                  >
+                    <Shield className="size-4" />
+                    Admin Panel
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="gap-2 text-destructive"

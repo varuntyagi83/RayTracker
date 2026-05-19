@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaces, getWorkspace, getUser } from "@/lib/supabase/queries";
+import { isSuperAdmin } from "@/lib/admin";
 import { WorkspaceProvider } from "@/components/shared/workspace-provider";
 import { PostHogIdentify } from "@/components/shared/posthog-identify";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -41,7 +42,7 @@ export default async function DashboardLayout({
         workspaceName={workspace.name}
       />
       <SidebarProvider>
-        <AppSidebar userEmail={user.email ?? ""} />
+        <AppSidebar userEmail={user.email ?? ""} isSuperAdmin={isSuperAdmin(user.id)} />
         <SidebarInset>
           <TopBar />
           <main className="flex-1 overflow-auto">{children}</main>

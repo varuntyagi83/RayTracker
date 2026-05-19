@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { workspaces, workspaceMembers } from "@/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import type { Workspace } from "@/lib/hooks/use-workspace";
+import { isSuperAdmin } from "@/lib/admin";
 
 const WORKSPACE_COOKIE = "voltic-active-workspace";
 
@@ -33,9 +34,28 @@ function rowToWorkspace(row: {
   };
 }
 
+const WORKSPACE_COLUMNS = {
+  id: workspaces.id,
+  name: workspaces.name,
+  slug: workspaces.slug,
+  timezone: workspaces.timezone,
+  currency: workspaces.currency,
+  creditBalance: workspaces.creditBalance,
+  settings: workspaces.settings,
+  metaAccessToken: workspaces.metaAccessToken,
+  slackAccessToken: workspaces.slackAccessToken,
+  slackTeamName: workspaces.slackTeamName,
+} as const;
+
 export async function getWorkspaces(): Promise<Workspace[]> {
   const { userId } = await auth();
   if (!userId) return [];
+
+  // Super-admin sees every workspace in the platform.
+  if (isSuperAdmin(userId)) {
+    const rows = await db.select(WORKSPACE_COLUMNS).from(workspaces);
+    return rows.map(rowToWorkspace);
+  }
 
   const members = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
@@ -46,18 +66,7 @@ export async function getWorkspaces(): Promise<Workspace[]> {
 
   const workspaceIds = members.map((m) => m.workspaceId);
   const rows = await db
-    .select({
-      id: workspaces.id,
-      name: workspaces.name,
-      slug: workspaces.slug,
-      timezone: workspaces.timezone,
-      currency: workspaces.currency,
-      creditBalance: workspaces.creditBalance,
-      settings: workspaces.settings,
-      metaAccessToken: workspaces.metaAccessToken,
-      slackAccessToken: workspaces.slackAccessToken,
-      slackTeamName: workspaces.slackTeamName,
-    })
+    .select(WORKSPACE_COLUMNS)
     .from(workspaces)
     .where(inArray(workspaces.id, workspaceIds));
 
