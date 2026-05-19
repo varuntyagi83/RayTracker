@@ -2,9 +2,9 @@ import { auth, currentUser as clerkCurrentUser } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaces, workspaceMembers } from "@/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, ne, and } from "drizzle-orm";
 import type { Workspace } from "@/lib/hooks/use-workspace";
-import { isSuperAdmin } from "@/lib/admin";
+import { isSuperAdmin, getSuperAdminUserId } from "@/lib/admin";
 
 const WORKSPACE_COOKIE = "voltic-active-workspace";
 
@@ -94,4 +94,42 @@ export async function getUser() {
   const clerkUser = await clerkCurrentUser();
   const email = clerkUser?.emailAddresses?.[0]?.emailAddress ?? "";
   return { id: userId, email };
+}
+
+export interface WorkspaceMember {
+  id: string;
+  userId: string;
+  role: string;
+  createdAt: Date;
+}
+
+/**
+ * Returns workspace members visible to regular users.
+ * The super-admin is always filtered out so they remain invisible
+ * to customers regardless of whether they hold a membership row.
+ */
+export async function getWorkspaceMembersForUser(
+  workspaceId: string
+): Promise<WorkspaceMember[]> {
+  const adminId = getSuperAdminUserId();
+
+  const query = db
+    .select({
+      id: workspaceMembers.id,
+      userId: workspaceMembers.userId,
+      role: workspaceMembers.role,
+      createdAt: workspaceMembers.createdAt,
+    })
+    .from(workspaceMembers)
+    .where(
+      adminId
+        ? and(
+            eq(workspaceMembers.workspaceId, workspaceId),
+            ne(workspaceMembers.userId, adminId)
+          )
+        : eq(workspaceMembers.workspaceId, workspaceId)
+    )
+    .orderBy(workspaceMembers.createdAt);
+
+  return query;
 }
