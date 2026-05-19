@@ -29,10 +29,13 @@ export async function createWorkspace(workspaceName: string) {
     return { error: null };
   }
 
-  const slug = parsed.data.workspaceName
+  const baseSlug = parsed.data.workspaceName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+
+  // Append a 4-char suffix to avoid unique-index collisions on slug.
+  const slug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
 
   const [newWorkspace] = await db
     .insert(workspaces)
