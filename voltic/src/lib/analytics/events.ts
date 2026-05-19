@@ -182,7 +182,12 @@ export interface EventPropertiesMap {
 
   // Stripe Webhooks (server-side)
   stripe_webhook_missing_metadata: { session_id: string; alert: boolean };
+  stripe_refund_received: { charge_id: string; amount_refunded: number; payment_intent: string | null | undefined; alert: boolean };
   credits_purchase_failed: { workspace_id: string; error: string | undefined };
+  credit_ledger_missing: { amount: number; type: string; error: string };
+
+  // Admin (server-side)
+  super_admin_workspace_switch: { target_workspace_id: string; target_workspace_name: string };
 
   // AI / Credits (server-side)
   credits_deducted: {

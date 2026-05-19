@@ -2,8 +2,7 @@
 
 import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
-import { getCreditTransactions, addCredits, getTotalCreditsUsed } from "@/lib/data/credits";
-import { CREDIT_PACKAGES } from "@/types/credits";
+import { getCreditTransactions, getTotalCreditsUsed } from "@/lib/data/credits";
 import type { TransactionType } from "@/types/credits";
 
 const fetchTransactionsSchema = z.object({
@@ -43,25 +42,4 @@ export async function fetchTotalCreditsUsedAction(): Promise<number> {
   const workspace = await getWorkspace();
   if (!workspace) return 0;
   return getTotalCreditsUsed(workspace.id);
-}
-
-// ─── Mock Purchase ───────────────────────────────────────────────────────
-
-export async function purchaseCreditsAction(input: {
-  packageId: string;
-}): Promise<{ success: boolean; newBalance?: number; error?: string }> {
-  const workspace = await getWorkspace();
-  if (!workspace) return { success: false, error: "No workspace" };
-
-  const pkg = CREDIT_PACKAGES.find((p) => p.id === input.packageId);
-  if (!pkg) return { success: false, error: "Invalid package" };
-
-  const result = await addCredits(
-    workspace.id,
-    pkg.credits,
-    "purchase",
-    `Credit purchase: ${pkg.credits} credits ($${pkg.price})`
-  );
-
-  return result;
 }

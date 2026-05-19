@@ -121,6 +121,17 @@ export async function addCredits(
       type,
       error: txErr instanceof Error ? txErr.message : String(txErr),
     });
+    // Track via PostHog so this surfaces in the dashboard, not just server logs
+    try {
+      const { trackServer } = await import("@/lib/analytics/posthog-server");
+      trackServer("credit_ledger_missing", workspaceId, {
+        amount,
+        type,
+        error: txErr instanceof Error ? txErr.message : String(txErr),
+      });
+    } catch {
+      // Non-fatal: tracking failure must never crash the credit flow
+    }
   }
 
   return { success: true, newBalance };

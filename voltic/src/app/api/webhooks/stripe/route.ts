@@ -4,7 +4,7 @@ import { addCredits } from "@/lib/data/credits";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { db } from "@/lib/db";
 import { creditTransactions } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 /**
  * POST /api/webhooks/stripe
@@ -68,11 +68,10 @@ export async function POST(request: NextRequest) {
       }
 
       // Idempotency guard: skip if this session was already processed.
-      // reference_id is UUID in schema; use text cast to compare Stripe session IDs.
       const [existing] = await db
         .select({ id: creditTransactions.id })
         .from(creditTransactions)
-        .where(sql`${creditTransactions.referenceId}::text = ${session.id}`)
+        .where(eq(creditTransactions.referenceId, session.id))
         .limit(1);
 
       if (existing) {
@@ -98,6 +97,24 @@ export async function POST(request: NextRequest) {
       } else {
         trackServer("credits_purchase_failed", userId, { workspace_id: workspaceId, error: result.error });
       }
+      break;
+    }
+
+    case "charge.refunded": {
+      const charge = event.data.object;
+      // Credits are not auto-reversed on refund — requires manual admin action
+      // via the admin panel to deduct credits from the workspace.
+      console.warn("[stripe-webhook] charge.refunded received — manual credit reversal required", {
+        charge_id: charge.id,
+        amount_refunded: charge.amount_refunded,
+        payment_intent: typeof charge.payment_intent === "string" ? charge.payment_intent : null,
+      });
+      trackServer("stripe_refund_received", "system", {
+        charge_id: charge.id,
+        amount_refunded: charge.amount_refunded,
+        payment_intent: typeof charge.payment_intent === "string" ? charge.payment_intent : null,
+        alert: true,
+      });
       break;
     }
 

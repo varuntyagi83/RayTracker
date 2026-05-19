@@ -4,9 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { getStripe } from "@/lib/stripe/client";
 import { CREDIT_PACKAGES } from "@/types/credits";
 import { apiLimiter } from "@/lib/utils/rate-limit";
-import { db } from "@/lib/db";
-import { workspaceMembers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { getWorkspace } from "@/lib/supabase/queries";
 
 const checkoutSchema = z.object({
   packageId: z.enum(["starter", "pro", "enterprise"]),
@@ -33,15 +31,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
-  // 2. Get workspace
-  const member = await db
-    .select({ workspaceId: workspaceMembers.workspaceId })
-    .from(workspaceMembers)
-    .where(eq(workspaceMembers.userId, userId))
-    .limit(1)
-    .then((rows) => rows[0] ?? null);
-
-  if (!member) {
+  // 2. Get workspace (respects active-workspace cookie for multi-workspace users)
+  const workspace = await getWorkspace();
+  if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 403 });
   }
 
@@ -80,7 +72,7 @@ export async function POST(request: NextRequest) {
       },
     ],
     metadata: {
-      workspace_id: member.workspaceId,
+      workspace_id: workspace.id,
       user_id: userId,
       package_id: pkg.id,
       credits: String(pkg.credits),

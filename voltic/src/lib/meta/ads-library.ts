@@ -99,6 +99,9 @@ export async function scrapeAdsLibrary(
   const token = process.env.APIFY_API_TOKEN;
 
   if (!token) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("[ads-library] APIFY_API_TOKEN is not configured — cannot serve real ad data in production");
+    }
     console.warn("[ads-library] APIFY_API_TOKEN not set — returning mock data");
     return getMockResult(params);
   }

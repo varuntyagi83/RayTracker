@@ -1,7 +1,10 @@
 import { verifyToken } from "@clerk/backend";
+import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { workspaceMembers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
+
+const WORKSPACE_COOKIE = "voltic-active-workspace";
 
 interface ExtensionAuthResult {
   valid: boolean;
@@ -26,15 +29,28 @@ export async function validateExtensionToken(token: string): Promise<ExtensionAu
     return { valid: false, error: "Invalid or expired token" };
   }
 
-  const [member] = await db
+  const memberRows = await db
     .select({ workspaceId: workspaceMembers.workspaceId })
     .from(workspaceMembers)
     .where(eq(workspaceMembers.userId, userId))
-    .limit(1);
+    .orderBy(desc(workspaceMembers.createdAt));
 
-  if (!member) {
+  if (memberRows.length === 0) {
     return { valid: false, error: "User has no workspace" };
   }
 
-  return { valid: true, userId, workspaceId: member.workspaceId };
+  // Respect the active-workspace cookie so the extension operates on the
+  // same workspace the user has selected in the web app.
+  let workspaceId = memberRows[0].workspaceId;
+  try {
+    const cookieStore = await cookies();
+    const preferred = cookieStore.get(WORKSPACE_COOKIE)?.value;
+    if (preferred && memberRows.some((m) => m.workspaceId === preferred)) {
+      workspaceId = preferred;
+    }
+  } catch {
+    // cookies() unavailable outside a request context — use first row
+  }
+
+  return { valid: true, userId, workspaceId };
 }

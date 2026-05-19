@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getWorkspace } from "@/lib/supabase/queries";
 import { compositeTextOnImage } from "@/lib/compositing/text-overlay";
 import { uploadAdImage } from "@/lib/data/ads";
+import { aiLimiter } from "@/lib/utils/rate-limit";
 
 export const maxDuration = 300;
 
@@ -46,6 +47,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     workspaceId = workspace.id;
+
+    const rl = await aiLimiter.check(workspace.id, 5);
+    if (!rl.success) {
+      return NextResponse.json({ error: "Too many batch requests — please wait before trying again" }, { status: 429 });
+    }
 
     let combinations: z.infer<typeof combinationSchema>[];
     try {

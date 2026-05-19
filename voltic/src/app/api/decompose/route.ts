@@ -8,6 +8,7 @@ import { getWorkspace } from "@/lib/supabase/queries";
 import { trackServer } from "@/lib/analytics/posthog-server";
 import { downloadImage, decomposeAdImage, generateCleanProductImage } from "@/lib/ai/decompose";
 import { checkAndDeductCredits, refundCredits } from "@/lib/data/insights";
+import { aiLimiter } from "@/lib/utils/rate-limit";
 import {
   DECOMPOSITION_ANALYSIS_COST,
   DECOMPOSITION_CLEAN_IMAGE_COST,
@@ -51,6 +52,11 @@ export async function POST(request: Request) {
   const workspace = await getWorkspace();
   if (!workspace) {
     return NextResponse.json({ error: "No workspace" }, { status: 404 });
+  }
+
+  const rl = await aiLimiter.check(workspace.id, 5);
+  if (!rl.success) {
+    return NextResponse.json({ error: "Too many decomposition requests — please wait before trying again" }, { status: 429 });
   }
   const workspaceId = workspace.id;
 

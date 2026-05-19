@@ -6,8 +6,15 @@ const isPublicRoute = createRouteMatcher([
   "/signup(.*)",
   "/onboarding(.*)",
   "/auth(.*)",
-  "/api/(.*)",
   "/",
+  // Webhooks: validated by their own signature/secret checks
+  "/api/webhooks/(.*)",
+  // MCP: validated by Bearer API key
+  "/api/mcp(.*)",
+  // Chrome extension: validated by Clerk verifyToken
+  "/api/extension/(.*)",
+  // Public page search (rate-limited by IP)
+  "/api/meta/page-search",
 ]);
 
 const isAuthRoute = createRouteMatcher(["/login", "/signup", "/"]);

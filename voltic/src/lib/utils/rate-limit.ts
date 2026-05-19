@@ -44,8 +44,8 @@ export class RateLimiter {
     timestamps.push(now);
     this.tokens.set(identifier, timestamps);
 
-    // Periodic cleanup: remove stale keys every ~100 calls
-    if (Math.random() < 0.01) {
+    // Periodic cleanup: remove stale keys every ~20 calls
+    if (Math.random() < 0.05 || this.tokens.size > 5000) {
       this.cleanup(windowStart);
     }
 

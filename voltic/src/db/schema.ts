@@ -415,7 +415,7 @@ export const creditTransactions = pgTable(
       .references(() => workspaces.id, { onDelete: "cascade" }),
     amount: integer("amount").notNull(),
     type: text("type").notNull(),
-    referenceId: uuid("reference_id"),
+    referenceId: text("reference_id"),
     description: text("description").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -423,6 +423,7 @@ export const creditTransactions = pgTable(
   },
   (table) => [
     index("idx_credit_transactions_workspace_id").on(table.workspaceId),
+    uniqueIndex("idx_credit_transactions_reference_id").on(table.referenceId),
   ]
 );
 
