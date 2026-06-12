@@ -17,11 +17,11 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.clerk.io https://js.stripe.com https://app.posthog.com https://va.vercel-scripts.com",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.clerk.io https://clerk.volticlens.com https://js.stripe.com https://app.posthog.com https://eu-assets.i.posthog.com https://va.vercel-scripts.com",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https: http:",
       "font-src 'self' data:",
-      "connect-src 'self' https://clerk.volticlens.com https://*.clerk.accounts.dev https://api.posthog.com https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com wss://clerk.volticlens.com wss://*.clerk.accounts.dev",
+      "connect-src 'self' https://clerk.volticlens.com https://*.clerk.accounts.dev https://api.posthog.com https://eu.i.posthog.com https://eu-assets.i.posthog.com https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com wss://clerk.volticlens.com wss://*.clerk.accounts.dev",
       "frame-src https://js.stripe.com https://hooks.stripe.com",
       "worker-src 'self' blob:",
     ].join("; "),
