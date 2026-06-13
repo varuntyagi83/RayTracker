@@ -210,21 +210,6 @@ function Hero() {
 // ── Dashboard mockup ──────────────────────────────────────────────────────────
 
 function DashboardMockup() {
-  const ads = [
-    { brand: "Allbirds", format: "Story", days: 12, spend: "$3.4K", active: true },
-    { brand: "Gymshark", format: "Reel", days: 5, spend: "$8.1K", active: true },
-    { brand: "AG1", format: "Feed", days: 21, spend: "$14.2K", active: true },
-    { brand: "Allbirds", format: "Feed", days: 3, spend: "$1.9K", active: true },
-    { brand: "Gymshark", format: "Story", days: 8, spend: "$5.7K", active: false },
-    { brand: "AG1", format: "Reel", days: 30, spend: "$22.0K", active: false },
-  ];
-
-  const palette: Record<string, { bg: string; text: string }> = {
-    Allbirds: { bg: "bg-sky-500/15 border-sky-500/20", text: "text-sky-400" },
-    Gymshark: { bg: "bg-violet-500/15 border-violet-500/20", text: "text-violet-400" },
-    AG1: { bg: "bg-amber-500/15 border-amber-500/20", text: "text-amber-400" },
-  };
-
   return (
     <div className="relative">
       <div className="absolute -inset-6 bg-emerald-500/5 rounded-3xl blur-3xl pointer-events-none" />
@@ -232,59 +217,37 @@ function DashboardMockup() {
         <div className="border-b border-zinc-800 px-4 py-3 flex items-center justify-between bg-zinc-900/60">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-zinc-100">Competitor Ads</span>
-            <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-md">
-              247 found
-            </span>
+            <span className="text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-md">247 found</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-zinc-500 bg-zinc-800/80 px-2.5 py-1 rounded-md border border-zinc-700 flex items-center gap-1.5">
-              <Filter className="w-3 h-3" />
-              All formats
+              <Filter className="w-3 h-3" />All formats
             </span>
             <span className="text-xs text-zinc-500 bg-zinc-800/80 px-2.5 py-1 rounded-md border border-zinc-700 flex items-center gap-1.5">
-              <Eye className="w-3 h-3" />
-              Active
+              <Eye className="w-3 h-3" />Active
             </span>
           </div>
         </div>
 
         <div className="p-4 grid grid-cols-3 gap-3">
-          {ads.map((ad, i) => (
-            <div
-              key={i}
-              className="rounded-xl border border-zinc-700/50 bg-zinc-800/40 overflow-hidden"
-            >
-              <div
-                className={`aspect-square w-full ${palette[ad.brand].bg} border-b border-zinc-700/30 flex items-center justify-center`}
-              >
-                <span
-                  className={`text-[10px] font-semibold uppercase tracking-wider ${palette[ad.brand].text}`}
-                >
-                  {ad.format}
-                </span>
-              </div>
-              <div className="p-2 space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-zinc-200">{ad.brand}</span>
-                  <span
-                    className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                      ad.active
-                        ? "bg-emerald-500/15 text-emerald-400"
-                        : "bg-zinc-700/50 text-zinc-500"
-                    }`}
-                  >
-                    {ad.active ? "Active" : "Ended"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="w-2.5 h-2.5 text-zinc-600" />
-                  <span className="text-[10px] text-zinc-500">{ad.days}d</span>
-                  <span className="text-zinc-700 mx-0.5">·</span>
-                  <span className="text-[10px] font-medium text-emerald-400">{ad.spend}</span>
-                </div>
-              </div>
-            </div>
-          ))}
+          <AdCard brand="Allbirds" logoColor="bg-emerald-700" format="Story" days={12} spend="$3.4K" active>
+            <AllbirdsCreative />
+          </AdCard>
+          <AdCard brand="Gymshark" logoColor="bg-violet-700" format="Reel" days={5} spend="$8.1K" active>
+            <GymsharkCreative />
+          </AdCard>
+          <AdCard brand="AG1" logoColor="bg-lime-700" format="Feed" days={21} spend="$14.2K" active>
+            <AG1Creative />
+          </AdCard>
+          <AdCard brand="Allbirds" logoColor="bg-emerald-700" format="Feed" days={3} spend="$1.9K" active>
+            <AllbirdsFeedCreative />
+          </AdCard>
+          <AdCard brand="Gymshark" logoColor="bg-violet-700" format="Story" days={8} spend="$5.7K" active={false}>
+            <GymsharkStoryCreative />
+          </AdCard>
+          <AdCard brand="AG1" logoColor="bg-lime-700" format="Reel" days={30} spend="$22.0K" active={false}>
+            <AG1ReelCreative />
+          </AdCard>
         </div>
 
         <div className="border-t border-zinc-800 px-4 py-2.5 flex items-center justify-between bg-zinc-900/40">
@@ -294,6 +257,186 @@ function DashboardMockup() {
             <span className="text-xs text-emerald-400">Live</span>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AdCard({
+  brand,
+  logoColor,
+  format,
+  days,
+  spend,
+  active,
+  children,
+}: {
+  brand: string;
+  logoColor: string;
+  format: string;
+  days: number;
+  spend: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl overflow-hidden border border-zinc-700/40 bg-zinc-800/40">
+      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-zinc-800/60">
+        <div className={`w-4 h-4 rounded-full ${logoColor} flex items-center justify-center text-[7px] font-bold text-white shrink-0`}>
+          {brand[0]}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[9px] font-semibold text-zinc-300 leading-none">{brand}</p>
+          <p className="text-[7px] text-zinc-600">Sponsored</p>
+        </div>
+        <span className={`text-[7px] px-1 py-0.5 rounded-full font-medium shrink-0 ${active ? "bg-emerald-500/15 text-emerald-400" : "bg-zinc-700/50 text-zinc-500"}`}>
+          {active ? "Active" : "Ended"}
+        </span>
+      </div>
+      <div className="aspect-square relative overflow-hidden">{children}</div>
+      <div className="flex items-center justify-between px-2 py-1 bg-zinc-800/30 border-t border-zinc-700/20">
+        <span className="text-[8px] text-zinc-500 uppercase tracking-wider">{format}</span>
+        <div className="flex items-center gap-1">
+          <Clock className="w-2 h-2 text-zinc-600" />
+          <span className="text-[8px] text-zinc-500">{days}d</span>
+          <span className="text-zinc-700 mx-0.5">·</span>
+          <span className="text-[8px] font-medium text-emerald-400">{spend}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SneakerSvg({ shoeColor = "white", accentColor = "#10b981" }: { shoeColor?: string; accentColor?: string }) {
+  return (
+    <svg viewBox="0 0 110 62" fill="none" className="w-[88%] h-auto drop-shadow-sm">
+      <ellipse cx="56" cy="57" rx="46" ry="4" fill="rgba(0,0,0,0.12)" />
+      <path d="M13,47 Q16,51 56,53 Q96,51 98,47" stroke="#222" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d="M14,44 Q56,49 98,44 L98,47 Q56,53 13,47 Z" fill="#d8d0c4" />
+      <path d="M16,42 Q22,22 50,28 Q72,32 92,21 Q105,25 98,44 Z" fill={shoeColor} />
+      <path d="M16,42 Q21,32 35,34 Q49,36 58,32" stroke="rgba(0,0,0,0.1)" strokeWidth="1.3" fill="none" strokeLinecap="round" />
+      <path d="M50,31 Q70,25 92,21" stroke="rgba(0,0,0,0.08)" strokeWidth="0.9" fill="none" />
+      <path d="M48,35 Q68,29 90,25" stroke="rgba(0,0,0,0.08)" strokeWidth="0.9" fill="none" />
+      <path d="M46,39 Q66,33 88,29" stroke="rgba(0,0,0,0.07)" strokeWidth="0.8" fill="none" />
+      <path d="M92,21 Q105,25 98,44 Q94,33 88,27 Z" fill="rgba(0,0,0,0.07)" />
+      <path d="M16,42 Q18,36 22,34" stroke="rgba(0,0,0,0.07)" strokeWidth="1" fill="none" strokeLinecap="round" />
+      <path d="M50,31 Q56,21 62,24 Q69,28 69,32" fill="rgba(0,0,0,0.05)" />
+      <circle cx="78" cy="36" r="3.5" fill={accentColor} fillOpacity="0.15" />
+      <circle cx="78" cy="36" r="2" fill={accentColor} fillOpacity="0.3" />
+    </svg>
+  );
+}
+
+function AllbirdsCreative() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-stone-100 to-amber-50 flex flex-col items-center justify-between py-2 px-2">
+      <div className="absolute top-0 left-0 right-0 h-[3px] bg-emerald-600" />
+      <div className="flex-1 flex items-center justify-center w-full">
+        <SneakerSvg shoeColor="white" accentColor="#059669" />
+      </div>
+      <div className="w-full bg-gradient-to-t from-stone-700/65 to-transparent pt-5 pb-1.5 px-2">
+        <p className="text-white text-[11px] font-bold leading-tight">Walk further. Feel better.</p>
+        <div className="mt-1 inline-block bg-emerald-600 text-white text-[8px] px-2 py-0.5 rounded font-semibold">Shop Now</div>
+      </div>
+    </div>
+  );
+}
+
+function GymsharkCreative() {
+  return (
+    <div className="absolute inset-0 bg-black flex flex-col items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center opacity-20">
+        <div className="w-28 h-28 rounded-full border border-violet-400" />
+        <div className="absolute w-20 h-20 rounded-full border border-violet-400" />
+        <div className="absolute w-12 h-12 rounded-full border border-violet-400" />
+      </div>
+      <div className="absolute top-1/2 left-0 right-0 h-px bg-violet-500/15" />
+      <div className="absolute left-1/2 top-0 bottom-0 w-px bg-violet-500/15" />
+      <div className="relative z-10 text-center">
+        <p className="text-white text-[14px] font-black uppercase tracking-widest leading-none">BUILT</p>
+        <p className="text-violet-400 text-[14px] font-black uppercase tracking-widest">DIFFERENT</p>
+      </div>
+      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent pt-4 pb-2 px-2.5">
+        <p className="text-zinc-400 text-[9px]">New season. New limits.</p>
+        <div className="mt-1 inline-block border border-violet-500/70 text-violet-300 text-[8px] px-2 py-0.5 rounded font-semibold">Shop Drop</div>
+      </div>
+    </div>
+  );
+}
+
+function AG1Creative() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-br from-[#1a3d20] to-[#0c1e0f] flex flex-col items-center justify-center gap-1.5 px-2">
+      <svg viewBox="0 0 50 65" fill="none" className="w-[28%] h-auto">
+        <rect x="8" y="18" width="34" height="40" rx="3" fill="#2a5c30" />
+        <ellipse cx="25" cy="18" rx="17" ry="5" fill="#3a7040" />
+        <ellipse cx="25" cy="58" rx="17" ry="5" fill="#163318" />
+        <rect x="8" y="30" width="34" height="20" fill="white" fillOpacity="0.06" />
+        <rect x="14" y="35" width="22" height="2.5" rx="1.25" fill="white" fillOpacity="0.75" />
+        <rect x="17" y="40" width="16" height="1.8" rx="0.9" fill="#9fdc70" fillOpacity="0.6" />
+        <path d="M8,18 Q8,12 25,12 Q42,12 42,18" stroke="#4a9050" strokeWidth="1.5" fill="none" />
+      </svg>
+      <div className="w-8 h-px bg-amber-400/50" />
+      <p className="text-white text-[11px] font-bold text-center leading-tight">One habit. Better everything.</p>
+      <p className="text-emerald-300 text-[9px] text-center">75 vitamins. One scoop.</p>
+      <div className="bg-amber-400/90 text-zinc-900 text-[8px] px-2.5 py-0.5 rounded font-bold">Try AG1</div>
+    </div>
+  );
+}
+
+function AllbirdsFeedCreative() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-sky-100 to-sky-50 flex flex-col items-center justify-between py-2 px-2">
+      <div className="flex-1 flex items-center justify-center w-full">
+        <SneakerSvg shoeColor="#ddeeff" accentColor="#0ea5e9" />
+      </div>
+      <div className="w-full bg-gradient-to-t from-sky-800/60 to-transparent pt-5 pb-1.5 px-2">
+        <p className="text-white text-[11px] font-bold leading-tight">Sustainable style.</p>
+        <div className="mt-1 inline-block bg-emerald-600 text-white text-[8px] px-2 py-0.5 rounded font-semibold">Find your fit</div>
+      </div>
+    </div>
+  );
+}
+
+function GymsharkStoryCreative() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-b from-zinc-900 to-violet-950 flex flex-col justify-between p-2.5">
+      <div className="flex items-center justify-between">
+        <span className="text-violet-400 text-[8px] font-black uppercase tracking-widest">Gymshark</span>
+        <div className="w-3.5 h-3.5 rounded-full border border-violet-500/40" />
+      </div>
+      <div className="flex items-center justify-center flex-1">
+        <svg viewBox="0 0 60 80" fill="none" className="h-2/3">
+          <circle cx="30" cy="11" r="6.5" fill="rgba(167,139,250,0.25)" />
+          <path d="M21,20 L30,50 L39,20" stroke="rgba(167,139,250,0.45)" strokeWidth="2" fill="none" strokeLinejoin="round" />
+          <path d="M17,30 L30,38 L43,30" stroke="rgba(167,139,250,0.35)" strokeWidth="1.5" fill="none" />
+          <path d="M23,50 L19,70" stroke="rgba(167,139,250,0.4)" strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path d="M37,50 L41,70" stroke="rgba(167,139,250,0.4)" strokeWidth="2" fill="none" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div>
+        <p className="text-white text-[12px] font-black uppercase leading-none">LEVEL</p>
+        <p className="text-violet-400 text-[12px] font-black uppercase">UP.</p>
+        <div className="mt-1 inline-block border border-violet-400/60 text-violet-300 text-[8px] px-2 py-0.5 rounded font-semibold">Shop Now</div>
+      </div>
+    </div>
+  );
+}
+
+function AG1ReelCreative() {
+  return (
+    <div className="absolute inset-0 bg-gradient-to-br from-[#1c3520] to-[#0a1a0c] flex flex-col justify-between p-2.5">
+      <div className="flex justify-center">
+        <div className="w-9 h-9 rounded-full bg-amber-400/12 border border-amber-400/25 flex items-center justify-center">
+          <div className="w-4.5 h-4.5 rounded-full bg-amber-400/35" />
+        </div>
+      </div>
+      <div className="w-full h-px bg-emerald-500/20" />
+      <div>
+        <p className="text-zinc-500 text-[8px] uppercase tracking-widest mb-1">Daily ritual</p>
+        <p className="text-white text-[11px] font-bold leading-tight">Your one daily non-negotiable.</p>
+        <p className="text-emerald-300 text-[9px] mt-1">75 vitamins. One scoop.</p>
+        <div className="mt-1.5 inline-block bg-emerald-600/80 text-white text-[8px] px-2.5 py-0.5 rounded font-semibold">Start today</div>
       </div>
     </div>
   );
@@ -463,13 +606,6 @@ function CompetitorFeature() {
 // ── AI Variations ─────────────────────────────────────────────────────────────
 
 function VariationsFeature() {
-  const variations = [
-    { label: "Outdoor scene", gradient: "from-sky-900/50 to-zinc-800" },
-    { label: "Studio white", gradient: "from-violet-900/50 to-zinc-800" },
-    { label: "Lifestyle", gradient: "from-amber-900/50 to-zinc-800" },
-    { label: "Minimal dark", gradient: "from-rose-900/50 to-zinc-800" },
-  ];
-
   return (
     <section className="py-28 px-6 border-t border-zinc-800/50">
       <div className="mx-auto max-w-7xl grid lg:grid-cols-2 gap-20 items-center">
@@ -485,14 +621,13 @@ function VariationsFeature() {
 
             <div className="p-4 space-y-4">
               <div className="flex items-stretch gap-4">
+                {/* Source photo: actual product */}
                 <div className="w-28 shrink-0">
                   <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
                     Source photo
                   </p>
-                  <div className="aspect-square rounded-xl bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-600 flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-lg bg-zinc-600 flex items-center justify-center">
-                      <Zap className="w-5 h-5 text-zinc-400" />
-                    </div>
+                  <div className="aspect-square rounded-xl bg-gradient-to-b from-stone-100 to-stone-50 border border-zinc-600 flex items-center justify-center overflow-hidden">
+                    <SneakerSvg shoeColor="white" accentColor="#059669" />
                   </div>
                 </div>
 
@@ -506,24 +641,71 @@ function VariationsFeature() {
                   </div>
                 </div>
 
+                {/* Variation outputs */}
                 <div className="flex-1">
                   <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
                     Variations generated
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {variations.map((v, i) => (
-                      <div
-                        key={i}
-                        className={`aspect-square rounded-xl bg-gradient-to-br ${v.gradient} border border-zinc-700 flex items-center justify-center relative overflow-hidden`}
-                      >
-                        <span className="text-[9px] text-zinc-400 text-center px-1">
-                          {v.label}
-                        </span>
-                        <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center">
-                          <Check className="w-2 h-2 text-emerald-400" />
-                        </div>
+                    {/* Outdoor */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700">
+                      <div className="absolute inset-0 bg-gradient-to-b from-sky-400 to-sky-500" />
+                      <div className="absolute bottom-0 left-0 right-0 h-[35%] bg-gradient-to-b from-emerald-600 to-emerald-700" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <SneakerSvg shoeColor="white" accentColor="#059669" />
                       </div>
-                    ))}
+                      <div className="absolute bottom-1 left-1 right-1 bg-black/40 rounded px-1 py-0.5">
+                        <p className="text-white text-[8px] font-bold leading-tight">Built for any terrain.</p>
+                      </div>
+                      <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
+                        <Check className="w-2 h-2 text-emerald-400" />
+                      </div>
+                    </div>
+
+                    {/* Studio white */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-300/30">
+                      <div className="absolute inset-0 bg-gradient-to-b from-white to-zinc-100" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <SneakerSvg shoeColor="#f0ebe4" accentColor="#059669" />
+                      </div>
+                      <div className="absolute bottom-0 left-0 right-0 h-3 bg-zinc-300/40" />
+                      <div className="absolute bottom-1 left-1 right-1 bg-zinc-900/50 rounded px-1 py-0.5">
+                        <p className="text-white text-[8px] font-bold leading-tight">Zero compromise.</p>
+                      </div>
+                      <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
+                        <Check className="w-2 h-2 text-emerald-400" />
+                      </div>
+                    </div>
+
+                    {/* Lifestyle / warm */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700">
+                      <div className="absolute inset-0 bg-gradient-to-br from-amber-900 to-amber-950" />
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(251,191,36,0.15),transparent_60%)]" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <SneakerSvg shoeColor="#f5e6d0" accentColor="#f59e0b" />
+                      </div>
+                      <div className="absolute bottom-1 left-1 right-1 bg-black/50 rounded px-1 py-0.5">
+                        <p className="text-amber-200 text-[8px] font-bold leading-tight">Worn all day.</p>
+                      </div>
+                      <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
+                        <Check className="w-2 h-2 text-emerald-400" />
+                      </div>
+                    </div>
+
+                    {/* Minimal dark */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700">
+                      <div className="absolute inset-0 bg-zinc-950" />
+                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.12),transparent_65%)]" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <SneakerSvg shoeColor="#2a3a32" accentColor="#10b981" />
+                      </div>
+                      <div className="absolute bottom-1 left-1 right-1 bg-black/60 rounded px-1 py-0.5">
+                        <p className="text-emerald-300 text-[8px] font-bold leading-tight">The shoe that does it all.</p>
+                      </div>
+                      <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
+                        <Check className="w-2 h-2 text-emerald-400" />
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
