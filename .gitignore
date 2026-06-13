@@ -1,0 +1,7 @@
+.vercel
+
+# Playwright MCP scratch output
+.playwright-mcp/
+
+# Local verification screenshots
+*.png

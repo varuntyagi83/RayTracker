@@ -647,60 +647,66 @@ function VariationsFeature() {
                     Variations generated
                   </p>
                   <div className="grid grid-cols-2 gap-2">
-                    {/* Outdoor */}
-                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700">
-                      <div className="absolute inset-0 bg-gradient-to-b from-sky-400 to-sky-500" />
-                      <div className="absolute bottom-0 left-0 right-0 h-[35%] bg-gradient-to-b from-emerald-600 to-emerald-700" />
-                      <div className="absolute inset-0 flex items-center justify-center">
+                    {/* V1: Minimal product hero — white bg, large centered shoe, spec text */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-300/20 bg-white flex flex-col">
+                      <div className="flex-1 flex items-center justify-center px-1 pt-2">
                         <SneakerSvg shoeColor="white" accentColor="#059669" />
                       </div>
-                      <div className="absolute bottom-1 left-1 right-1 bg-black/40 rounded px-1 py-0.5">
-                        <p className="text-white text-[8px] font-bold leading-tight">Built for any terrain.</p>
+                      <div className="bg-white px-2 pb-2">
+                        <p className="text-zinc-800 text-[9px] font-bold leading-none">Natural Wool.</p>
+                        <p className="text-zinc-400 text-[8px] leading-tight">Zero Plastic Soles.</p>
+                        <div className="mt-1 inline-block bg-zinc-900 text-white text-[7px] px-1.5 py-0.5 rounded font-semibold">Shop Now</div>
                       </div>
                       <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
                         <Check className="w-2 h-2 text-emerald-400" />
                       </div>
                     </div>
 
-                    {/* Studio white */}
-                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-300/30">
-                      <div className="absolute inset-0 bg-gradient-to-b from-white to-zinc-100" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <SneakerSvg shoeColor="#f0ebe4" accentColor="#059669" />
+                    {/* V2: Bold typographic — huge copy fills frame, shoe tiny */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700 bg-zinc-950 flex flex-col justify-between p-2">
+                      <div>
+                        <p className="text-white text-[16px] font-black uppercase leading-none tracking-tight">WALK</p>
+                        <p className="text-emerald-400 text-[16px] font-black uppercase leading-none tracking-tight">FURTHER.</p>
                       </div>
-                      <div className="absolute bottom-0 left-0 right-0 h-3 bg-zinc-300/40" />
-                      <div className="absolute bottom-1 left-1 right-1 bg-zinc-900/50 rounded px-1 py-0.5">
-                        <p className="text-white text-[8px] font-bold leading-tight">Zero compromise.</p>
-                      </div>
-                      <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
-                        <Check className="w-2 h-2 text-emerald-400" />
-                      </div>
-                    </div>
-
-                    {/* Lifestyle / warm */}
-                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700">
-                      <div className="absolute inset-0 bg-gradient-to-br from-amber-900 to-amber-950" />
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_left,rgba(251,191,36,0.15),transparent_60%)]" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <SneakerSvg shoeColor="#f5e6d0" accentColor="#f59e0b" />
-                      </div>
-                      <div className="absolute bottom-1 left-1 right-1 bg-black/50 rounded px-1 py-0.5">
-                        <p className="text-amber-200 text-[8px] font-bold leading-tight">Worn all day.</p>
+                      <div className="flex items-end justify-between">
+                        <p className="text-zinc-500 text-[8px] leading-tight max-w-[55%]">Merino wool. All-day comfort.</p>
+                        <div className="w-10 opacity-40">
+                          <SneakerSvg shoeColor="white" accentColor="#10b981" />
+                        </div>
                       </div>
                       <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
                         <Check className="w-2 h-2 text-emerald-400" />
                       </div>
                     </div>
 
-                    {/* Minimal dark */}
-                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700">
-                      <div className="absolute inset-0 bg-zinc-950" />
-                      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(16,185,129,0.12),transparent_65%)]" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <SneakerSvg shoeColor="#2a3a32" accentColor="#10b981" />
+                    {/* V3: Social proof — stars + testimonial quote */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700 bg-gradient-to-b from-zinc-900 to-zinc-950 flex flex-col justify-between p-2">
+                      <div>
+                        <p className="text-amber-400 text-[10px] leading-none">★★★★★</p>
+                        <p className="text-zinc-200 text-[9px] font-semibold mt-1 leading-tight">&ldquo;Most comfortable shoes I&rsquo;ve ever owned.&rdquo;</p>
+                        <p className="text-zinc-500 text-[8px] mt-0.5">Sarah K. — verified buyer</p>
                       </div>
-                      <div className="absolute bottom-1 left-1 right-1 bg-black/60 rounded px-1 py-0.5">
-                        <p className="text-emerald-300 text-[8px] font-bold leading-tight">The shoe that does it all.</p>
+                      <div className="flex items-end justify-between">
+                        <div className="w-12 opacity-60">
+                          <SneakerSvg shoeColor="#e8ddd0" accentColor="#059669" />
+                        </div>
+                        <div className="inline-block bg-emerald-600 text-white text-[7px] px-1.5 py-0.5 rounded font-bold">Try risk-free</div>
+                      </div>
+                      <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
+                        <Check className="w-2 h-2 text-emerald-400" />
+                      </div>
+                    </div>
+
+                    {/* V4: Color-split lifestyle — top green / bottom cream, shoe at seam */}
+                    <div className="aspect-square rounded-xl overflow-hidden relative border border-zinc-700 flex flex-col">
+                      <div className="h-[48%] bg-emerald-700" />
+                      <div className="h-[52%] bg-stone-100" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <SneakerSvg shoeColor="white" accentColor="#f59e0b" />
+                      </div>
+                      <div className="absolute bottom-2 left-2 right-2">
+                        <p className="text-zinc-700 text-[9px] font-bold leading-tight">Your next daily wear.</p>
+                        <div className="mt-0.5 inline-block bg-emerald-700 text-white text-[7px] px-1.5 py-0.5 rounded font-semibold">Shop Allbirds</div>
                       </div>
                       <div className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500/25 border border-emerald-500/50 flex items-center justify-center">
                         <Check className="w-2 h-2 text-emerald-400" />
