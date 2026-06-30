@@ -7,7 +7,7 @@ import { apiLimiter } from "@/lib/utils/rate-limit";
 import { getWorkspace } from "@/lib/supabase/queries";
 
 const checkoutSchema = z.object({
-  packageId: z.enum(["starter", "pro", "enterprise"]),
+  packageId: z.enum(["starter", "pro", "scale"]),
 });
 
 /**

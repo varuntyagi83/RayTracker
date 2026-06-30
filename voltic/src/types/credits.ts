@@ -43,9 +43,9 @@ export interface CreditPackage {
 }
 
 export const CREDIT_PACKAGES: CreditPackage[] = [
-  { id: "starter", credits: 100, price: 9.99, popular: false },
-  { id: "pro", credits: 500, price: 39.99, popular: true },
-  { id: "enterprise", credits: 1000, price: 69.99, popular: false },
+  { id: "starter", credits: 100, price: 29, popular: false },
+  { id: "pro", credits: 300, price: 79, popular: true },
+  { id: "scale", credits: 500, price: 129, popular: false },
 ];
 
 // ─── Description Generator ───────────────────────────────────────────────

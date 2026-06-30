@@ -15,6 +15,15 @@ import {
 type Stat = { value: string; label: string };
 type Problem = { n: string; headline: string; body: string };
 type FaqItem = { q: string; a: string };
+type Plan = {
+  name: string;
+  price: number;
+  credits: number;
+  accounts: string;
+  seats: number;
+  features: string[];
+  popular: boolean;
+};
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
@@ -40,6 +49,62 @@ const PROBLEMS: Problem[] = [
     n: "03",
     headline: "Someone exports spreadsheets every Friday afternoon",
     body: "Manual reporting is a tax on your team. One missed export and the weekly review has no data. Someone is always late. Someone always catches the error after the meeting.",
+  },
+];
+
+const PLANS: Plan[] = [
+  {
+    name: "Solo",
+    price: 49,
+    credits: 100,
+    accounts: "3 ad accounts",
+    seats: 1,
+    features: [
+      "100 credits per month",
+      "3 Meta ad accounts",
+      "1 seat",
+      "Competitor tracking",
+      "AI creative variations",
+      "Slack reports",
+      "7-day free trial",
+    ],
+    popular: false,
+  },
+  {
+    name: "Agency",
+    price: 149,
+    credits: 300,
+    accounts: "10 ad accounts",
+    seats: 3,
+    features: [
+      "300 credits per month",
+      "10 Meta ad accounts",
+      "3 seats",
+      "Competitor tracking",
+      "AI creative variations",
+      "Slack reports",
+      "Auto competitor reports",
+      "Priority support",
+    ],
+    popular: true,
+  },
+  {
+    name: "Scale",
+    price: 299,
+    credits: 500,
+    accounts: "Unlimited accounts",
+    seats: 10,
+    features: [
+      "500 credits per month",
+      "Unlimited ad accounts",
+      "10 seats",
+      "Competitor tracking",
+      "AI creative variations",
+      "Slack reports",
+      "Auto competitor reports",
+      "Dedicated onboarding",
+    ],
+    popular: false,
   },
 ];
 
@@ -88,6 +153,7 @@ export default function LandingPage() {
       <VariationsFeature />
       <ReportingFeature />
       <HowItWorks />
+      <PricingSection />
       <FaqSection />
       <FinalCta />
       <Footer />
@@ -954,6 +1020,82 @@ function HowItWorks() {
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ── Pricing ───────────────────────────────────────────────────────────────────
+
+function PricingSection() {
+  return (
+    <section id="pricing" className="py-28 px-6 border-t border-zinc-800/50">
+      <div className="mx-auto max-w-7xl">
+        <div className="text-center space-y-4 mb-16">
+          <p className="text-emerald-400 text-sm font-semibold tracking-widest uppercase">Pricing</p>
+          <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
+            Simple, usage-based plans
+          </h2>
+          <p className="text-zinc-400 text-lg max-w-xl mx-auto">
+            Every plan includes a 7-day free trial. Add credits when you need more.
+          </p>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-6 mb-12">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.name}
+              className={`relative rounded-2xl border p-8 flex flex-col ${
+                plan.popular
+                  ? "border-emerald-500 bg-zinc-900"
+                  : "border-zinc-800 bg-zinc-900/40"
+              }`}
+            >
+              {plan.popular && (
+                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
+                  <span className="bg-emerald-500 text-zinc-950 text-xs font-bold px-3 py-1 rounded-full">
+                    Most popular
+                  </span>
+                </div>
+              )}
+              <div className="mb-6">
+                <p className="text-zinc-400 text-sm font-medium mb-1">{plan.name}</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-4xl font-bold text-white">${plan.price}</span>
+                  <span className="text-zinc-500 text-sm">/month</span>
+                </div>
+                <p className="text-zinc-500 text-sm mt-2">
+                  {plan.credits} credits/mo · {plan.accounts} · {plan.seats} {plan.seats === 1 ? "seat" : "seats"}
+                </p>
+              </div>
+
+              <ul className="space-y-3 flex-1 mb-8">
+                {plan.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2.5 text-sm text-zinc-300">
+                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <Link
+                href="/signup"
+                className={`w-full text-center py-3 px-6 rounded-xl font-semibold text-sm transition-colors ${
+                  plan.popular
+                    ? "bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-lg shadow-emerald-500/20"
+                    : "bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
+                }`}
+              >
+                Start free trial
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-center text-zinc-600 text-sm">
+          Need more credits? Add-on packs available at $29 per 100 credits.
+          Enterprise pricing on request.
+        </p>
       </div>
     </section>
   );
