@@ -6,6 +6,7 @@ import { PostHogIdentify } from "@/components/shared/posthog-identify";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TopBar } from "@/components/layout/top-bar";
+import { SubscriptionStatusRefresh } from "@/components/subscription/subscription-status-refresh";
 
 export default async function DashboardLayout({
   children,
@@ -45,6 +46,7 @@ export default async function DashboardLayout({
         <AppSidebar userEmail={user.email ?? ""} isSuperAdmin={isSuperAdmin(user.id)} />
         <SidebarInset>
           <TopBar />
+          <SubscriptionStatusRefresh />
           <main className="flex-1 overflow-auto">{children}</main>
         </SidebarInset>
       </SidebarProvider>

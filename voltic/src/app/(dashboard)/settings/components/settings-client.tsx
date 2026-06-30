@@ -27,6 +27,7 @@ import { useWorkspace } from "@/lib/hooks/use-workspace";
 import { track } from "@/lib/analytics/events";
 import { updateWorkspaceTimezoneAction, disconnectMetaAction } from "../actions";
 import McpKeysCard from "./mcp-keys-card";
+import { CancelTrialModal } from "@/components/subscription/cancel-trial-modal";
 
 // ─── Timezone helpers ────────────────────────────────────────────────────────
 
@@ -93,6 +94,23 @@ export default function SettingsClient() {
   // Meta connection state
   const [disconnecting, setDisconnecting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+
+  // Subscription state
+  const [subStatus, setSubStatus] = useState<string | null>(null);
+  const [subPlan, setSubPlan] = useState<string | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/subscription/status")
+      .then((r) => r.json())
+      .then((data) => {
+        setSubStatus(data.status ?? null);
+        setSubPlan(data.plan ?? null);
+        setTrialEndsAt(data.trialEndsAt ?? null);
+      })
+      .catch(() => {});
+  }, []);
 
   // API Token state
   const [apiToken, setApiToken] = useState<string | null>(null);
@@ -164,6 +182,7 @@ export default function SettingsClient() {
       <Tabs defaultValue="general">
         <TabsList>
           <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="subscription">Subscription</TabsTrigger>
           <TabsTrigger value="brand-guidelines">Brand Guidelines</TabsTrigger>
         </TabsList>
 
@@ -520,6 +539,75 @@ export default function SettingsClient() {
           </Card>
           {/* MCP API Keys */}
           <McpKeysCard />
+        </TabsContent>
+
+        {/* ── Subscription ─────────────────────────────────────────────── */}
+        <TabsContent value="subscription" className="mt-6 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Subscription</CardTitle>
+              <CardDescription>
+                Manage your Voltic plan, trial period, and billing.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {subStatus ? (
+                <>
+                  <div className="flex items-center gap-3">
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      subStatus === "trialing" ? "bg-blue-500/10 text-blue-400 border border-blue-500/20" :
+                      subStatus === "active" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                      "bg-red-500/10 text-red-400 border border-red-500/20"
+                    }`}>
+                      {subStatus === "trialing" ? "Free trial" : subStatus === "active" ? "Active" : subStatus}
+                    </span>
+                    {subPlan && (
+                      <span className="text-sm text-zinc-400 capitalize">{subPlan} plan</span>
+                    )}
+                  </div>
+
+                  {subStatus === "trialing" && trialEndsAt && (
+                    <p className="text-sm text-zinc-400">
+                      Trial ends{" "}
+                      <span className="text-white font-medium">
+                        {new Date(trialEndsAt).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
+                      </span>
+                      . Your card will be charged after that date.
+                    </p>
+                  )}
+
+                  {(subStatus === "trialing" || subStatus === "active") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCancelModalOpen(true)}
+                      className="border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
+                    >
+                      {subStatus === "trialing" ? "Cancel free trial" : "Cancel subscription"}
+                    </Button>
+                  )}
+
+                  {(subStatus === "canceled" || subStatus === "past_due") && (
+                    <Button asChild size="sm">
+                      <a href="/#pricing">Choose a plan</a>
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-zinc-500">Loading subscription status...</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <CancelTrialModal
+            open={cancelModalOpen}
+            onClose={() => setCancelModalOpen(false)}
+            isTrial={subStatus === "trialing"}
+          />
         </TabsContent>
 
         {/* ── Brand Guidelines ────────────────────────────────────────── */}
