@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PricingSection } from "@/components/landing/pricing-section";
 import {
   Zap,
   BarChart3,
@@ -123,7 +124,7 @@ const FAQS: FaqItem[] = [
   },
   {
     q: "Is there a free trial?",
-    a: "Yes. Every new workspace gets 7 days of full access. No credit card required.",
+    a: "Yes. Every new workspace gets 7 days of full access. A credit card is required at signup but nothing is charged until the trial ends. Cancel before day 7 and you pay nothing.",
   },
   {
     q: "How many ad accounts can I connect?",
@@ -257,7 +258,7 @@ function Hero() {
             </div>
 
             <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-              {["No credit card required", "7-day free trial", "Cancel anytime"].map((t) => (
+              {["7-day free trial", "Card required at signup", "Cancel anytime"].map((t) => (
                 <span key={t} className="flex items-center gap-1.5 text-sm text-zinc-500">
                   <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                   {t}
@@ -1025,81 +1026,6 @@ function HowItWorks() {
   );
 }
 
-// ── Pricing ───────────────────────────────────────────────────────────────────
-
-function PricingSection() {
-  return (
-    <section id="pricing" className="py-28 px-6 border-t border-zinc-800/50">
-      <div className="mx-auto max-w-7xl">
-        <div className="text-center space-y-4 mb-16">
-          <p className="text-emerald-400 text-sm font-semibold tracking-widest uppercase">Pricing</p>
-          <h2 className="text-4xl md:text-5xl font-bold text-white tracking-tight">
-            Simple, usage-based plans
-          </h2>
-          <p className="text-zinc-400 text-lg max-w-xl mx-auto">
-            Every plan includes a 7-day free trial. Add credits when you need more.
-          </p>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-6 mb-12">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.name}
-              className={`relative rounded-2xl border p-8 flex flex-col ${
-                plan.popular
-                  ? "border-emerald-500 bg-zinc-900"
-                  : "border-zinc-800 bg-zinc-900/40"
-              }`}
-            >
-              {plan.popular && (
-                <div className="absolute -top-3.5 left-1/2 -translate-x-1/2">
-                  <span className="bg-emerald-500 text-zinc-950 text-xs font-bold px-3 py-1 rounded-full">
-                    Most popular
-                  </span>
-                </div>
-              )}
-              <div className="mb-6">
-                <p className="text-zinc-400 text-sm font-medium mb-1">{plan.name}</p>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-white">${plan.price}</span>
-                  <span className="text-zinc-500 text-sm">/month</span>
-                </div>
-                <p className="text-zinc-500 text-sm mt-2">
-                  {plan.credits} credits/mo · {plan.accounts} · {plan.seats} {plan.seats === 1 ? "seat" : "seats"}
-                </p>
-              </div>
-
-              <ul className="space-y-3 flex-1 mb-8">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-sm text-zinc-300">
-                    <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              <Link
-                href="/signup"
-                className={`w-full text-center py-3 px-6 rounded-xl font-semibold text-sm transition-colors ${
-                  plan.popular
-                    ? "bg-emerald-500 hover:bg-emerald-400 text-zinc-950 shadow-lg shadow-emerald-500/20"
-                    : "bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
-                }`}
-              >
-                Start free trial
-              </Link>
-            </div>
-          ))}
-        </div>
-
-        <p className="text-center text-zinc-600 text-sm">
-          Need more credits? Add-on packs available at $29 per 100 credits.
-          Enterprise pricing on request.
-        </p>
-      </div>
-    </section>
-  );
-}
 
 // ── FAQ ───────────────────────────────────────────────────────────────────────
 
@@ -1166,7 +1092,7 @@ function FinalCta() {
           <ArrowRight className="w-5 h-5" />
         </Link>
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 pt-2">
-          {["No credit card required", "7-day free trial", "Cancel anytime"].map((t) => (
+          {["7-day free trial", "Card required at signup", "Cancel anytime"].map((t) => (
             <span key={t} className="flex items-center gap-1.5 text-sm text-zinc-600">
               <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
               {t}

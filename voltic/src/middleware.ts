@@ -7,8 +7,12 @@ const isPublicRoute = createRouteMatcher([
   "/onboarding(.*)",
   "/auth(.*)",
   "/",
+  "/subscription/cancelled",
+  "/subscription/paywall",
   // Webhooks: validated by their own signature/secret checks
   "/api/webhooks/(.*)",
+  // Subscription checkout is called before auth check in some flows
+  "/api/subscription/checkout",
   // MCP: validated by Bearer API key
   "/api/mcp(.*)",
   // Chrome extension: validated by Clerk verifyToken
@@ -18,6 +22,13 @@ const isPublicRoute = createRouteMatcher([
 ]);
 
 const isAuthRoute = createRouteMatcher(["/login", "/signup", "/"]);
+
+// Billing/subscription pages exempt from paywall so lapsed users can resubscribe
+const isSubscriptionExempt = createRouteMatcher([
+  "/subscription/(.*)",
+  "/settings/billing(.*)",
+  "/api/subscription/(.*)",
+]);
 
 export default clerkMiddleware(async (auth, request) => {
   const { userId } = await auth();
@@ -29,6 +40,14 @@ export default clerkMiddleware(async (auth, request) => {
 
   if (userId && isAuthRoute(request)) {
     return NextResponse.redirect(new URL("/home", request.url));
+  }
+
+  // Subscription gate: block dashboard access for cancelled or past_due accounts
+  if (userId && !isPublicRoute(request) && !isSubscriptionExempt(request)) {
+    const subStatus = request.cookies.get("voltic-sub-status")?.value;
+    if (subStatus === "canceled" || subStatus === "past_due") {
+      return NextResponse.redirect(new URL("/subscription/paywall", request.url));
+    }
   }
 });
 

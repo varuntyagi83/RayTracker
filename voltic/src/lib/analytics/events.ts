@@ -182,9 +182,16 @@ export interface EventPropertiesMap {
 
   // Stripe Webhooks (server-side)
   stripe_webhook_missing_metadata: { session_id: string; alert: boolean };
-  stripe_refund_received: { charge_id: string; amount_refunded: number; payment_intent: string | null | undefined; alert: boolean };
+  stripe_refund_received: { charge_id: string; amount_refunded: number; payment_intent?: string | null; alert: boolean };
   credits_purchase_failed: { workspace_id: string; error: string | undefined };
   credit_ledger_missing: { amount: number; type: string; error: string };
+
+  // Subscription (server-side)
+  subscription_trial_started: { workspace_id: string; plan_id: string; trial_end: string | undefined };
+  subscription_updated: { workspace_id: string; status: string };
+  subscription_cancelled: { workspace_id: string };
+  subscription_renewed: { workspace_id: string; plan_id: string; credits: number; invoice_id: string };
+  subscription_payment_failed: { workspace_id: string; invoice_id: string; alert: boolean };
 
   // Admin (server-side)
   super_admin_workspace_switch: { target_workspace_id: string; target_workspace_name: string };

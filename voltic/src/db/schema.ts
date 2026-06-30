@@ -29,6 +29,12 @@ export const workspaces = pgTable("workspaces", {
   slackAccessToken: text("slack_access_token"),
   slackTeamName: text("slack_team_name"),
   settings: jsonb("settings").notNull().default({}),
+  // Stripe subscription fields
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  subscriptionStatus: text("subscription_status"), // trialing | active | past_due | canceled | incomplete
+  subscriptionPlan: text("subscription_plan"), // solo | agency | scale
+  trialEndsAt: timestamp("trial_ends_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
